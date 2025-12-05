@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Avatar,
   Typography,
@@ -28,6 +28,7 @@ import {
   Space,
 } from '@douyinfe/semi-ui';
 import { Copy, Users, BarChart2, TrendingUp, Gift, Zap } from 'lucide-react';
+import { getRealInviteCount } from '../../helpers/pythonApi';
 
 const { Text } = Typography;
 
@@ -39,6 +40,35 @@ const InvitationCard = ({
   affLink,
   handleAffLinkClick,
 }) => {
+  const [realInviteCount, setRealInviteCount] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    // 获取真实邀请人数
+    if (userState?.user?.id) {
+      setLoading(true);
+      getRealInviteCount(userState.user.id)
+        .then((count) => {
+          setRealInviteCount(count);
+        })
+        .catch((error) => {
+          console.error('获取真实邀请人数失败:', error);
+          // 失败时使用数据库的aff_count
+          setRealInviteCount(userState?.user?.aff_count || 0);
+        })
+        .finally(() => {
+          setLoading(false);
+        });
+    }
+  }, [userState?.user?.id, userState?.user?.aff_count]);
+
+  // 显示真实邀请人数或loading状态
+  const displayInviteCount = loading
+    ? '...'
+    : realInviteCount !== null
+      ? realInviteCount
+      : userState?.user?.aff_count || 0;
+
   return (
     <Card className='!rounded-2xl shadow-sm border-0'>
       {/* 卡片头部 */}
@@ -150,7 +180,7 @@ const InvitationCard = ({
                       className='text-base sm:text-2xl font-bold mb-2'
                       style={{ color: 'white' }}
                     >
-                      {userState?.user?.aff_count || 0}
+                      {displayInviteCount}
                     </div>
                     <div className='flex items-center justify-center text-sm'>
                       <Users
@@ -165,6 +195,18 @@ const InvitationCard = ({
                         }}
                       >
                         {t('邀请人数')}
+                        {!loading &&
+                          realInviteCount !== null &&
+                          realInviteCount !== userState?.user?.aff_count && (
+                            <span
+                              style={{
+                                fontSize: '10px',
+                                marginLeft: '4px',
+                              }}
+                            >
+                              (实时)
+                            </span>
+                          )}
                       </Text>
                     </div>
                   </div>
