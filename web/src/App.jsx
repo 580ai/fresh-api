@@ -21,7 +21,7 @@ import React, { lazy, Suspense, useContext, useMemo } from 'react';
 import { Route, Routes, useLocation } from 'react-router-dom';
 import Loading from './components/common/ui/Loading';
 import User from './pages/User';
-import { AuthRedirect, PrivateRoute, AdminRoute } from './helpers';
+import { AuthRedirect, PrivateRoute, AdminRoute, SuperAdminRoute } from './helpers';
 import RegisterForm from './components/auth/RegisterForm';
 import LoginForm from './components/auth/LoginForm';
 import NotFound from './pages/NotFound';
@@ -103,17 +103,17 @@ function App() {
         <Route
           path='/console/models'
           element={
-            <AdminRoute>
+            <SuperAdminRoute>
               <ModelPage />
-            </AdminRoute>
+            </SuperAdminRoute>
           }
         />
         <Route
           path='/console/channel'
           element={
-            <AdminRoute>
+            <SuperAdminRoute>
               <Channel />
-            </AdminRoute>
+            </SuperAdminRoute>
           }
         />
         <Route
@@ -135,17 +135,17 @@ function App() {
         <Route
           path='/console/redemption'
           element={
-            <AdminRoute>
+            <SuperAdminRoute>
               <Redemption />
-            </AdminRoute>
+            </SuperAdminRoute>
           }
         />
         <Route
           path='/console/user'
           element={
-            <AdminRoute>
+            <SuperAdminRoute>
               <User />
-            </AdminRoute>
+            </SuperAdminRoute>
           }
         />
         <Route
@@ -219,11 +219,11 @@ function App() {
         <Route
           path='/console/setting'
           element={
-            <AdminRoute>
+            <SuperAdminRoute>
               <Suspense fallback={<Loading></Loading>} key={location.pathname}>
                 <Setting />
               </Suspense>
-            </AdminRoute>
+            </SuperAdminRoute>
           }
         />
         <Route
