@@ -32,6 +32,18 @@ export function authHeader() {
   }
 }
 
+// 检查是否是超级管理员（userID = 1）
+export function isSuperAdmin() {
+  try {
+    const raw = localStorage.getItem('user');
+    if (!raw) return false;
+    const user = JSON.parse(raw);
+    return user && user.id === 1;
+  } catch (e) {
+    return false;
+  }
+}
+
 export const AuthRedirect = ({ children }) => {
   const user = localStorage.getItem('user');
 
@@ -57,6 +69,23 @@ export function AdminRoute({ children }) {
   try {
     const user = JSON.parse(raw);
     if (user && typeof user.role === 'number' && user.role >= 10) {
+      return children;
+    }
+  } catch (e) {
+    // ignore
+  }
+  return <Navigate to='/forbidden' replace />;
+}
+
+// 超级管理员路由保护 - 只允许 userID = 1 的用户访问
+export function SuperAdminRoute({ children }) {
+  const raw = localStorage.getItem('user');
+  if (!raw) {
+    return <Navigate to='/login' state={{ from: history.location }} />;
+  }
+  try {
+    const user = JSON.parse(raw);
+    if (user && user.id === 1) {
       return children;
     }
   } catch (e) {

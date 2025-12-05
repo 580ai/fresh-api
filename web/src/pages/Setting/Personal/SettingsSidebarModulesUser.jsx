@@ -30,7 +30,6 @@ import {
 } from '@douyinfe/semi-ui';
 import { API, showSuccess, showError } from '../../../helpers';
 import { StatusContext } from '../../../context/Status';
-import { UserContext } from '../../../context/User';
 import { useUserPermissions } from '../../../hooks/common/useUserPermissions';
 import { useSidebar } from '../../../hooks/common/useSidebar';
 import { Settings } from 'lucide-react';
@@ -44,7 +43,6 @@ export default function SettingsSidebarModulesUser() {
 
   // 使用后端权限验证替代前端角色判断
   const {
-    permissions,
     loading: permissionsLoading,
     hasSidebarSettingsPermission,
     isSidebarSectionAllowed,

@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useState, useEffect } from 'react';
-import { API } from '../../helpers';
+import { API, isSuperAdmin } from '../../helpers';
 
 /**
  * 用户权限钩子 - 从后端获取用户权限，替代前端角色判断
@@ -61,6 +61,10 @@ export const useUserPermissions = () => {
 
   // 检查是否允许访问特定的边栏区域
   const isSidebarSectionAllowed = (sectionKey) => {
+    // admin区域只允许超级管理员访问
+    if (sectionKey === 'admin' && !isSuperAdmin()) {
+      return false;
+    }
     if (!permissions?.sidebar_modules) return true;
     const sectionPerms = permissions.sidebar_modules[sectionKey];
     return sectionPerms !== false;
@@ -68,6 +72,10 @@ export const useUserPermissions = () => {
 
   // 检查是否允许访问特定的边栏模块
   const isSidebarModuleAllowed = (sectionKey, moduleKey) => {
+    // admin区域的所有模块只允许超级管理员访问
+    if (sectionKey === 'admin' && !isSuperAdmin()) {
+      return false;
+    }
     if (!permissions?.sidebar_modules) return true;
     const sectionPerms = permissions.sidebar_modules[sectionKey];
 

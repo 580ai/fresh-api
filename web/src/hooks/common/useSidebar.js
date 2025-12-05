@@ -19,7 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 
 import { useState, useEffect, useMemo, useContext, useRef } from 'react';
 import { StatusContext } from '../../context/Status';
-import { API } from '../../helpers';
+import { API, isSuperAdmin } from '../../helpers';
 
 // 创建一个全局事件系统来同步所有useSidebar实例
 const sidebarEventTarget = new EventTarget();
@@ -204,10 +204,19 @@ export const useSidebar = () => {
       return result;
     }
 
+    // 检查是否是超级管理员
+    const isSuperAdminUser = isSuperAdmin();
+
     // 遍历所有区域
     Object.keys(adminConfig).forEach((sectionKey) => {
       const adminSection = adminConfig[sectionKey];
       const userSection = userConfig[sectionKey];
+
+      // 如果是admin区域且用户不是超级管理员，直接跳过
+      if (sectionKey === 'admin' && !isSuperAdminUser) {
+        result[sectionKey] = { enabled: false };
+        return;
+      }
 
       // 如果管理员禁用了整个区域，则该区域不显示
       if (!adminSection?.enabled) {
