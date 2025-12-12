@@ -21,7 +21,7 @@ import CryptoJS from 'crypto-js';
 
 // Python API 服务地址
 const PYTHON_API_URL =
-  import.meta.env.VITE_PYTHON_API_URL || 'http://localhost:8001';
+  import.meta.env.VITE_PYTHON_API_URL || '';
 
 // HMAC 共享密钥（需要与Python脚本中的密钥一致）
 const SHARED_SECRET = 'dd7ea0087bb492abaf990d6e2795b2f0a3fafd0c40a9a8b7a9ccf7112cf3ba75';
@@ -52,7 +52,7 @@ export async function getRealInviteCount(userId) {
     const auth_token = generateAuthToken(userId, timestamp);
 
     // 构建请求URL
-    const url = `${PYTHON_API_URL}/api/user/aff?user_id=${userId}&auth_token=${auth_token}&timestamp=${timestamp}`;
+    const url = `${PYTHON_API_URL}/pyapi/user/aff?user_id=${userId}&auth_token=${auth_token}&timestamp=${timestamp}`;
 
     // 发送请求
     const response = await fetch(url, {
