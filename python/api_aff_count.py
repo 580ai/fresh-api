@@ -3,8 +3,8 @@
 
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import json
-import mysql.connector
-from mysql.connector import pooling
+import psycopg2
+from psycopg2 import pool
 from urllib.parse import urlparse, parse_qs
 import hmac
 import hashlib
@@ -13,11 +13,11 @@ import os
 
 # 数据库配置
 DB_CONFIG = {
-    "host": "localhost",
-    "user": "root",
-    "password": "1234qwer",
-    "database": "new_cc_test",
-    "charset": "utf8mb4",
+    "host": "47.85.39.99",
+    "user": "postgres",
+    "password": "6smCsd63xTkLGTTy",
+    "database": "claude_aidaxue",
+    "port": 5432,
 }
 
 # 共享密钥（需要与前端一致）
@@ -27,10 +27,9 @@ SHARED_SECRET = os.getenv(
 )
 
 # 创建数据库连接池
-connection_pool = pooling.MySQLConnectionPool(
-    pool_name="aff_count_pool",
-    pool_size=5,  # 连接池大小
-    pool_reset_session=True,
+connection_pool = pool.SimpleConnectionPool(
+    1,  # 最小连接数
+    5,  # 最大连接数
     **DB_CONFIG,
 )
 
@@ -128,8 +127,8 @@ class APIHandler(BaseHTTPRequestHandler):
         conn = None
         try:
             # 从连接池获取连接
-            conn = connection_pool.get_connection()
-            cursor = conn.cursor(dictionary=True)
+            conn = connection_pool.getconn()
+            cursor = conn.cursor()
 
             # 统计有多少用户的inviter_id是当前用户的id
             count_query = """
@@ -141,14 +140,14 @@ class APIHandler(BaseHTTPRequestHandler):
             result = cursor.fetchone()
             cursor.close()
 
-            return result["invite_count"] if result else 0
+            return result[0] if result else 0
 
-        except mysql.connector.Error as e:
+        except psycopg2.Error as e:
             print(f"Database error: {e}")
             return None
         finally:
-            if conn and conn.is_connected():
-                conn.close()  # 归还连接到连接池
+            if conn:
+                connection_pool.putconn(conn)  # 归还连接到连接池
 
     def _send_error(self, status_code, message):
         """发送错误响应"""
@@ -169,9 +168,7 @@ def run_server(host="127.0.0.1", port=8001):
     server_address = (host, port)
     httpd = HTTPServer(server_address, APIHandler)
     print(f"服务器启动在 http://{host}:{port}")
-    print(
-        f"数据库连接池: {connection_pool.pool_name} (大小: {connection_pool.pool_size})"
-    )
+    print(f"数据库连接池: PostgreSQL (连接池大小: 1-5)")
     print(f"API端点:")
     print(f"  - GET http://localhost:{port}/api/user/aff")
     print(f"    参数: user_id, auth_token, timestamp")
@@ -186,6 +183,8 @@ def run_server(host="127.0.0.1", port=8001):
     except KeyboardInterrupt:
         print("\n服务器已停止")
         httpd.server_close()
+        # 关闭连接池
+        connection_pool.closeall()
 
 
 if __name__ == "__main__":
