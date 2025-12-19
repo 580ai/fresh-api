@@ -141,8 +141,9 @@ const Home = () => {
   }, [hideNoticeModal]);
 
   useEffect(() => {
+    if (hideBanner) return;
     displayHomePageContent().then();
-  }, []);
+  }, [hideBanner]);
 
   useEffect(() => {
     const timer = setInterval(() => {
