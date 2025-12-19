@@ -86,9 +86,10 @@ export const useDashboardData = (userState, userDispatch, statusState) => {
   const isAdminUser = isAdmin();
 
   // ========== Panel enable flags ==========
-  const apiInfoEnabled = statusState?.status?.api_info_enabled ?? true;
-  const announcementsEnabled =
-    statusState?.status?.announcements_enabled ?? true;
+  const hideApiInfo = import.meta.env.VITE_HIDE_API_INFO === 'true';
+  const hideAnnouncements = import.meta.env.VITE_HIDE_ANNOUNCEMENTS === 'true';
+  const apiInfoEnabled = hideApiInfo ? false : (statusState?.status?.api_info_enabled ?? true);
+  const announcementsEnabled = hideAnnouncements ? false : (statusState?.status?.announcements_enabled ?? true);
   const faqEnabled = statusState?.status?.faq_enabled ?? true;
   const uptimeEnabled = statusState?.status?.uptime_kuma_enabled ?? true;
 

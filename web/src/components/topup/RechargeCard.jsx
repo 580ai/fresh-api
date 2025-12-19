@@ -87,6 +87,7 @@ const RechargeCard = ({
   const onlineFormApiRef = useRef(null);
   const redeemFormApiRef = useRef(null);
   const showAmountSkeleton = useMinimumLoadingTime(amountLoading);
+  const hideOnlineTopup = import.meta.env.VITE_HIDE_ONLINE_TOPUP === 'true';
   console.log(' enabled screem ?', enableCreemTopUp, ' products ?', creemProducts);
   return (
     <Card className='!rounded-2xl shadow-sm border-0'>
@@ -216,7 +217,7 @@ const RechargeCard = ({
           }
         >
           {/* 在线充值表单 */}
-          {statusLoading ? (
+          {!hideOnlineTopup && (statusLoading ? (
             <div className='py-8 flex justify-center'>
               <Spin size='large' />
             </div>
@@ -521,7 +522,7 @@ const RechargeCard = ({
               className='!rounded-xl'
               closeIcon={null}
             />
-          )}
+          ))}
         </Card>
 
         {/* 兑换码充值 */}

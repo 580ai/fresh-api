@@ -80,6 +80,8 @@ const Home = () => {
   const endpointItems = API_ENDPOINTS.map((e) => ({ value: e }));
   const [endpointIndex, setEndpointIndex] = useState(0);
   const isChinese = i18n.language.startsWith('zh');
+  const hideBanner = import.meta.env.VITE_HIDE_HOME_BANNER === 'true';
+  const hideNoticeModal = import.meta.env.VITE_HIDE_NOTICE_MODAL === 'true';
 
   const displayHomePageContent = async () => {
     setHomePageContent(localStorage.getItem('home_page_content') || '');
@@ -119,6 +121,7 @@ const Home = () => {
 
   useEffect(() => {
     const checkNoticeAndShow = async () => {
+      if (hideNoticeModal) return;
       const lastCloseDate = localStorage.getItem('notice_close_date');
       const today = new Date().toDateString();
       if (lastCloseDate !== today) {
@@ -135,7 +138,7 @@ const Home = () => {
     };
 
     checkNoticeAndShow();
-  }, []);
+  }, [hideNoticeModal]);
 
   useEffect(() => {
     displayHomePageContent().then();
@@ -155,7 +158,7 @@ const Home = () => {
         onClose={() => setNoticeVisible(false)}
         isMobile={isMobile}
       />
-      {homePageContentLoaded && homePageContent === '' ? (
+      {homePageContentLoaded && homePageContent === '' && !hideBanner ? (
         <div className='w-full overflow-x-hidden'>
           {/* Banner 部分 */}
           <div className='w-full border-b border-semi-color-border min-h-[500px] md:min-h-[600px] lg:min-h-[700px] relative overflow-x-hidden'>

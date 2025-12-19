@@ -40,15 +40,19 @@ const ActionButtons = ({
   navigate,
   t,
 }) => {
+  const hideNoticeModal = import.meta.env.VITE_HIDE_NOTICE_MODAL === 'true';
+
   return (
     <div className='flex items-center gap-2 md:gap-3'>
       <NewYearButton isNewYear={isNewYear} />
 
-      <NotificationButton
-        unreadCount={unreadCount}
-        onNoticeOpen={onNoticeOpen}
-        t={t}
-      />
+      {!hideNoticeModal && (
+        <NotificationButton
+          unreadCount={unreadCount}
+          onNoticeOpen={onNoticeOpen}
+          t={t}
+        />
+      )}
 
       <ThemeToggle theme={theme} onThemeToggle={onThemeToggle} t={t} />
 
