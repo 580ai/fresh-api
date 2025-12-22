@@ -83,8 +83,11 @@ const Home = () => {
 
   const displayHomePageContent = async () => {
     setHomePageContent(localStorage.getItem('home_page_content') || '');
-    const res = await API.get('/api/home_page_content');
-    const { success, message, data } = res.data;
+    // const res = await API.get('/api/home_page_content');
+    // const { success, message, data } = res.data;
+    const success = true;
+    const message = '请求失败'
+    const data = 'https://ring88127.github.io/POLOAPI.top/'
     if (success) {
       let content = data;
       if (!data.startsWith('https://')) {
