@@ -94,4 +94,21 @@ export function SuperAdminRoute({ children }) {
   return <Navigate to='/forbidden' replace />;
 }
 
+// 管理员或超级管理员路由保护 - 允许 role >= 10 的用户访问
+export function AdminOrSuperAdminRoute({ children }) {
+  const raw = localStorage.getItem('user');
+  if (!raw) {
+    return <Navigate to='/login' state={{ from: history.location }} />;
+  }
+  try {
+    const user = JSON.parse(raw);
+    if (user && typeof user.role === 'number' && user.role >= 10) {
+      return children;
+    }
+  } catch (e) {
+    // ignore
+  }
+  return <Navigate to='/forbidden' replace />;
+}
+
 export { PrivateRoute };

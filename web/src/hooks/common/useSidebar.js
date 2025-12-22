@@ -190,6 +190,18 @@ export const useSidebar = () => {
     };
   }, [adminConfig]);
 
+  // 获取用户角色
+  const getUserRole = () => {
+    try {
+      const raw = localStorage.getItem('user');
+      if (!raw) return 0;
+      const user = JSON.parse(raw);
+      return user.role || 0;
+    } catch (e) {
+      return 0;
+    }
+  };
+
   // 计算最终的显示配置
   const finalConfig = useMemo(() => {
     const result = {};
@@ -206,16 +218,49 @@ export const useSidebar = () => {
 
     // 检查是否是超级管理员
     const isSuperAdminUser = isSuperAdmin();
+    const userRole = getUserRole();
 
     // 遍历所有区域
     Object.keys(adminConfig).forEach((sectionKey) => {
       const adminSection = adminConfig[sectionKey];
       const userSection = userConfig[sectionKey];
 
-      // 如果是admin区域且用户不是超级管理员，直接跳过
-      if (sectionKey === 'admin' && !isSuperAdminUser) {
-        result[sectionKey] = { enabled: false };
-        return;
+      // admin区域的权限控制
+      if (sectionKey === 'admin') {
+        // 超级管理员可以访问所有admin模块
+        if (isSuperAdminUser) {
+          // 继续正常处理
+        } 
+        // 普通管理员（role=10）只能访问部分模块
+        else if (userRole === 10) {
+          // 允许访问admin区域，但只显示特定模块
+          const sectionEnabled = userSection ? userSection.enabled !== false : true;
+          result[sectionKey] = { enabled: sectionEnabled };
+
+          // 只允许兑换码管理和用户管理
+          const allowedModules = ['redemption', 'user'];
+          Object.keys(adminSection).forEach((moduleKey) => {
+            if (moduleKey === 'enabled') return;
+
+            // 只有在允许列表中的模块才可能显示
+            if (allowedModules.includes(moduleKey)) {
+              const adminAllowed = adminSection[moduleKey];
+              const userAllowed = userSection
+                ? userSection[moduleKey] !== false
+                : true;
+              result[sectionKey][moduleKey] =
+                adminAllowed && userAllowed && sectionEnabled;
+            } else {
+              result[sectionKey][moduleKey] = false;
+            }
+          });
+          return;
+        } 
+        // 其他用户无法访问admin区域
+        else {
+          result[sectionKey] = { enabled: false };
+          return;
+        }
       }
 
       // 如果管理员禁用了整个区域，则该区域不显示
