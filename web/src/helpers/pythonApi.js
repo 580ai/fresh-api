@@ -75,3 +75,47 @@ export async function getRealInviteCount(userId) {
     throw error;
   }
 }
+
+/**
+ * 获取邀请用户的充值总金额（收益统计）
+ * @param {number} userId - 用户ID
+ * @returns {Promise<{total_income: number, pending_income: number}>} 收益数据
+ *   - total_income: 总收益（邀请用户充值总金额，美元）
+ *   - pending_income: 待使用收益（美元）
+ * @throws {Error} 如果请求失败或认证失败
+ */
+export async function getInviteIncome(userId) {
+  try {
+    // 生成当前时间戳（秒）
+    const timestamp = Math.floor(Date.now() / 1000);
+
+    // 生成HMAC认证token
+    const auth_token = generateAuthToken(userId, timestamp);
+
+    // 构建请求URL
+    const url = `${PYTHON_API_URL}/pyapi/user/aff/income?user_id=${userId}&auth_token=${auth_token}&timestamp=${timestamp}`;
+
+    // 发送请求
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    // 解析响应
+    const data = await response.json();
+
+    if (data.success) {
+      return {
+        total_income: data.data.total_income,
+        pending_income: data.data.pending_income,
+      };
+    } else {
+      throw new Error(data.message || '获取收益数据失败');
+    }
+  } catch (error) {
+    console.error('获取邀请收益失败:', error);
+    throw error;
+  }
+}

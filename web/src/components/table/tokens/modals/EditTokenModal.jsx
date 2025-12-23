@@ -365,6 +365,8 @@ const EditTokenModal = (props) => {
                         placeholder={t('令牌分组，默认为用户的分组')}
                         optionList={groups}
                         renderOptionItem={renderGroupOption}
+                        filter={selectFilter}
+                        searchPosition='dropdown'
                         showClear
                         style={{ width: '100%' }}
                       />

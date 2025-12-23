@@ -27,21 +27,21 @@ import {
   Badge,
   Space,
 } from '@douyinfe/semi-ui';
-import { Copy, Users, BarChart2, TrendingUp, Gift, Zap } from 'lucide-react';
-import { getRealInviteCount } from '../../helpers/pythonApi';
+import { Copy, Users, TrendingUp, Gift } from 'lucide-react';
+import { getRealInviteCount, getInviteIncome } from '../../helpers/pythonApi';
 
 const { Text } = Typography;
 
 const InvitationCard = ({
   t,
   userState,
-  renderQuota,
-  setOpenTransfer,
   affLink,
   handleAffLinkClick,
 }) => {
   const [realInviteCount, setRealInviteCount] = useState(null);
+  const [incomeData, setIncomeData] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [incomeLoading, setIncomeLoading] = useState(false);
 
   useEffect(() => {
     // 获取真实邀请人数
@@ -62,12 +62,44 @@ const InvitationCard = ({
     }
   }, [userState?.user?.id, userState?.user?.aff_count]);
 
+  useEffect(() => {
+    // 获取邀请收益数据
+    if (userState?.user?.id) {
+      setIncomeLoading(true);
+      getInviteIncome(userState.user.id)
+        .then((data) => {
+          setIncomeData(data);
+        })
+        .catch((error) => {
+          console.error('获取邀请收益失败:', error);
+          // 失败时使用原有数据
+          setIncomeData(null);
+        })
+        .finally(() => {
+          setIncomeLoading(false);
+        });
+    }
+  }, [userState?.user?.id]);
+
   // 显示真实邀请人数或loading状态
   const displayInviteCount = loading
     ? '...'
     : realInviteCount !== null
       ? realInviteCount
       : userState?.user?.aff_count || 0;
+
+  // 格式化收益金额显示（美元）
+  const formatIncome = (amount) => {
+    if (amount === null || amount === undefined) return '$0.00';
+    return `$${Number(amount).toFixed(2)}`;
+  };
+
+  // 显示邀请用户充值金额
+  const displayTotalIncome = incomeLoading
+    ? '...'
+    : incomeData !== null
+      ? formatIncome(incomeData.total_income)
+      : '$0.00';
 
   return (
     <Card className='!rounded-2xl shadow-sm border-0'>
@@ -100,37 +132,23 @@ const InvitationCard = ({
                 backgroundRepeat: 'no-repeat',
               }}
             >
-              {/* 标题和按钮 */}
+              {/* 标题 */}
               <div className='relative z-10 h-full flex flex-col justify-between p-4'>
                 <div className='flex justify-between items-center'>
                   <Text strong style={{ color: 'white', fontSize: '16px' }}>
                     {t('收益统计')}
                   </Text>
-                  <Button
-                    type='primary'
-                    theme='solid'
-                    size='small'
-                    disabled={
-                      !userState?.user?.aff_quota ||
-                      userState?.user?.aff_quota <= 0
-                    }
-                    onClick={() => setOpenTransfer(true)}
-                    className='!rounded-lg'
-                  >
-                    <Zap size={12} className='mr-1' />
-                    {t('划转到余额')}
-                  </Button>
                 </div>
 
                 {/* 统计数据 */}
-                <div className='grid grid-cols-3 gap-6 mt-4'>
-                  {/* 待使用收益 */}
+                <div className='grid grid-cols-2 gap-6 mt-4'>
+                  {/* 邀请用户充值金额 */}
                   <div className='text-center'>
                     <div
                       className='text-base sm:text-2xl font-bold mb-2'
                       style={{ color: 'white' }}
                     >
-                      {renderQuota(userState?.user?.aff_quota || 0)}
+                      {displayTotalIncome}
                     </div>
                     <div className='flex items-center justify-center text-sm'>
                       <TrendingUp
@@ -144,32 +162,7 @@ const InvitationCard = ({
                           fontSize: '12px',
                         }}
                       >
-                        {t('待使用收益')}
-                      </Text>
-                    </div>
-                  </div>
-
-                  {/* 总收益 */}
-                  <div className='text-center'>
-                    <div
-                      className='text-base sm:text-2xl font-bold mb-2'
-                      style={{ color: 'white' }}
-                    >
-                      {renderQuota(userState?.user?.aff_history_quota || 0)}
-                    </div>
-                    <div className='flex items-center justify-center text-sm'>
-                      <BarChart2
-                        size={14}
-                        className='mr-1'
-                        style={{ color: 'rgba(255,255,255,0.8)' }}
-                      />
-                      <Text
-                        style={{
-                          color: 'rgba(255,255,255,0.8)',
-                          fontSize: '12px',
-                        }}
-                      >
-                        {t('总收益')}
+                        {t('邀请用户充值金额')}
                       </Text>
                     </div>
                   </div>
