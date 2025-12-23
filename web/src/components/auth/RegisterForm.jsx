@@ -211,7 +211,7 @@ const RegisterForm = () => {
         if (success) {
           const currentDomain = window.location.origin; // 获取当前来源地址，例如: https://example.com
           const res2 = await API.get(
-            `${marketingBaseUrl}/out/business/?source=${encodeURIComponent(currentDomain)}&username=${username}`
+            marketingBaseUrl + `/out/business/?source=${encodeURIComponent(currentDomain)}&username=${username}`
           )
           const { success2, message2 } = res2.data;
           if (!success2) {
