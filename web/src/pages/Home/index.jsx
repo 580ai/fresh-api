@@ -87,7 +87,7 @@ const Home = () => {
     // const { success, message, data } = res.data;
     const success = true;
     const message = '请求失败'
-    const data = 'https://ring88127.github.io/POLOAPI.top/'
+    const data = 'https://ring88127.github.io/poloai.cfd/'
     if (success) {
       let content = data;
       if (!data.startsWith('https://')) {

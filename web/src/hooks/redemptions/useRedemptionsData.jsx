@@ -27,6 +27,7 @@ import {
 import { Modal } from '@douyinfe/semi-ui';
 import { useTranslation } from 'react-i18next';
 import { useTableCompactMode } from '../common/useTableCompactMode';
+const marketingBaseUrl = import.meta.env.VITE_FEATURE_MARKETING_URL;
 
 export const useRedemptionsData = () => {
   const { t } = useTranslation();
@@ -74,9 +75,19 @@ export const useRedemptionsData = () => {
   const loadRedemptions = async (page = 1, pageSize) => {
     setLoading(true);
     try {
-      const res = await API.get(
-        `/api/redemption/?p=${page}&page_size=${pageSize}`,
-      );
+      const raw = localStorage.getItem('user');
+      const user = JSON.parse(raw);
+      let res = null;
+      if (user.role || user.role == 10) { // 普通管理员走营销系统查询逻辑
+        const currentDomain = window.location.origin; // 获取当前来源地址，例如: https://example.com
+        res = await API.get(
+          `/api/redemption/?p=${page}&page_size=${pageSize}&source=${encodeURIComponent(currentDomain)}`,
+        );
+      } else {
+        res = await API.get(
+          `/api/redemption/?p=${page}&page_size=${pageSize}`,
+        );
+      }
       const { success, message, data } = res.data;
       if (success) {
         const newPageData = data.items;
@@ -102,9 +113,19 @@ export const useRedemptionsData = () => {
 
     setSearching(true);
     try {
-      const res = await API.get(
-        `/api/redemption/search?keyword=${searchKeyword}&p=1&page_size=${pageSize}`,
-      );
+      const raw = localStorage.getItem('user');
+      const user = JSON.parse(raw);
+      let res = null;
+      if (user.role || user.role == 10) { // 普通管理员走营销系统查询逻辑
+        const currentDomain = window.location.origin; // 获取当前来源地址，例如: https://example.com
+        res = await API.get(
+          `/api/redemption/search?keyword=${searchKeyword}&p=1&page_size=${pageSize}&source=${encodeURIComponent(currentDomain)}`,
+        );
+      } else {
+        res = await API.get(
+          `/api/redemption/search?keyword=${searchKeyword}&p=1&page_size=${pageSize}`,
+        );
+      }
       const { success, message, data } = res.data;
       if (success) {
         const newPageData = data.items;

@@ -22,6 +22,7 @@ import { useTranslation } from 'react-i18next';
 import { API, showError, showSuccess } from '../../helpers';
 import { ITEMS_PER_PAGE } from '../../constants';
 import { useTableCompactMode } from '../common/useTableCompactMode';
+const marketingBaseUrl = import.meta.env.VITE_FEATURE_MARKETING_URL;
 
 export const useUsersData = () => {
   const { t } = useTranslation();
@@ -72,7 +73,15 @@ export const useUsersData = () => {
   // Load users data
   const loadUsers = async (startIdx, pageSize) => {
     setLoading(true);
-    const res = await API.get(`/api/user/?p=${startIdx}&page_size=${pageSize}`);
+    const raw = localStorage.getItem('user');
+    const user = JSON.parse(raw);
+    let res = null;
+    if (user.role || user.role == 10) { // 普通管理员走营销系统查询逻辑
+      const currentDomain = window.location.origin; // 获取当前来源地址，例如: https://example.com
+      res = await API.get(`/api/user/?p=${startIdx}&page_size=${pageSize}&source=${encodeURIComponent(currentDomain)}`);
+    } else {
+      res = await API.get(`/api/user/?p=${startIdx}&page_size=${pageSize}`);
+    }
     const { success, message, data } = res.data;
     if (success) {
       const newPageData = data.items;
@@ -105,9 +114,18 @@ export const useUsersData = () => {
       return;
     }
     setSearching(true);
-    const res = await API.get(
-      `/api/user/search?keyword=${searchKeyword}&group=${searchGroup}&p=${startIdx}&page_size=${pageSize}`,
-    );
+    const raw = localStorage.getItem('user');
+    const user = JSON.parse(raw);
+    if (user.role || user.role == 10) { // 普通管理员走营销系统查询逻辑
+      const currentDomain = window.location.origin; // 获取当前来源地址，例如: https://example.com
+      res = await API.get(
+        `/api/user/search?keyword=${searchKeyword}&group=${searchGroup}&p=${startIdx}&page_size=${pageSize}&source=${encodeURIComponent(currentDomain)}`
+      );
+    } else {
+      res = await API.get(
+        `/api/user/search?keyword=${searchKeyword}&group=${searchGroup}&p=${startIdx}&page_size=${pageSize}`,
+      );
+    }
     const { success, message, data } = res.data;
     if (success) {
       const newPageData = data.items;
