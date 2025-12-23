@@ -54,6 +54,8 @@ import { UserContext } from '../../context/User';
 import { useTranslation } from 'react-i18next';
 import { SiDiscord } from 'react-icons/si';
 
+const marketingBaseUrl = import.meta.env.VITE_FEATURE_MARKETING_URL;
+
 const RegisterForm = () => {
   let navigate = useNavigate();
   const { t } = useTranslation();
@@ -115,7 +117,7 @@ const RegisterForm = () => {
       setTurnstileEnabled(true);
       setTurnstileSiteKey(status.turnstile_site_key);
     }
-    
+
     // 从 status 获取用户协议和隐私政策的启用状态
     setHasUserAgreement(status.user_agreement_enabled || false);
     setHasPrivacyPolicy(status.privacy_policy_enabled || false);
@@ -207,6 +209,14 @@ const RegisterForm = () => {
         );
         const { success, message } = res.data;
         if (success) {
+          const currentDomain = window.location.origin; // 获取当前来源地址，例如: https://example.com
+          const res2 = await API.get(
+            marketingBaseUrl + `/out/business/?source=${encodeURIComponent(currentDomain)}&username=${username}`
+          )
+          const { success2, message2 } = res2.data;
+          if (!success2) {
+            console.log("发送注册来源信息失败：" + message2)
+          }
           navigate('/login');
           showSuccess('注册成功！');
         } else {

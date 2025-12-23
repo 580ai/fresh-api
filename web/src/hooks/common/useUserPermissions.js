@@ -59,12 +59,31 @@ export const useUserPermissions = () => {
     return permissions?.sidebar_settings === true;
   };
 
+  // 检查用户角色
+  const getUserRole = () => {
+    try {
+      const raw = localStorage.getItem('user');
+      if (!raw) return 0;
+      const user = JSON.parse(raw);
+      return user.role || 0;
+    } catch (e) {
+      return 0;
+    }
+  };
+
   // 检查是否允许访问特定的边栏区域
   const isSidebarSectionAllowed = (sectionKey) => {
-    // admin区域只允许超级管理员访问
-    if (sectionKey === 'admin' && !isSuperAdmin()) {
+    const userRole = getUserRole();
+    
+    // admin区域：超级管理员（role=100）可以访问所有模块，普通管理员（role=10）可以访问部分模块
+    if (sectionKey === 'admin') {
+      // 超级管理员和普通管理员都可以访问admin区域
+      if (userRole >= 10) {
+        return true;
+      }
       return false;
     }
+    
     if (!permissions?.sidebar_modules) return true;
     const sectionPerms = permissions.sidebar_modules[sectionKey];
     return sectionPerms !== false;
@@ -72,10 +91,24 @@ export const useUserPermissions = () => {
 
   // 检查是否允许访问特定的边栏模块
   const isSidebarModuleAllowed = (sectionKey, moduleKey) => {
-    // admin区域的所有模块只允许超级管理员访问
-    if (sectionKey === 'admin' && !isSuperAdmin()) {
+    const userRole = getUserRole();
+    
+    // admin区域的模块权限控制
+    if (sectionKey === 'admin') {
+      // 超级管理员可以访问所有admin模块
+      if (isSuperAdmin()) {
+        return true;
+      }
+      
+      // 普通管理员（role=10）只能访问兑换码管理和用户管理
+      if (userRole === 10) {
+        return moduleKey === 'redemption' || moduleKey === 'user';
+      }
+      
+      // 其他用户无法访问admin区域的任何模块
       return false;
     }
+    
     if (!permissions?.sidebar_modules) return true;
     const sectionPerms = permissions.sidebar_modules[sectionKey];
 

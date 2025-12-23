@@ -144,36 +144,65 @@ const SiderBar = ({ onNavigate = () => {} }) => {
   }, [t, isModuleVisible]);
 
   const adminItems = useMemo(() => {
+    // 获取用户角色
+    const getUserRole = () => {
+      try {
+        const raw = localStorage.getItem('user');
+        if (!raw) return 0;
+        const user = JSON.parse(raw);
+        return user.role || 0;
+      } catch (e) {
+        return 0;
+      }
+    };
+
+    const userRole = getUserRole();
+    const isSuperAdminUser = isSuperAdmin();
+
+    // 判断某个模块是否应该显示
+    const shouldShowModule = (moduleKey) => {
+      // 超级管理员可以看到所有模块
+      if (isSuperAdminUser) return true;
+      
+      // 普通管理员（role=10）只能看到兑换码管理和用户管理
+      if (userRole === 10) {
+        return moduleKey === 'redemption' || moduleKey === 'user';
+      }
+      
+      // 其他用户看不到任何admin模块
+      return false;
+    };
+
     const items = [
       {
         text: t('渠道管理'),
         itemKey: 'channel',
         to: '/channel',
-        className: isSuperAdmin() ? '' : 'tableHiddle',
+        className: shouldShowModule('channel') ? '' : 'tableHiddle',
       },
       {
         text: t('模型管理'),
         itemKey: 'models',
         to: '/console/models',
-        className: isSuperAdmin() ? '' : 'tableHiddle',
+        className: shouldShowModule('models') ? '' : 'tableHiddle',
       },
       {
         text: t('兑换码管理'),
         itemKey: 'redemption',
         to: '/redemption',
-        className: isSuperAdmin() ? '' : 'tableHiddle',
+        className: shouldShowModule('redemption') ? '' : 'tableHiddle',
       },
       {
         text: t('用户管理'),
         itemKey: 'user',
         to: '/user',
-        className: isSuperAdmin() ? '' : 'tableHiddle',
+        className: shouldShowModule('user') ? '' : 'tableHiddle',
       },
       {
         text: t('系统设置'),
         itemKey: 'setting',
         to: '/setting',
-        className: isSuperAdmin() ? '' : 'tableHiddle',
+        className: shouldShowModule('setting') ? '' : 'tableHiddle',
       },
     ];
 
@@ -462,8 +491,8 @@ const SiderBar = ({ onNavigate = () => {} }) => {
             </>
           )}
 
-          {/* 管理员区域 - 只在超级管理员时显示且配置允许时显示 */}
-          {isSuperAdmin() && hasSectionVisibleModules('admin') && (
+          {/* 管理员区域 - 超级管理员和普通管理员都可以看到（但显示的模块不同） */}
+          {isAdmin() && hasSectionVisibleModules('admin') && (
             <>
               <Divider className='sidebar-divider' />
               <div>

@@ -21,7 +21,7 @@ import React, { lazy, Suspense, useContext, useMemo } from 'react';
 import { Route, Routes, useLocation } from 'react-router-dom';
 import Loading from './components/common/ui/Loading';
 import User from './pages/User';
-import { AuthRedirect, PrivateRoute, AdminRoute, SuperAdminRoute } from './helpers';
+import { AuthRedirect, PrivateRoute, AdminRoute, SuperAdminRoute, AdminOrSuperAdminRoute } from './helpers';
 import RegisterForm from './components/auth/RegisterForm';
 import LoginForm from './components/auth/LoginForm';
 import NotFound from './pages/NotFound';
@@ -135,17 +135,17 @@ function App() {
         <Route
           path='/console/redemption'
           element={
-            <SuperAdminRoute>
+            <AdminOrSuperAdminRoute>
               <Redemption />
-            </SuperAdminRoute>
+            </AdminOrSuperAdminRoute>
           }
         />
         <Route
           path='/console/user'
           element={
-            <SuperAdminRoute>
+            <AdminOrSuperAdminRoute>
               <User />
-            </SuperAdminRoute>
+            </AdminOrSuperAdminRoute>
           }
         />
         <Route
