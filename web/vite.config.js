@@ -86,6 +86,10 @@ export default defineConfig({
   server: {
     host: '0.0.0.0',
     proxy: {
+      '/out': {
+        target: 'http://localhost:8086',
+        changeOrigin: true,
+      },
       '/api': {
         target: 'https://work.poloapi.com',
         changeOrigin: true,

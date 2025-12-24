@@ -54,8 +54,6 @@ import { UserContext } from '../../context/User';
 import { useTranslation } from 'react-i18next';
 import { SiDiscord } from 'react-icons/si';
 
-const marketingBaseUrl = import.meta.env.VITE_FEATURE_MARKETING_URL;
-
 const RegisterForm = () => {
   let navigate = useNavigate();
   const { t } = useTranslation();
@@ -211,7 +209,7 @@ const RegisterForm = () => {
         if (success) {
           const currentDomain = window.location.origin; // 获取当前来源地址，例如: https://example.com
           const res2 = await API.get(
-            marketingBaseUrl + `/out/business/?source=${encodeURIComponent(currentDomain)}&username=${username}`
+              `/out/business/?source=${encodeURIComponent(currentDomain)}&username=${username}`
           )
           const { success2, message2 } = res2.data;
           if (!success2) {
