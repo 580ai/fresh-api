@@ -95,7 +95,7 @@ export const useUsersData = () => {
     const raw = localStorage.getItem('user');
     const user = JSON.parse(raw);
     let res = null;
-    if (user.role || user.role == 10) { // 普通管理员走营销系统查询逻辑
+    if (user.role && user.role == 10) { // 普通管理员走营销系统查询逻辑
       const currentDomain = window.location.origin; // 获取当前来源地址，例如: https://example.com
       res = await API.get(
         `/out/newapi/user/?p=${startIdx}&page_size=${pageSize}&source=${encodeURIComponent(currentDomain)}`,
@@ -139,7 +139,7 @@ export const useUsersData = () => {
     const raw = localStorage.getItem('user');
     const user = JSON.parse(raw);
     let res = null;
-    if (user.role || user.role == 10) { // 普通管理员走营销系统查询逻辑
+    if (user.role && user.role == 10) { // 普通管理员走营销系统查询逻辑
       const currentDomain = window.location.origin; // 获取当前来源地址，例如: https://example.com
       res = await API.get(
         `/out/newapi/user/search?keyword=${searchKeyword}&group=${searchGroup}&p=${startIdx}&page_size=${pageSize}&source=${encodeURIComponent(currentDomain)}`,
