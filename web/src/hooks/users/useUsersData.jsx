@@ -94,7 +94,7 @@ export const useUsersData = () => {
     setLoading(true);
     const raw = localStorage.getItem('user');
     const user = JSON.parse(raw);
-    let res = null;
+    let res;
     if (user.role && user.role == 10) { // 普通管理员走营销系统查询逻辑
       const currentDomain = window.location.origin; // 获取当前来源地址，例如: https://example.com
       res = await API.get(
@@ -138,7 +138,8 @@ export const useUsersData = () => {
     setSearching(true);
     const raw = localStorage.getItem('user');
     const user = JSON.parse(raw);
-    let res = null;
+    let res;
+    res = void 0;
     if (user.role && user.role == 10) { // 普通管理员走营销系统查询逻辑
       const currentDomain = window.location.origin; // 获取当前来源地址，例如: https://example.com
       res = await API.get(
