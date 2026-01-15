@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React, { memo, useCallback } from 'react';
+import React, { memo, useCallback, useEffect } from 'react';
 import { Input, Button, Switch, Select, Divider } from '@douyinfe/semi-ui';
 import { IconSearch, IconCopy, IconFilter } from '@douyinfe/semi-icons';
 
@@ -60,6 +60,9 @@ const SearchActions = memo(
     const handleTokenUnitToggle = useCallback(() => {
       setTokenUnit?.(tokenUnit === 'K' ? 'M' : 'K');
     }, [tokenUnit, setTokenUnit]);
+    useEffect(() => {
+      setShowWithRecharge(true);
+    }, []);
 
     return (
       <div className='flex items-center gap-2 w-full'>
