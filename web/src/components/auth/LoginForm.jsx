@@ -1,10 +1,11 @@
 import React, { useContext, useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { UserContext } from '../../context/User';
 import {
   API,
   getLogo,
   showError,
+  showInfo,
   showSuccess,
   updateAPI,
   getSystemName,
@@ -31,7 +32,7 @@ const LoginForm = () => {
   const { t } = useTranslation();
   const [inputs, setInputs] = useState({ username: '', password: '', wechat_verification_code: '' });
   const { username, password } = inputs;
-  const [, userDispatch] = useContext(UserContext);
+  const [userState, userDispatch] = useContext(UserContext);
   
   const [turnstileEnabled, setTurnstileEnabled] = useState(false);
   const [turnstileSiteKey, setTurnstileSiteKey] = useState('');
@@ -62,9 +63,7 @@ const LoginForm = () => {
     setInputs((inputs) => ({ ...inputs, [name]: value }));
   };
 
-  // 核心提交逻辑
   const handleSubmit = async (ignoreCheck = false) => {
-    // 修改点：如果未勾选且不忽略检查，直接打开协议弹窗，不再 showInfo 提示
     if (!ignoreCheck && !agreedToTerms) {
       setShowAgreementModal(true);
       return;
@@ -80,23 +79,32 @@ const LoginForm = () => {
       const res = await API.post(`/api/user/login?turnstile=${turnstileToken}`, { username, password });
       const { success, message, data } = res.data;
       
-      if (success && data) {
-        if (data.require_2fa) {
+      if (success) {
+        if (data && data.require_2fa) {
           setShowTwoFA(true);
           setLoginLoading(false);
           return;
         }
         
-        userDispatch({ type: 'login', payload: data });
-        setUserData(data);
-        updateAPI();
-        showSuccess('登录成功！');
-        navigate('/console');
+        // 成功处理：先更新本地持久化，再更新全局 Context
+        if (data) {
+          setUserData(data);
+          userDispatch({ type: 'login', payload: data });
+          updateAPI();
+          showSuccess('登录成功！');
+          // 延迟极短时间确保状态写入后再跳转
+          setTimeout(() => {
+            navigate('/console');
+          }, 100);
+        } else {
+          showError('返回数据异常，请重试');
+        }
       } else {
         showError(message || '登录失败');
       }
     } catch (error) {
-      showError('登录异常，请重试');
+      console.error("Login Error Details:", error);
+      showError('登录异常，请检查网络或刷新页面');
     } finally {
       setLoginLoading(false);
     }
@@ -105,7 +113,7 @@ const LoginForm = () => {
   const handleAgreeAndLogin = () => {
     setAgreedToTerms(true); 
     setShowAgreementModal(false);
-    handleSubmit(true); // 强制执行登录，跳过勾选检查
+    handleSubmit(true); 
   };
 
   const renderEmailForm = () => (
@@ -182,29 +190,34 @@ const LoginForm = () => {
   return (
     <div className="h-screen w-full flex bg-white overflow-hidden font-sans">
       
-      {/* --- 左侧背景 --- */}
+      {/* --- 左侧背景区域 (48% 宽度) --- */}
       <div 
-        className="hidden lg:block lg:w-7/12 h-full"
+        className="hidden lg:block lg:w-[48%] h-full relative"
         style={{
             backgroundImage: 'url("/login.png")',
             backgroundSize: 'cover',
             backgroundPosition: 'center',
             backgroundRepeat: 'no-repeat'
         }}
-      />
+      >
+        <div className="absolute inset-0 bg-black/5 flex flex-col justify-start p-16 pt-24">
+            <h1 className="text-4xl font-extrabold text-[#2F65FF] mb-2 drop-shadow-sm">PoloAPI</h1>
+            <h2 className="text-2xl font-bold text-gray-800 mb-1 drop-shadow-sm">全球领先的AI大模型API供应商</h2>
+            <div className="text-xl font-bold text-gray-700 mb-6 drop-shadow-sm flex items-center">
+                专业稳定高并发 <span className="mx-2 text-gray-300">|</span> 直连官转中转API
+            </div>
+        </div>
+      </div>
 
-      {/* --- 右侧内容 --- */}
-      <div className="w-full lg:w-5/12 flex flex-col items-center justify-center px-8 sm:px-20 bg-white relative">
+      {/* --- 右侧登录区域 (52% 宽度) --- */}
+      <div className="w-full lg:w-[52%] flex flex-col items-center justify-center px-8 sm:px-20 bg-white relative">
         <div className="absolute top-8 right-8 cursor-pointer text-gray-300 hover:text-blue-600 transition-colors">
-           <IconLanguage size="large" />
+            <IconLanguage size="large" />
         </div>
 
         <div className="w-full max-w-sm">
           <div className="flex flex-col items-center mb-10 text-center">
-            <div className="p-4 bg-white shadow-xl rounded-2xl mb-4 border border-gray-50">
-              <img src={logo} alt="Logo" className="h-10 w-10 object-contain" />
-            </div>
-            <Title heading={3} className="!m-0 text-gray-800">{systemName}</Title>
+            <Title heading={1} className="!m-0 text-gray-800">{systemName}</Title>
             <Text type="secondary" className="mt-1">用户登录</Text>
           </div>
 
@@ -218,7 +231,6 @@ const LoginForm = () => {
         </div>
       </div>
 
-      {/* 协议弹窗 */}
       <Modal
         title={t('用户协议')}
         visible={showAgreementModal}
@@ -241,7 +253,6 @@ const LoginForm = () => {
         </div>
       </Modal>
 
-      {/* 其他业务弹窗 */}
       <Modal title="微信扫码登录" visible={showWeChatLoginModal} onCancel={() => setShowWeChatLoginModal(false)} footer={null} centered>
         <div className="flex flex-col items-center p-6 text-center">
           <img src={status.wechat_qrcode} alt="WeChat" className="w-48 h-48 mb-6 shadow-xl rounded-xl border border-gray-100" />

@@ -1,32 +1,23 @@
-import React, { useContext, useEffect, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import React, { useContext, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   API,
   getLogo,
   showError,
   showInfo,
   showSuccess,
-  updateAPI,
   getSystemName,
-  setUserData,
-  onDiscordOAuthClicked,
   onGitHubOAuthClicked,
   onLinuxDOOAuthClicked,
-  onOIDCClicked,
 } from '../../helpers';
 import Turnstile from 'react-turnstile';
-import { Button, Checkbox, Form, Icon, Modal, Typography, Spin } from '@douyinfe/semi-ui';
+import { Button, Checkbox, Form, Icon, Modal, Typography } from '@douyinfe/semi-ui';
 import {
   IconGithubLogo,
-  IconMail,
-  IconUser,
-  IconLock,
-  IconKey,
   IconLanguage
 } from '@douyinfe/semi-icons';
-import OIDCIcon from '../common/logo/OIDCIcon';
-import LinuxDoIcon from '../common/logo/LinuxDoIcon';
 import WeChatIcon from '../common/logo/WeChatIcon';
+import LinuxDoIcon from '../common/logo/LinuxDoIcon';
 import DocumentRenderer from '../../components/common/DocumentRenderer';
 import { UserContext } from '../../context/User';
 import { useTranslation } from 'react-i18next';
@@ -42,7 +33,6 @@ const RegisterForm = () => {
     password2: '',
     email: '',
     verification_code: '',
-    wechat_verification_code: '',
   });
   const { username, password, password2 } = inputs;
   const [, userDispatch] = useContext(UserContext);
@@ -265,34 +255,48 @@ const RegisterForm = () => {
         <Text size="small" type="secondary">{t('已有账户？')} </Text>
         <Text size="small" link onClick={() => navigate('/login')} style={{ cursor: 'pointer', fontWeight: 'bold' }}>{t('登录')}</Text>
       </div>
+
+      <div className="flex items-center justify-center mt-8 gap-6">
+        {status.github_oauth && <IconGithubLogo size="extra-large" className="cursor-pointer text-gray-400 hover:text-black transition-colors" onClick={() => onGitHubOAuthClicked(status.github_client_id)} />}
+        {status.linuxdo_oauth && <LinuxDoIcon className="cursor-pointer w-6 h-6 grayscale hover:grayscale-0 transition-all" onClick={() => onLinuxDOOAuthClicked(status.linuxdo_client_id)} />}
+        {status.wechat_login && <Icon svg={<WeChatIcon />} className="cursor-pointer text-gray-400 hover:text-green-500 transition-colors" onClick={() => navigate('/login')} />}
+      </div>
     </div>
   );
 
   return (
     <div className="h-screen w-full flex bg-white overflow-hidden font-sans">
-      {/* --- 左侧背景 --- */}
-      <div
-        className="hidden lg:block lg:w-7/12 h-full"
+      {/* --- 左侧背景区域 (48% 宽度) --- */}
+      <div 
+        className="hidden lg:block lg:w-[48%] h-full relative"
         style={{
-          backgroundImage: 'url("/login.png")',
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-          backgroundRepeat: 'no-repeat'
+            backgroundImage: 'url("/login.png")',
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            backgroundRepeat: 'no-repeat'
         }}
-      />
+      >
+        <div className="absolute inset-0 bg-black/5 flex flex-col justify-start p-16 pt-24">
+            <h1 className="text-4xl font-extrabold text-[#2F65FF] mb-2 drop-shadow-sm">PoloAPI</h1>
+            <h2 className="text-2xl font-bold text-gray-800 mb-1 drop-shadow-sm">全球领先的AI大模型API供应商</h2>
+            <div className="text-xl font-bold text-gray-700 mb-6 drop-shadow-sm flex items-center">
+                专业稳定高并发 <span className="mx-2 text-gray-300">|</span> 直连官转中转API
+            </div>
+        </div>
+      </div>
 
-      {/* --- 右侧注册区 --- */}
-      <div className="w-full lg:w-5/12 flex flex-col items-center justify-center px-8 sm:px-20 bg-white relative">
+      {/* --- 右侧注册区 (52% 宽度) --- */}
+      <div className="w-full lg:w-[52%] flex flex-col items-center justify-center px-8 sm:px-20 bg-white relative">
         <div className="absolute top-8 right-8 cursor-pointer text-gray-300 hover:text-blue-600 transition-colors">
           <IconLanguage size="large" />
         </div>
 
         <div className="w-full max-w-sm">
           <div className="flex flex-col items-center mb-8 text-center">
-            <div className="p-4 bg-white shadow-xl rounded-2xl mb-4 border border-gray-50">
+            {/* <div className="p-4 bg-white shadow-xl rounded-2xl mb-4 border border-gray-50">
               <img src={logo} alt="Logo" className="h-10 w-10 object-contain" />
-            </div>
-            <Title heading={3} className="!m-0 text-gray-800">{systemName}</Title>
+            </div> */}
+            <Title heading={1} className="!m-0 text-gray-800">{systemName}</Title>
             <Text type="secondary" className="mt-1">{t('注 册')}</Text>
           </div>
 
