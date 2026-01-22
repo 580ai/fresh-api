@@ -17,9 +17,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Button, Form } from '@douyinfe/semi-ui';
 import { IconSearch } from '@douyinfe/semi-icons';
+import { selectFilter } from '../../../helpers';
 
 const ChannelsFilters = ({
   setEditingChannel,
@@ -36,6 +37,16 @@ const ChannelsFilters = ({
   searching,
   t,
 }) => {
+  // 对分组选项进行字母排序
+  const sortedGroupOptions = useMemo(() => {
+    if (!groupOptions || groupOptions.length === 0) return [];
+    return [...groupOptions].sort((a, b) => {
+      const labelA = (a.label || '').toString().toLowerCase();
+      const labelB = (b.label || '').toString().toLowerCase();
+      return labelA.localeCompare(labelB);
+    });
+  }, [groupOptions]);
+
   return (
     <div className='flex flex-col md:flex-row justify-between items-center gap-2 w-full'>
       <div className='flex gap-2 w-full md:w-auto order-2 md:order-1'>
@@ -112,11 +123,13 @@ const ChannelsFilters = ({
               placeholder={t('选择分组')}
               optionList={[
                 { label: t('选择分组'), value: null },
-                ...groupOptions,
+                ...sortedGroupOptions,
               ]}
               className='w-full'
               showClear
               pure
+              filter={selectFilter}
+              searchPosition='dropdown'
               onChange={() => {
                 // 延迟执行搜索，让表单值先更新
                 setTimeout(() => {

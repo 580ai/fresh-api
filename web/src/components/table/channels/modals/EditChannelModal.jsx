@@ -172,6 +172,7 @@ const EditChannelModal = (props) => {
   const [originModelOptions, setOriginModelOptions] = useState([]);
   const [modelOptions, setModelOptions] = useState([]);
   const [groupOptions, setGroupOptions] = useState([]);
+  const [sortedGroupOptions, setSortedGroupOptions] = useState([]);
   const [basicModels, setBasicModels] = useState([]);
   const [fullModels, setFullModels] = useState([]);
   const [modelGroups, setModelGroups] = useState([]);
@@ -721,12 +722,18 @@ const EditChannelModal = (props) => {
       if (res === undefined) {
         return;
       }
-      setGroupOptions(
-        res.data.data.map((group) => ({
-          label: group,
-          value: group,
-        })),
-      );
+      const groups = res.data.data.map((group) => ({
+        label: group,
+        value: group,
+      }));
+      setGroupOptions(groups);
+      // 对分组进行字母排序
+      const sorted = [...groups].sort((a, b) => {
+        const labelA = (a.label || '').toString().toLowerCase();
+        const labelB = (b.label || '').toString().toLowerCase();
+        return labelA.localeCompare(labelB);
+      });
+      setSortedGroupOptions(sorted);
     } catch (error) {
       showError(error.message);
     }
@@ -2610,8 +2617,10 @@ const EditChannelModal = (props) => {
                       additionLabel={t(
                         '请在系统设置页面编辑分组倍率以添加新的分组：',
                       )}
-                      optionList={groupOptions}
+                      optionList={sortedGroupOptions}
                       style={{ width: '100%' }}
+                      filter={selectFilter}
+                      searchPosition='dropdown'
                       onChange={(value) => handleInputChange('groups', value)}
                     />
 
