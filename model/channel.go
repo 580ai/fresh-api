@@ -524,6 +524,29 @@ func (channel *Channel) UpdateBalance(balance float64) {
 	}
 }
 
+// UpdateChannelPriorityAndWeight 更新渠道的优先级和权重
+func UpdateChannelPriorityAndWeight(channelId int, priority int64, weight uint) error {
+	err := DB.Model(&Channel{}).Where("id = ?", channelId).Updates(map[string]interface{}{
+		"priority": priority,
+		"weight":   weight,
+	}).Error
+	if err != nil {
+		common.SysLog(fmt.Sprintf("failed to update priority and weight: channel_id=%d, error=%v", channelId, err))
+		return err
+	}
+
+	// 更新缓存
+	if common.MemoryCacheEnabled {
+		channelCache, _ := CacheGetChannel(channelId)
+		if channelCache != nil {
+			channelCache.Priority = &priority
+			channelCache.Weight = &weight
+		}
+	}
+
+	return nil
+}
+
 func (channel *Channel) Delete() error {
 	var err error
 	err = DB.Delete(channel).Error

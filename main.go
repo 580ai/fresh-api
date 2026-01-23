@@ -102,6 +102,9 @@ func main() {
 
 	go controller.AutomaticallyTestChannels()
 
+	// 渠道优先级监控定时任务
+	go controller.AutomaticallyRunChannelPriorityMonitor()
+
 	// Codex credential auto-refresh check every 10 minutes, refresh when expires within 1 day
 	service.StartCodexCredentialAutoRefreshTask()
 

@@ -29,13 +29,14 @@ import {
   Tag,
   Popconfirm,
 } from '@douyinfe/semi-ui';
-import { IconPlus, IconDelete } from '@douyinfe/semi-icons';
+import { IconPlus, IconDelete, IconPlay } from '@douyinfe/semi-icons';
 import {
   compareObjects,
   API,
   showError,
   showSuccess,
   showWarning,
+  showInfo,
   parseHttpStatusCodeRules,
 } from '../../../helpers';
 import { useTranslation } from 'react-i18next';
@@ -122,6 +123,28 @@ export default function SettingsMonitoring(props) {
     });
   };
 
+  // 立即执行渠道优先级监控
+  const [runningMonitor, setRunningMonitor] = useState(false);
+  const runPriorityMonitor = async () => {
+    if (!inputs['channel_priority_monitor.model_priorities']) {
+      showWarning(t('请先配置需要监控的模型'));
+      return;
+    }
+    setRunningMonitor(true);
+    try {
+      const res = await API.post('/api/channel/priority_monitor');
+      if (res.data.success) {
+        showSuccess(t('渠道优先级监控任务已开始执行'));
+      } else {
+        showError(res.data.message || t('执行失败'));
+      }
+    } catch (error) {
+      showError(t('请求失败：') + error.message);
+    } finally {
+      setRunningMonitor(false);
+    }
+  };
+
   function onSubmit() {
     const updateArray = compareObjects(inputs, inputsRow);
     if (!updateArray.length) return showWarning(t('你似乎并没有修改什么'));
@@ -178,7 +201,8 @@ export default function SettingsMonitoring(props) {
   }
 
   useEffect(() => {
-    const currentInputs = {};
+    // 从默认值开始，然后用服务器返回的值覆盖
+    const currentInputs = { ...inputs };
     for (let key in props.options) {
       if (Object.keys(inputs).includes(key)) {
         currentInputs[key] = props.options[key];
@@ -550,8 +574,18 @@ export default function SettingsMonitoring(props) {
                 <Button size='default' onClick={onSubmit}>
                   {t('保存渠道优先级监控设置')}
                 </Button>
+                <Button
+                  size='default'
+                  type='primary'
+                  theme='solid'
+                  icon={<IconPlay />}
+                  loading={runningMonitor}
+                  onClick={runPriorityMonitor}
+                >
+                  {t('立即执行')}
+                </Button>
                 <Tag color='blue'>
-                  {t('响应时间短的渠道优先级数值更小，会被优先选择')}
+                  {t('响应时间短的渠道优先级数值更大，会被优先选择')}
                 </Tag>
               </Space>
             </Row>
