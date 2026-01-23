@@ -89,6 +89,11 @@ const renderStatus = (text, record, t) => {
 
 // Render group column
 const renderGroupColumn = (text, record, t) => {
+  // 空分组显示用户分组
+  if (!text || text === '') {
+    return renderGroup('');
+  }
+
   if (text === 'auto') {
     return (
       <Tooltip
@@ -99,11 +104,12 @@ const renderGroupColumn = (text, record, t) => {
       >
         <Tag color='white' shape='circle'>
           {t('智能熔断')}
-          {record && record.cross_group_retry ? `(${t('跨分组')})` : ''}
         </Tag>
       </Tooltip>
     );
   }
+
+  // renderGroup 已经能处理逗号分隔的多分组
   return renderGroup(text);
 };
 

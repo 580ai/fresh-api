@@ -20,6 +20,8 @@ type GeneralSetting struct {
 	CustomCurrencySymbol string `json:"custom_currency_symbol"`
 	// 自定义货币与美元汇率（1 USD = X Custom）
 	CustomCurrencyExchangeRate float64 `json:"custom_currency_exchange_rate"`
+	// 每个分组的最大重试次数（多分组场景下，每个分组最多尝试多少次后切换到下一个分组）
+	MaxRetryPerGroup int `json:"max_retry_per_group"`
 }
 
 // 默认配置
@@ -30,6 +32,7 @@ var generalSetting = GeneralSetting{
 	QuotaDisplayType:           QuotaDisplayTypeUSD,
 	CustomCurrencySymbol:       "¤",
 	CustomCurrencyExchangeRate: 1.0,
+	MaxRetryPerGroup:           2,
 }
 
 func init() {
@@ -88,4 +91,12 @@ func GetUsdToCurrencyRate(usdToCny float64) float64 {
 	default:
 		return 1
 	}
+}
+
+// GetMaxRetryPerGroup 返回每个分组的最大重试次数
+func GetMaxRetryPerGroup() int {
+	if generalSetting.MaxRetryPerGroup <= 0 {
+		return 2 // 默认值
+	}
+	return generalSetting.MaxRetryPerGroup
 }

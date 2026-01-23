@@ -279,19 +279,36 @@ func TokenAuth() func(c *gin.Context) {
 		userGroup := userCache.Group
 		tokenGroup := token.Group
 		if tokenGroup != "" {
-			// check common.UserUsableGroups[userGroup]
-			if _, ok := service.GetUserUsableGroups(userGroup)[tokenGroup]; !ok {
-				abortWithOpenAiMessage(c, http.StatusForbidden, fmt.Sprintf("无权访问 %s 分组", tokenGroup))
-				return
-			}
-			// check group in common.GroupRatio
-			if !ratio_setting.ContainsGroupRatio(tokenGroup) {
-				if tokenGroup != "auto" {
-					abortWithOpenAiMessage(c, http.StatusForbidden, fmt.Sprintf("分组 %s 已被弃用", tokenGroup))
+			// Handle multi-group (comma-separated) or single group
+			tokenGroups := strings.Split(tokenGroup, ",")
+			userUsableGroups := service.GetUserUsableGroups(userGroup)
+
+			for _, tg := range tokenGroups {
+				tg = strings.TrimSpace(tg)
+				if tg == "" {
+					continue
+				}
+				// Skip "auto" group for permission check as it's a special group
+				if tg == "auto" {
+					continue
+				}
+				// check common.UserUsableGroups[userGroup]
+				if _, ok := userUsableGroups[tg]; !ok {
+					abortWithOpenAiMessage(c, http.StatusForbidden, fmt.Sprintf("无权访问 %s 分组", tg))
+					return
+				}
+				// check group in common.GroupRatio
+				if !ratio_setting.ContainsGroupRatio(tg) {
+					abortWithOpenAiMessage(c, http.StatusForbidden, fmt.Sprintf("分组 %s 已被弃用", tg))
 					return
 				}
 			}
-			userGroup = tokenGroup
+			// Use the first group as the primary group for single-group compatibility
+			// The full tokenGroup string is stored in context for multi-group handling
+			firstGroup := strings.TrimSpace(tokenGroups[0])
+			if firstGroup != "" {
+				userGroup = firstGroup
+			}
 		}
 		common.SetContextKey(c, constant.ContextKeyUsingGroup, userGroup)
 
