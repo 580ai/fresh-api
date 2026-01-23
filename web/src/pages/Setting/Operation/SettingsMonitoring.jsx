@@ -24,7 +24,12 @@ import {
   Form,
   Row,
   Spin,
+  Typography,
+  Space,
+  Tag,
+  Popconfirm,
 } from '@douyinfe/semi-ui';
+import { IconPlus, IconDelete } from '@douyinfe/semi-icons';
 import {
   compareObjects,
   API,
@@ -35,6 +40,8 @@ import {
 } from '../../../helpers';
 import { useTranslation } from 'react-i18next';
 import HttpStatusCodeRulesInput from '../../../components/settings/HttpStatusCodeRulesInput';
+
+const { Text } = Typography;
 
 export default function SettingsMonitoring(props) {
   const { t } = useTranslation();
@@ -49,15 +56,71 @@ export default function SettingsMonitoring(props) {
     AutomaticRetryStatusCodes: '100-199,300-399,401-407,409-499,500-503,505-523,525-599',
     'monitor_setting.auto_test_channel_enabled': false,
     'monitor_setting.auto_test_channel_minutes': 10,
+    // 渠道优先级监控设置
+    'channel_priority_monitor.enabled': false,
+    'channel_priority_monitor.interval_minutes': 30,
+    'channel_priority_monitor.timeout_seconds': 30,
+    'channel_priority_monitor.model_priorities': '',
+    'channel_priority_monitor.response_time_tiers': '[{"min":0,"max":3},{"min":3,"max":10},{"min":10,"max":30},{"min":30,"max":9999}]',
   });
   const refForm = useRef();
   const [inputsRow, setInputsRow] = useState(inputs);
+
+  // 响应时间分层配置
+  const [responseTimeTiers, setResponseTimeTiers] = useState([
+    { min: 0, max: 3 },
+    { min: 3, max: 10 },
+    { min: 10, max: 30 },
+    { min: 30, max: 9999 },
+  ]);
+
   const parsedAutoDisableStatusCodes = parseHttpStatusCodeRules(
     inputs.AutomaticDisableStatusCodes || '',
   );
   const parsedAutoRetryStatusCodes = parseHttpStatusCodeRules(
     inputs.AutomaticRetryStatusCodes || '',
   );
+
+  // 更新分层配置
+  const updateTier = (index, field, value) => {
+    const newTiers = [...responseTimeTiers];
+    newTiers[index] = { ...newTiers[index], [field]: value };
+    setResponseTimeTiers(newTiers);
+    // 同步到 inputs
+    setInputs({
+      ...inputs,
+      'channel_priority_monitor.response_time_tiers': JSON.stringify(newTiers),
+    });
+  };
+
+  // 添加新分层
+  const addTier = () => {
+    const lastTier = responseTimeTiers[responseTimeTiers.length - 1];
+    const newTier = {
+      min: lastTier ? lastTier.max : 0,
+      max: lastTier ? lastTier.max + 10 : 10,
+    };
+    const newTiers = [...responseTimeTiers, newTier];
+    setResponseTimeTiers(newTiers);
+    setInputs({
+      ...inputs,
+      'channel_priority_monitor.response_time_tiers': JSON.stringify(newTiers),
+    });
+  };
+
+  // 删除分层
+  const removeTier = (index) => {
+    if (responseTimeTiers.length <= 1) {
+      showWarning(t('至少保留一个分层配置'));
+      return;
+    }
+    const newTiers = responseTimeTiers.filter((_, i) => i !== index);
+    setResponseTimeTiers(newTiers);
+    setInputs({
+      ...inputs,
+      'channel_priority_monitor.response_time_tiers': JSON.stringify(newTiers),
+    });
+  };
 
   function onSubmit() {
     const updateArray = compareObjects(inputs, inputsRow);
@@ -124,6 +187,18 @@ export default function SettingsMonitoring(props) {
     setInputs(currentInputs);
     setInputsRow(structuredClone(currentInputs));
     refForm.current.setValues(currentInputs);
+
+    // 解析响应时间分层配置
+    if (currentInputs['channel_priority_monitor.response_time_tiers']) {
+      try {
+        const tiers = JSON.parse(currentInputs['channel_priority_monitor.response_time_tiers']);
+        if (Array.isArray(tiers) && tiers.length > 0) {
+          setResponseTimeTiers(tiers);
+        }
+      } catch (e) {
+        console.error('解析响应时间分层配置失败:', e);
+      }
+    }
   }, [props.options]);
 
   return (
@@ -286,6 +361,199 @@ export default function SettingsMonitoring(props) {
               <Button size='default' onClick={onSubmit}>
                 {t('保存监控设置')}
               </Button>
+            </Row>
+          </Form.Section>
+
+          {/* 渠道优先级监控设置 */}
+          <Form.Section text={t('渠道优先级监控设置')}>
+            <Row gutter={16}>
+              <Col xs={24} sm={12} md={8} lg={8} xl={8}>
+                <Form.Switch
+                  field={'channel_priority_monitor.enabled'}
+                  label={t('启用定时测试渠道')}
+                  size='default'
+                  checkedText='｜'
+                  uncheckedText='〇'
+                  onChange={(value) =>
+                    setInputs({
+                      ...inputs,
+                      'channel_priority_monitor.enabled': value,
+                    })
+                  }
+                  extraText={t('定时测试渠道并根据响应时间自动调整优先级和权重')}
+                />
+              </Col>
+              <Col xs={24} sm={12} md={8} lg={8} xl={8}>
+                <Form.InputNumber
+                  label={t('自动测试间隔时间')}
+                  step={1}
+                  min={1}
+                  suffix={t('分钟')}
+                  extraText={t('每隔多少分钟测试一次配置的模型')}
+                  placeholder={'30'}
+                  field={'channel_priority_monitor.interval_minutes'}
+                  onChange={(value) =>
+                    setInputs({
+                      ...inputs,
+                      'channel_priority_monitor.interval_minutes': parseInt(value),
+                    })
+                  }
+                />
+              </Col>
+              <Col xs={24} sm={12} md={8} lg={8} xl={8}>
+                <Form.InputNumber
+                  label={t('最长响应时间')}
+                  step={1}
+                  min={1}
+                  suffix={t('秒')}
+                  extraText={t('超过此时间的渠道将被标记为超时')}
+                  placeholder={'30'}
+                  field={'channel_priority_monitor.timeout_seconds'}
+                  onChange={(value) =>
+                    setInputs({
+                      ...inputs,
+                      'channel_priority_monitor.timeout_seconds': parseInt(value),
+                    })
+                  }
+                />
+              </Col>
+            </Row>
+
+            <Row gutter={16}>
+              <Col xs={24} sm={16}>
+                <Form.TextArea
+                  label={t('模型优先级配置')}
+                  placeholder={t('一行一个，格式：模型名称:起始优先级\n例如：\ngemini-2.5-pro:100\ngpt-4o:200\nclaude-3-5-sonnet:300')}
+                  extraText={t('配置需要监控的模型及其起始优先级，测试后会根据响应时间在此基础上调整')}
+                  field={'channel_priority_monitor.model_priorities'}
+                  autosize={{ minRows: 4, maxRows: 10 }}
+                  onChange={(value) =>
+                    setInputs({
+                      ...inputs,
+                      'channel_priority_monitor.model_priorities': value,
+                    })
+                  }
+                />
+              </Col>
+            </Row>
+
+            {/* 响应时间分层配置 */}
+            <Row gutter={16}>
+              <Col xs={24}>
+                <div style={{ marginBottom: 8 }}>
+                  <Text strong>{t('响应时间分层配置')}</Text>
+                  <Text type='tertiary' style={{ marginLeft: 8 }}>
+                    {t('根据响应时间划分层级，同层级内按响应时间排序分配优先级和权重')}
+                  </Text>
+                </div>
+                <div
+                  style={{
+                    border: '1px solid var(--semi-color-border)',
+                    borderRadius: 8,
+                    padding: 16,
+                    backgroundColor: 'var(--semi-color-bg-1)',
+                  }}
+                >
+                  {/* 表头 */}
+                  <Row gutter={8} style={{ marginBottom: 8 }}>
+                    <Col span={3}>
+                      <Text type='secondary' size='small'>{t('层级')}</Text>
+                    </Col>
+                    <Col span={8}>
+                      <Text type='secondary' size='small'>{t('最小时间(秒)')}</Text>
+                    </Col>
+                    <Col span={8}>
+                      <Text type='secondary' size='small'>{t('最大时间(秒)')}</Text>
+                    </Col>
+                    <Col span={5}>
+                      <Text type='secondary' size='small'>{t('操作')}</Text>
+                    </Col>
+                  </Row>
+
+                  {/* 分层列表 */}
+                  {responseTimeTiers.map((tier, index) => (
+                    <Row gutter={8} key={index} style={{ marginBottom: 8 }} align='middle'>
+                      <Col span={3}>
+                        <Tag color='blue' size='small'>
+                          {t('第{{n}}层', { n: index + 1 })}
+                        </Tag>
+                      </Col>
+                      <Col span={8}>
+                        <Form.InputNumber
+                          field={`tier_min_${index}`}
+                          noLabel
+                          min={0}
+                          value={tier.min}
+                          onChange={(value) => updateTier(index, 'min', value)}
+                          style={{ width: '100%' }}
+                        />
+                      </Col>
+                      <Col span={8}>
+                        <Form.InputNumber
+                          field={`tier_max_${index}`}
+                          noLabel
+                          min={0}
+                          value={tier.max}
+                          onChange={(value) => updateTier(index, 'max', value)}
+                          style={{ width: '100%' }}
+                        />
+                      </Col>
+                      <Col span={5}>
+                        <Popconfirm
+                          title={t('确定删除此分层？')}
+                          onConfirm={() => removeTier(index)}
+                        >
+                          <Button
+                            icon={<IconDelete />}
+                            type='danger'
+                            theme='borderless'
+                            size='small'
+                            disabled={responseTimeTiers.length <= 1}
+                          />
+                        </Popconfirm>
+                      </Col>
+                    </Row>
+                  ))}
+
+                  {/* 添加按钮 */}
+                  <Button
+                    icon={<IconPlus />}
+                    theme='light'
+                    type='tertiary'
+                    size='small'
+                    onClick={addTier}
+                    style={{ marginTop: 8 }}
+                  >
+                    {t('添加分层')}
+                  </Button>
+
+                  {/* 说明 */}
+                  <div style={{ marginTop: 12, padding: 12, backgroundColor: 'var(--semi-color-bg-2)', borderRadius: 6 }}>
+                    <Text type='tertiary' size='small'>
+                      <div style={{ marginBottom: 4 }}><Text strong>{t('优先级分配规则（数值越大越优先）：')}</Text></div>
+                      {t('1. 响应时间越短，优先级数值越大，越优先被选择')}
+                      <br />
+                      {t('2. 第1层渠道优先级最大，依次递减；同层内按响应时间从短到长排序，优先级递减1')}
+                      <br />
+                      {t('3. 如果配置了模型起始优先级（如 gemini-2.5-pro:100），则从该值开始向下分配；否则使用渠道原有优先级')}
+                      <br /><br />
+                      <div style={{ marginBottom: 4 }}><Text strong>{t('权重分配规则（数值越大越优先）：')}</Text></div>
+                      {t('同一层级内，响应时间越短权重越大，被选中的概率越高')}
+                    </Text>
+                  </div>
+                </div>
+              </Col>
+            </Row>
+
+            <Row style={{ marginTop: 16 }}>
+              <Space>
+                <Button size='default' onClick={onSubmit}>
+                  {t('保存渠道优先级监控设置')}
+                </Button>
+                <Tag color='blue'>
+                  {t('响应时间短的渠道优先级数值更小，会被优先选择')}
+                </Tag>
+              </Space>
             </Row>
           </Form.Section>
         </Form>
