@@ -49,6 +49,7 @@ export default function GeneralSettings(props) {
     'general_setting.quota_display_type': 'USD',
     'general_setting.custom_currency_symbol': '¤',
     'general_setting.custom_currency_exchange_rate': '',
+    'general_setting.max_retry_per_group': 2,
     QuotaPerUnit: '',
     RetryTimes: '',
     USDExchangeRate: '',
@@ -72,6 +73,8 @@ export default function GeneralSettings(props) {
     const requestQueue = updateArray.map((item) => {
       let value = '';
       if (typeof inputs[item.key] === 'boolean') {
+        value = String(inputs[item.key]);
+      } else if (typeof inputs[item.key] === 'number') {
         value = String(inputs[item.key]);
       } else {
         value = inputs[item.key];
@@ -154,6 +157,11 @@ export default function GeneralSettings(props) {
       currentInputs['general_setting.custom_currency_exchange_rate'] =
         props.options['general_setting.custom_currency_exchange_rate'];
     }
+    // 回填分组重试次数
+    if (props.options['general_setting.max_retry_per_group'] !== undefined) {
+      const val = props.options['general_setting.max_retry_per_group'];
+      currentInputs['general_setting.max_retry_per_group'] = typeof val === 'string' ? parseInt(val, 10) || 2 : val;
+    }
     setInputs(currentInputs);
     setInputsRow(structuredClone(currentInputs));
     refForm.current.setValues(currentInputs);
@@ -198,6 +206,18 @@ export default function GeneralSettings(props) {
                   placeholder={t('失败重试次数')}
                   onChange={handleFieldChange('RetryTimes')}
                   showClear
+                />
+              </Col>
+              <Col xs={24} sm={12} md={8} lg={8} xl={8}>
+                <Form.InputNumber
+                  field={'general_setting.max_retry_per_group'}
+                  label={t('分组重试次数')}
+                  initValue={2}
+                  min={1}
+                  max={10}
+                  placeholder={t('每个分组最大重试次数')}
+                  extraText={t('多分组场景下，每个分组最多尝试多少次后切换到下一个分组')}
+                  onChange={handleFieldChange('general_setting.max_retry_per_group')}
                 />
               </Col>
               <Col xs={24} sm={12} md={8} lg={8} xl={8}>

@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
+import React from 'react';
 import i18next from 'i18next';
 import { Modal, Tag, Typography, Avatar } from '@douyinfe/semi-ui';
 import { copy, showSuccess } from './utils';
@@ -660,30 +661,38 @@ export function renderGroup(group) {
     premium: 'red',
   };
 
-  const groups = group.split(',').sort();
+  // 不排序，保持原有顺序（优先级顺序）
+  const groups = group.split(',').filter(g => g.trim() !== '');
 
   return (
-    <span key={group}>
-      {groups.map((group) => (
-        <Tag
-          color={tagColors[group] || stringToColor(group)}
-          key={group}
-          shape='circle'
-          onClick={async (event) => {
-            event.stopPropagation();
-            if (await copy(group)) {
-              showSuccess(i18next.t('已复制：') + group);
-            } else {
-              Modal.error({
-                title: i18next.t('无法复制到剪贴板，请手动复制'),
-                content: group,
-              });
-            }
-          }}
-        >
-          {group}
-        </Tag>
-      ))}
+    <span key={group} style={{ display: 'inline-flex', flexWrap: 'wrap', alignItems: 'center', gap: '4px' }}>
+      {groups.map((g, index) => {
+        const trimmedGroup = g.trim();
+        return (
+          <React.Fragment key={trimmedGroup}>
+            <Tag
+              color={tagColors[trimmedGroup] || stringToColor(trimmedGroup)}
+              shape='circle'
+              onClick={async (event) => {
+                event.stopPropagation();
+                if (await copy(trimmedGroup)) {
+                  showSuccess(i18next.t('已复制：') + trimmedGroup);
+                } else {
+                  Modal.error({
+                    title: i18next.t('无法复制到剪贴板，请手动复制'),
+                    content: trimmedGroup,
+                  });
+                }
+              }}
+            >
+              {trimmedGroup}
+            </Tag>
+            {index < groups.length - 1 && (
+              <span style={{ color: 'var(--semi-color-text-2)', fontSize: '12px' }}>➔</span>
+            )}
+          </React.Fragment>
+        );
+      })}
     </span>
   );
 }

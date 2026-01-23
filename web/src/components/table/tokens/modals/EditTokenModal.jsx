@@ -23,11 +23,11 @@ import {
   showError,
   showSuccess,
   timestamp2string,
-  renderGroupOption,
   renderQuotaWithPrompt,
   getModelCategories,
   selectFilter,
 } from '../../../../helpers';
+import DraggableGroupSelect from '../../../common/ui/DraggableGroupSelect';
 import { useIsMobile } from '../../../../hooks/common/useIsMobile';
 import {
   Button,
@@ -62,6 +62,7 @@ const EditTokenModal = (props) => {
   const formApiRef = useRef(null);
   const [models, setModels] = useState([]);
   const [groups, setGroups] = useState([]);
+  const [selectedGroups, setSelectedGroups] = useState([]);
   const isEdit = props.editingToken.id !== undefined;
 
   const getInitValues = () => ({
@@ -72,7 +73,7 @@ const EditTokenModal = (props) => {
     model_limits_enabled: false,
     model_limits: [],
     allow_ips: '',
-    group: '',
+    cross_group_retry: false,
     tokenCount: 1,
   });
 
@@ -99,7 +100,7 @@ const EditTokenModal = (props) => {
   const loadModels = async () => {
     let res = await API.get(`/api/user/models`);
     const { success, message, data } = res.data;
-    if (success) {
+    if (success && data) {
       const categories = getModelCategories(t);
       let localModelOptions = data.map((model) => {
         let icon = null;
@@ -120,7 +121,7 @@ const EditTokenModal = (props) => {
         };
       });
       setModels(localModelOptions);
-    } else {
+    } else if (!success) {
       showError(t(message));
     }
   };
@@ -156,10 +157,17 @@ const EditTokenModal = (props) => {
       if (data.expired_time !== -1) {
         data.expired_time = timestamp2string(data.expired_time);
       }
-      if (data.model_limits !== '') {
+      if (data.model_limits && data.model_limits !== '') {
         data.model_limits = data.model_limits.split(',');
       } else {
         data.model_limits = [];
+      }
+      // 将 group 字符串转换为 groups 数组
+      if (data.group && data.group !== '') {
+        const groupsArray = data.group.split(',').filter(g => g.trim() !== '');
+        setSelectedGroups(groupsArray);
+      } else {
+        setSelectedGroups([]);
       }
       if (formApiRef.current) {
         formApiRef.current.setValues({ ...getInitValues(), ...data });
@@ -186,9 +194,11 @@ const EditTokenModal = (props) => {
         loadToken();
       } else {
         formApiRef.current?.setValues(getInitValues());
+        setSelectedGroups([]);
       }
     } else {
       formApiRef.current?.reset();
+      setSelectedGroups([]);
     }
   }, [props.visiable, props.editingToken.id]);
 
@@ -220,6 +230,10 @@ const EditTokenModal = (props) => {
       }
       localInputs.model_limits = localInputs.model_limits.join(',');
       localInputs.model_limits_enabled = localInputs.model_limits.length > 0;
+      // 使用 selectedGroups state
+      localInputs.group = selectedGroups.join(',');
+      // 多个分组时自动开启跨分组重试
+      localInputs.cross_group_retry = selectedGroups.length > 1;
       let res = await API.put(`/api/token/`, {
         ...localInputs,
         id: parseInt(props.editingToken.id),
@@ -257,6 +271,10 @@ const EditTokenModal = (props) => {
         }
         localInputs.model_limits = localInputs.model_limits.join(',');
         localInputs.model_limits_enabled = localInputs.model_limits.length > 0;
+        // 使用 selectedGroups state
+        localInputs.group = selectedGroups.join(',');
+        // 多个分组时自动开启跨分组重试
+        localInputs.cross_group_retry = selectedGroups.length > 1;
         let res = await API.post(`/api/token/`, localInputs);
         const { success, message } = res.data;
         if (success) {
@@ -274,6 +292,7 @@ const EditTokenModal = (props) => {
     }
     setLoading(false);
     formApiRef.current?.setValues(getInitValues());
+    setSelectedGroups([]);
   };
 
   return (
@@ -359,17 +378,20 @@ const EditTokenModal = (props) => {
                   </Col>
                   <Col span={24}>
                     {groups.length > 0 ? (
-                      <Form.Select
-                        field='group'
-                        label={t('令牌分组')}
-                        placeholder={t('令牌分组，默认为用户的分组')}
-                        optionList={groups}
-                        renderOptionItem={renderGroupOption}
-                        filter={selectFilter}
-                        searchPosition='dropdown'
-                        showClear
-                        style={{ width: '100%' }}
-                      />
+                      <Form.Slot label={t('令牌分组')}>
+                        <DraggableGroupSelect
+                          value={selectedGroups}
+                          onChange={(newGroups) => {
+                            setSelectedGroups(newGroups);
+                            // 多个分组时自动开启跨分组重试
+                            if (formApiRef.current) {
+                              formApiRef.current.setValue('cross_group_retry', newGroups.length > 1);
+                            }
+                          }}
+                          options={groups}
+                          placeholder={t('请选择分组，可多选并拖拽排序设置优先级')}
+                        />
+                      </Form.Slot>
                     ) : (
                       <Form.Select
                         placeholder={t('管理员未设置用户可选分组')}
@@ -501,7 +523,7 @@ const EditTokenModal = (props) => {
                     <Form.Switch
                       field='unlimited_quota'
                       label={t('无限额度')}
-                      size='large'
+                      size='default'
                       extraText={t(
                         '令牌的额度仅用于限制令牌本身的最大额度使用量，实际的使用受到账户的剩余额度限制',
                       )}
@@ -548,11 +570,11 @@ const EditTokenModal = (props) => {
                   <Col span={24}>
                     <Form.TextArea
                       field='allow_ips'
-                      label={t('IP白名单')}
+                      label={t('IP白名单（支持CIDR表达式）')}
                       placeholder={t('允许的IP，一行一个，不填写则不限制')}
                       autosize
                       rows={1}
-                      extraText={t('请勿过度信任此功能，IP可能被伪造')}
+                      extraText={t('请勿过度信任此功能，IP可能被伪造，请配合nginx和cdn等网关使用')}
                       showClear
                       style={{ width: '100%' }}
                     />

@@ -88,7 +88,12 @@ const renderStatus = (text, record, t) => {
 };
 
 // Render group column
-const renderGroupColumn = (text, t) => {
+const renderGroupColumn = (text, record, t) => {
+  // 空分组显示用户分组
+  if (!text || text === '') {
+    return renderGroup('');
+  }
+
   if (text === 'auto') {
     return (
       <Tooltip
@@ -98,12 +103,13 @@ const renderGroupColumn = (text, t) => {
         position='top'
       >
         <Tag color='white' shape='circle'>
-          {' '}
-          {t('智能熔断')}{' '}
+          {t('智能熔断')}
         </Tag>
       </Tooltip>
     );
   }
+
+  // renderGroup 已经能处理逗号分隔的多分组
   return renderGroup(text);
 };
 
@@ -455,7 +461,7 @@ export const getTokensColumns = ({
       title: t('分组'),
       dataIndex: 'group',
       key: 'group',
-      render: (text) => renderGroupColumn(text, t),
+      render: (text, record) => renderGroupColumn(text, record, t),
     },
     {
       title: t('密钥'),
