@@ -127,10 +127,6 @@ export default function SettingsMonitoring(props) {
   // 立即执行渠道优先级监控
   const [runningMonitor, setRunningMonitor] = useState(false);
   const runPriorityMonitor = async () => {
-    if (!inputs['channel_priority_monitor.model_priorities']) {
-      showWarning(t('请先配置需要监控的模型'));
-      return;
-    }
     setRunningMonitor(true);
     try {
       const res = await API.post('/api/channel/priority_monitor');
