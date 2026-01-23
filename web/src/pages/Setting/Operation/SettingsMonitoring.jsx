@@ -28,6 +28,7 @@ import {
   Space,
   Tag,
   Popconfirm,
+  InputNumber,
 } from '@douyinfe/semi-ui';
 import { IconPlus, IconDelete, IconPlay } from '@douyinfe/semi-icons';
 import {
@@ -503,9 +504,7 @@ export default function SettingsMonitoring(props) {
                         </Tag>
                       </Col>
                       <Col span={8}>
-                        <Form.InputNumber
-                          field={`tier_min_${index}`}
-                          noLabel
+                        <InputNumber
                           min={0}
                           value={tier.min}
                           onChange={(value) => updateTier(index, 'min', value)}
@@ -513,9 +512,7 @@ export default function SettingsMonitoring(props) {
                         />
                       </Col>
                       <Col span={8}>
-                        <Form.InputNumber
-                          field={`tier_max_${index}`}
-                          noLabel
+                        <InputNumber
                           min={0}
                           value={tier.max}
                           onChange={(value) => updateTier(index, 'max', value)}
