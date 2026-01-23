@@ -1021,6 +1021,199 @@ const EditChannelModal = (props) => {
     return normalizedMapping !== initialMapping;
   };
 
+  // 拆分提交：每个模型创建一个独立渠道
+  const submitSplit = async () => {
+    const formValues = formApiRef.current ? formApiRef.current.getValues() : {};
+    let localInputs = { ...formValues };
+
+    if (!localInputs.name) {
+      showInfo(t('请填写渠道名称！'));
+      return;
+    }
+    if (!localInputs.key && !isEdit) {
+      showInfo(t('请填写渠道密钥！'));
+      return;
+    }
+    if (!Array.isArray(localInputs.models) || localInputs.models.length === 0) {
+      showInfo(t('请至少选择一个模型！'));
+      return;
+    }
+    if (localInputs.models.length === 1) {
+      showInfo(t('只有一个模型，请直接使用普通提交'));
+      return;
+    }
+
+    // 确认对话框
+    const confirmed = await new Promise((resolve) => {
+      Modal.confirm({
+        title: t('确认拆分提交'),
+        content: t('将创建 {{count}} 个渠道，每个渠道对应一个模型，是否继续？', {
+          count: localInputs.models.length,
+        }),
+        onOk: () => resolve(true),
+        onCancel: () => resolve(false),
+        centered: true,
+      });
+    });
+
+    if (!confirmed) return;
+
+    setLoading(true);
+
+    // 处理 Vertex AI 密钥
+    if (localInputs.type === 41) {
+      const keyType = localInputs.vertex_key_type || 'json';
+      if (keyType !== 'api_key') {
+        if (useManualInput) {
+          if (localInputs.key && localInputs.key.trim() !== '') {
+            try {
+              const parsedKey = JSON.parse(localInputs.key);
+              localInputs.key = JSON.stringify(parsedKey);
+            } catch (err) {
+              showError(t('密钥格式无效，请输入有效的 JSON 格式密钥'));
+              setLoading(false);
+              return;
+            }
+          }
+        } else {
+          let keys = vertexKeys;
+          if (keys.length === 0 && vertexFileList.length > 0) {
+            try {
+              const parsed = await Promise.all(
+                vertexFileList.map(async (item) => {
+                  const fileObj = item.fileInstance;
+                  if (!fileObj) return null;
+                  const txt = await fileObj.text();
+                  return JSON.parse(txt);
+                }),
+              );
+              keys = parsed.filter(Boolean);
+            } catch (err) {
+              showError(t('解析密钥文件失败: {{msg}}', { msg: err.message }));
+              setLoading(false);
+              return;
+            }
+          }
+          if (keys.length > 0) {
+            localInputs.key = JSON.stringify(keys[0]);
+          }
+        }
+      }
+    }
+
+    // 生成渠道额外设置JSON
+    const channelExtraSettings = {
+      force_format: localInputs.force_format || false,
+      thinking_to_content: localInputs.thinking_to_content || false,
+      proxy: localInputs.proxy || '',
+      pass_through_body_enabled: localInputs.pass_through_body_enabled || false,
+      system_prompt: localInputs.system_prompt || '',
+      system_prompt_override: localInputs.system_prompt_override || false,
+    };
+    localInputs.setting = JSON.stringify(channelExtraSettings);
+
+    // 处理 settings 字段
+    let settings = {};
+    if (localInputs.settings) {
+      try {
+        settings = JSON.parse(localInputs.settings);
+      } catch (error) {
+        console.error('解析settings失败:', error);
+      }
+    }
+
+    if (localInputs.type === 20) {
+      settings.openrouter_enterprise = localInputs.is_enterprise_account === true;
+    }
+    if (localInputs.type === 33) {
+      settings.aws_key_type = localInputs.aws_key_type || 'ak_sk';
+    }
+    if (localInputs.type === 41) {
+      settings.vertex_key_type = localInputs.vertex_key_type || 'json';
+    }
+    if (localInputs.type === 1 || localInputs.type === 14) {
+      settings.allow_service_tier = localInputs.allow_service_tier === true;
+      if (localInputs.type === 1) {
+        settings.disable_store = localInputs.disable_store === true;
+        settings.allow_safety_identifier = localInputs.allow_safety_identifier === true;
+      }
+    }
+    localInputs.settings = JSON.stringify(settings);
+
+    // 清理不需要发送到后端的字段
+    delete localInputs.force_format;
+    delete localInputs.thinking_to_content;
+    delete localInputs.proxy;
+    delete localInputs.pass_through_body_enabled;
+    delete localInputs.system_prompt;
+    delete localInputs.system_prompt_override;
+    delete localInputs.is_enterprise_account;
+    delete localInputs.vertex_key_type;
+    delete localInputs.aws_key_type;
+    delete localInputs.allow_service_tier;
+    delete localInputs.disable_store;
+    delete localInputs.allow_safety_identifier;
+    delete localInputs.vertex_files;
+
+    const models = localInputs.models;
+    const baseName = localInputs.name;
+    const results = { success: 0, fail: 0, failedModels: [] };
+
+    // 并发控制：同时最多 5 个请求
+    const concurrencyLimit = 10;
+    const createChannel = async (model) => {
+      const channelData = {
+        ...localInputs,
+        name: `${baseName}-${model}`,
+        models: model,
+        auto_ban: localInputs.auto_ban ? 1 : 0,
+        group: (localInputs.groups || []).join(','),
+      };
+
+      try {
+        const res = await API.post(`/api/channel/`, {
+          mode: 'single',
+          channel: channelData,
+        });
+        if (res.data.success) {
+          results.success++;
+        } else {
+          results.fail++;
+          results.failedModels.push(model);
+        }
+      } catch (error) {
+        results.fail++;
+        results.failedModels.push(model);
+      }
+    };
+
+    // 分批并发执行
+    for (let i = 0; i < models.length; i += concurrencyLimit) {
+      const batch = models.slice(i, i + concurrencyLimit);
+      await Promise.all(batch.map(createChannel));
+    }
+
+    setLoading(false);
+
+    if (results.fail === 0) {
+      showSuccess(t('成功创建 {{count}} 个渠道', { count: results.success }));
+      setInputs(originInputs);
+      props.refresh();
+      props.handleClose();
+    } else if (results.success === 0) {
+      showError(t('所有渠道创建失败'));
+    } else {
+      showInfo(
+        t('成功 {{success}} 个，失败 {{fail}} 个：{{models}}', {
+          success: results.success,
+          fail: results.fail,
+          models: results.failedModels.join(', '),
+        }),
+      );
+      props.refresh();
+    }
+  };
+
   const submit = async () => {
     const formValues = formApiRef.current ? formApiRef.current.getValues() : {};
     let localInputs = { ...formValues };
@@ -1589,9 +1782,20 @@ const EditChannelModal = (props) => {
               >
                 {t('提交')}
               </Button>
+              {!isEdit && (
+                <Button
+                  theme='light'
+                  type='primary'
+                  onClick={submitSplit}
+                  disabled={!inputs.models || inputs.models.length <= 1}
+                  title={t('每个模型创建一个独立渠道')}
+                >
+                  {t('拆分提交')}
+                </Button>
+              )}
               <Button
                 theme='light'
-                type='primary'
+                type='tertiary'
                 onClick={handleCancel}
                 icon={<IconClose />}
               >
