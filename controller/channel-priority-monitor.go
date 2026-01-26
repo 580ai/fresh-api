@@ -122,8 +122,32 @@ func RunChannelPriorityMonitorOptimized(
 	// 等待所有分组处理完成
 	var groupWg sync.WaitGroup
 
+	// 记录需要测试的渠道（排除只有一个渠道的分组）
+	channelsToTest := make(map[int]bool)
+	for modelName, channelIds := range modelChannels {
+		if len(channelIds) <= 1 {
+			common.SysLog(fmt.Sprintf("模型 %s: 只有 %d 个渠道，跳过测试", modelName, len(channelIds)))
+			continue
+		}
+		for _, channelId := range channelIds {
+			channelsToTest[channelId] = true
+		}
+	}
+
+	if len(channelsToTest) == 0 {
+		common.SysLog("没有需要测试的渠道（所有模型分组都只有一个渠道）")
+		return nil
+	}
+
+	common.SysLog(fmt.Sprintf("需要测试的渠道数: %d", len(channelsToTest)))
+
 	// 为每个模型分组启动一个 goroutine，等待该分组内所有渠道测试完成后立即处理
 	for modelName, channelIds := range modelChannels {
+		// 跳过只有一个渠道的分组
+		if len(channelIds) <= 1 {
+			continue
+		}
+
 		groupWg.Add(1)
 		mName := modelName
 		cIds := channelIds
@@ -151,6 +175,12 @@ func RunChannelPriorityMonitorOptimized(
 				return
 			}
 
+			// 如果成功的结果只有一个，也跳过
+			if len(successResults) == 1 {
+				common.SysLog(fmt.Sprintf("模型 %s: 只有 1 个成功渠道，跳过优先级调整", mName))
+				return
+			}
+
 			// 获取该模型的基准优先级
 			basePriority, hasConfig := modelPriorities[mName]
 			if !hasConfig {
@@ -164,7 +194,7 @@ func RunChannelPriorityMonitorOptimized(
 				tierGroups[tierIdx] = append(tierGroups[tierIdx], r)
 			}
 
-			// 对每个层级内的渠道按响应时间排序（从短到长）
+			// 对每个层级内的渠道按响应时间排序（从短到长，用于计算权重）
 			for tierIdx := range tierGroups {
 				sort.Slice(tierGroups[tierIdx], func(i, j int) bool {
 					return tierGroups[tierIdx][i].ResponseTime < tierGroups[tierIdx][j].ResponseTime
@@ -179,10 +209,13 @@ func RunChannelPriorityMonitorOptimized(
 			sort.Ints(tierIndices)
 
 			// 计算优先级和权重
-			currentPriority := basePriority
+			// 同一层级内优先级相同，不同层级优先级递减
 			for _, tierIdx := range tierIndices {
 				group := tierGroups[tierIdx]
 				tier := tiers[tierIdx]
+
+				// 该层级的优先级 = 基准优先级 - 层级索引
+				tierPriority := basePriority - int64(tierIdx)
 
 				minTime := int64(tier.Min * 1000)
 				maxTime := int64(tier.Max * 1000)
@@ -192,7 +225,7 @@ func RunChannelPriorityMonitorOptimized(
 				}
 
 				for _, r := range group {
-					// 计算权重
+					// 计算权重：响应时间越短，权重越大（10-100）
 					var newWeight uint
 					if r.ResponseTime <= minTime {
 						newWeight = 100
@@ -205,8 +238,8 @@ func RunChannelPriorityMonitorOptimized(
 
 					// 更新最终优先级和权重（取最大值）
 					finalMu.Lock()
-					if existingPriority, ok := channelPriority[r.ChannelId]; !ok || currentPriority > existingPriority {
-						channelPriority[r.ChannelId] = currentPriority
+					if existingPriority, ok := channelPriority[r.ChannelId]; !ok || tierPriority > existingPriority {
+						channelPriority[r.ChannelId] = tierPriority
 					}
 					if existingWeight, ok := channelWeight[r.ChannelId]; !ok || newWeight > existingWeight {
 						channelWeight[r.ChannelId] = newWeight
@@ -214,9 +247,7 @@ func RunChannelPriorityMonitorOptimized(
 					finalMu.Unlock()
 
 					common.SysLog(fmt.Sprintf("模型 %s - 渠道 %d (%s): 响应时间 %dms, 层级 %d, 优先级 %d, 权重 %d",
-						mName, r.ChannelId, r.ChannelName, r.ResponseTime, tierIdx+1, currentPriority, newWeight))
-
-					currentPriority--
+						mName, r.ChannelId, r.ChannelName, r.ResponseTime, tierIdx+1, tierPriority, newWeight))
 				}
 			}
 
@@ -224,8 +255,17 @@ func RunChannelPriorityMonitorOptimized(
 		})
 	}
 
-	// 并发测试所有渠道
+	// 只测试需要测试的渠道
 	for _, channel := range targetChannels {
+		// 跳过不需要测试的渠道
+		if !channelsToTest[channel.Id] {
+			// 直接关闭 done channel，避免分组等待
+			if state, ok := channelStates[channel.Id]; ok {
+				close(state.done)
+			}
+			continue
+		}
+
 		ch := channel
 		gopool.Go(func() {
 			models := ch.GetModels()
@@ -264,7 +304,7 @@ func RunChannelPriorityMonitorOptimized(
 			// 保存结果并通知完成
 			if state, ok := channelStates[ch.Id]; ok {
 				state.result = testResult
-				close(state.done) // 通知所有等待该渠道的分组
+				close(state.done)
 			}
 		})
 	}
