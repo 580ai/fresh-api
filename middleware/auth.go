@@ -2,15 +2,18 @@ package middleware
 
 import (
 	"fmt"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
+	"github.com/QuantumNous/new-api/types"
 
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
@@ -193,8 +196,8 @@ func TokenAuth() func(c *gin.Context) {
 			}
 			c.Request.Header.Set("Authorization", "Bearer "+key)
 		}
-		// 检查path包含/v1/messages
-		if strings.Contains(c.Request.URL.Path, "/v1/messages") {
+		// 检查path包含/v1/messages 或 /v1/models
+		if strings.Contains(c.Request.URL.Path, "/v1/messages") || strings.Contains(c.Request.URL.Path, "/v1/models") {
 			anthropicKey := c.Request.Header.Get("x-api-key")
 			if anthropicKey != "" {
 				c.Request.Header.Set("Authorization", "Bearer "+anthropicKey)
@@ -216,10 +219,14 @@ func TokenAuth() func(c *gin.Context) {
 		}
 		key := c.Request.Header.Get("Authorization")
 		parts := make([]string, 0)
-		key = strings.TrimPrefix(key, "Bearer ")
+		if strings.HasPrefix(key, "Bearer ") || strings.HasPrefix(key, "bearer ") {
+			key = strings.TrimSpace(key[7:])
+		}
 		if key == "" || key == "midjourney-proxy" {
 			key = c.Request.Header.Get("mj-api-secret")
-			key = strings.TrimPrefix(key, "Bearer ")
+			if strings.HasPrefix(key, "Bearer ") || strings.HasPrefix(key, "bearer ") {
+				key = strings.TrimSpace(key[7:])
+			}
 			key = strings.TrimPrefix(key, "sk-")
 			parts = strings.Split(key, "-")
 			key = parts[0]
@@ -240,13 +247,20 @@ func TokenAuth() func(c *gin.Context) {
 			return
 		}
 
-		allowIpsMap := token.GetIpLimitsMap()
-		if len(allowIpsMap) != 0 {
+		allowIps := token.GetIpLimits()
+		if len(allowIps) > 0 {
 			clientIp := c.ClientIP()
-			if _, ok := allowIpsMap[clientIp]; !ok {
-				abortWithOpenAiMessage(c, http.StatusForbidden, "您的 IP 不在令牌允许访问的列表中")
+			logger.LogDebug(c, "Token has IP restrictions, checking client IP %s", clientIp)
+			ip := net.ParseIP(clientIp)
+			if ip == nil {
+				abortWithOpenAiMessage(c, http.StatusForbidden, "无法解析客户端 IP 地址")
 				return
 			}
+			if common.IsIpInCIDRList(ip, allowIps) == false {
+				abortWithOpenAiMessage(c, http.StatusForbidden, "您的 IP 不在令牌允许访问的列表中", types.ErrorCodeAccessDenied)
+				return
+			}
+			logger.LogDebug(c, "Client IP %s passed the token IP restrictions check", clientIp)
 		}
 
 		userCache, err := model.GetUserCache(token.UserId)
@@ -265,19 +279,36 @@ func TokenAuth() func(c *gin.Context) {
 		userGroup := userCache.Group
 		tokenGroup := token.Group
 		if tokenGroup != "" {
-			// check common.UserUsableGroups[userGroup]
-			if _, ok := service.GetUserUsableGroups(userGroup)[tokenGroup]; !ok {
-				abortWithOpenAiMessage(c, http.StatusForbidden, fmt.Sprintf("无权访问 %s 分组", tokenGroup))
-				return
-			}
-			// check group in common.GroupRatio
-			if !ratio_setting.ContainsGroupRatio(tokenGroup) {
-				if tokenGroup != "auto" {
-					abortWithOpenAiMessage(c, http.StatusForbidden, fmt.Sprintf("分组 %s 已被弃用", tokenGroup))
+			// Handle multi-group (comma-separated) or single group
+			tokenGroups := strings.Split(tokenGroup, ",")
+			userUsableGroups := service.GetUserUsableGroups(userGroup)
+
+			for _, tg := range tokenGroups {
+				tg = strings.TrimSpace(tg)
+				if tg == "" {
+					continue
+				}
+				// Skip "auto" group for permission check as it's a special group
+				if tg == "auto" {
+					continue
+				}
+				// check common.UserUsableGroups[userGroup]
+				if _, ok := userUsableGroups[tg]; !ok {
+					abortWithOpenAiMessage(c, http.StatusForbidden, fmt.Sprintf("无权访问 %s 分组", tg))
+					return
+				}
+				// check group in common.GroupRatio
+				if !ratio_setting.ContainsGroupRatio(tg) {
+					abortWithOpenAiMessage(c, http.StatusForbidden, fmt.Sprintf("分组 %s 已被弃用", tg))
 					return
 				}
 			}
-			userGroup = tokenGroup
+			// Use the first group as the primary group for single-group compatibility
+			// The full tokenGroup string is stored in context for multi-group handling
+			firstGroup := strings.TrimSpace(tokenGroups[0])
+			if firstGroup != "" {
+				userGroup = firstGroup
+			}
 		}
 		common.SetContextKey(c, constant.ContextKeyUsingGroup, userGroup)
 
@@ -307,7 +338,8 @@ func SetupContextForToken(c *gin.Context, token *model.Token, parts ...string) e
 	} else {
 		c.Set("token_model_limit_enabled", false)
 	}
-	c.Set("token_group", token.Group)
+	common.SetContextKey(c, constant.ContextKeyTokenGroup, token.Group)
+	common.SetContextKey(c, constant.ContextKeyTokenCrossGroupRetry, token.CrossGroupRetry)
 	if len(parts) > 1 {
 		if model.IsAdmin(token.UserId) {
 			c.Set("specific_channel_id", parts[1])

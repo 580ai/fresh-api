@@ -217,11 +217,6 @@ func IntMax(a int, b int) int {
 	}
 }
 
-func IsIP(s string) bool {
-	ip := net.ParseIP(s)
-	return ip != nil
-}
-
 func GetUUID() string {
 	code := uuid.New().String()
 	code = strings.Replace(code, "-", "", -1)
@@ -268,7 +263,7 @@ func GetTimestamp() int64 {
 }
 
 func GetTimeString() string {
-	now := time.Now()
+	now := time.Now().UTC()
 	return fmt.Sprintf("%s%d", now.Format("20060102150405"), now.UnixNano()%1e9)
 }
 

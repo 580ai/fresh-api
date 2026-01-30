@@ -93,6 +93,10 @@ func SetApiRouter(router *gin.Engine) {
 				selfRoute.POST("/2fa/enable", controller.Enable2FA)
 				selfRoute.POST("/2fa/disable", controller.Disable2FA)
 				selfRoute.POST("/2fa/backup_codes", controller.RegenerateBackupCodes)
+
+				// Check-in routes
+				selfRoute.GET("/checkin", controller.GetCheckinStatus)
+				selfRoute.POST("/checkin", middleware.TurnstileCheck(), controller.DoCheckin)
 			}
 
 			adminRoute := userRoute.Group("/")
@@ -141,6 +145,7 @@ func SetApiRouter(router *gin.Engine) {
 			channelRoute.GET("/test/:id", controller.TestChannel)
 			channelRoute.GET("/update_balance", controller.UpdateAllChannelsBalance)
 			channelRoute.GET("/update_balance/:id", controller.UpdateChannelBalance)
+			channelRoute.POST("/priority_monitor", controller.RunChannelPriorityMonitorAPI)
 			channelRoute.POST("/", controller.AddChannel)
 			channelRoute.PUT("/", controller.UpdateChannel)
 			channelRoute.DELETE("/disabled", controller.DeleteDisabledChannel)
@@ -152,6 +157,16 @@ func SetApiRouter(router *gin.Engine) {
 			channelRoute.POST("/fix", controller.FixChannelsAbilities)
 			channelRoute.GET("/fetch_models/:id", controller.FetchUpstreamModels)
 			channelRoute.POST("/fetch_models", controller.FetchModels)
+			channelRoute.POST("/codex/oauth/start", controller.StartCodexOAuth)
+			channelRoute.POST("/codex/oauth/complete", controller.CompleteCodexOAuth)
+			channelRoute.POST("/:id/codex/oauth/start", controller.StartCodexOAuthForChannel)
+			channelRoute.POST("/:id/codex/oauth/complete", controller.CompleteCodexOAuthForChannel)
+			channelRoute.POST("/:id/codex/refresh", controller.RefreshCodexChannelCredential)
+			channelRoute.GET("/:id/codex/usage", controller.GetCodexChannelUsage)
+			channelRoute.POST("/ollama/pull", controller.OllamaPullModel)
+			channelRoute.POST("/ollama/pull/stream", controller.OllamaPullModelStream)
+			channelRoute.DELETE("/ollama/delete", controller.OllamaDeleteModel)
+			channelRoute.GET("/ollama/version/:id", controller.OllamaVersion)
 			channelRoute.POST("/batch/tag", controller.BatchSetChannelTag)
 			channelRoute.GET("/tag/models", controller.GetTagModels)
 			channelRoute.POST("/copy/:id", controller.CopyChannel)
@@ -255,6 +270,32 @@ func SetApiRouter(router *gin.Engine) {
 			modelsRoute.POST("/", controller.CreateModelMeta)
 			modelsRoute.PUT("/", controller.UpdateModelMeta)
 			modelsRoute.DELETE("/:id", controller.DeleteModelMeta)
+		}
+
+		// Deployments (model deployment management)
+		deploymentsRoute := apiRouter.Group("/deployments")
+		deploymentsRoute.Use(middleware.AdminAuth())
+		{
+			deploymentsRoute.GET("/settings", controller.GetModelDeploymentSettings)
+			deploymentsRoute.POST("/settings/test-connection", controller.TestIoNetConnection)
+			deploymentsRoute.GET("/", controller.GetAllDeployments)
+			deploymentsRoute.GET("/search", controller.SearchDeployments)
+			deploymentsRoute.POST("/test-connection", controller.TestIoNetConnection)
+			deploymentsRoute.GET("/hardware-types", controller.GetHardwareTypes)
+			deploymentsRoute.GET("/locations", controller.GetLocations)
+			deploymentsRoute.GET("/available-replicas", controller.GetAvailableReplicas)
+			deploymentsRoute.POST("/price-estimation", controller.GetPriceEstimation)
+			deploymentsRoute.GET("/check-name", controller.CheckClusterNameAvailability)
+			deploymentsRoute.POST("/", controller.CreateDeployment)
+
+			deploymentsRoute.GET("/:id", controller.GetDeployment)
+			deploymentsRoute.GET("/:id/logs", controller.GetDeploymentLogs)
+			deploymentsRoute.GET("/:id/containers", controller.ListDeploymentContainers)
+			deploymentsRoute.GET("/:id/containers/:container_id", controller.GetContainerDetails)
+			deploymentsRoute.PUT("/:id", controller.UpdateDeployment)
+			deploymentsRoute.PUT("/:id/name", controller.UpdateDeploymentName)
+			deploymentsRoute.POST("/:id/extend", controller.ExtendDeployment)
+			deploymentsRoute.DELETE("/:id", controller.DeleteDeployment)
 		}
 	}
 }
