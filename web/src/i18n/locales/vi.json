@@ -54,7 +54,7 @@
     "API 密钥": "Khóa API",
     "API 文档": "Tài liệu API",
     "API 配置": "Cấu hình API",
-    "API令牌管理": "Quản lý mã thông báo API",
+    "API令牌": "API токен",
     "API使用记录": "Hồ sơ sử dụng API",
     "API信息": "Thông tin API",
     "API信息管理，可以配置多个API地址用于状态展示和负载均衡（最多50个）": "Quản lý thông tin API, bạn có thể cấu hình nhiều địa chỉ API để hiển thị trạng thái và cân bằng tải (tối đa 50)",
@@ -1151,7 +1151,7 @@
     "操作失败，请重试": "Thao tác thất bại, vui lòng thử lại",
     "操作成功完成！": "Thao tác hoàn tất thành công!",
     "操作暂时被禁用": "Thao tác tạm thời bị vô hiệu hóa",
-    "操练场": "Sân chơi",
+    "体验中心": "Trải nghiệm",
     "操练场和聊天功能": "Chức năng sân chơi và trò chuyện",
     "支付地址": "Địa chỉ thanh toán",
     "支付宝": "Alipay",
@@ -1825,6 +1825,7 @@
     "用户列表": "Danh sách người dùng",
     "用户创建成功，密码为": "Người dùng được tạo thành công, mật khẩu là",
     "用户协议": "Thỏa thuận người dùng",
+    "《用户协议》": "《Thỏa thuận người dùng》",
     "用户协议已更新": "Thỏa thuận người dùng đã được cập nhật",
     "用户协议更新失败": "Cập nhật thỏa thuận người dùng thất bại",
     "用户可选分组": "Nhóm người dùng có thể chọn",
@@ -3167,6 +3168,10 @@
     "格式化 JSON": "Định dạng JSON",
     "关闭提示": "Đóng thông báo",
     "说明：本页测试为非流式请求；若渠道仅支持流式返回，可能出现测试失败，请以实际使用为准。": "Lưu ý: Bài kiểm tra trên trang này sử dụng yêu cầu không streaming. Nếu kênh chỉ hỗ trợ phản hồi streaming, bài kiểm tra có thể thất bại. Vui lòng dựa vào sử dụng thực tế.",
-    "提示：端点映射仅用于模型广场展示，不会影响模型真实调用。如需配置真实调用，请前往「渠道管理」。": "Lưu ý: Ánh xạ endpoint chỉ dùng để hiển thị trong \"Chợ mô hình\" và không ảnh hưởng đến việc gọi thực tế. Để cấu hình gọi thực tế, vui lòng vào \"Quản lý kênh\"."
+    "提示：端点映射仅用于模型广场展示，不会影响模型真实调用。如需配置真实调用，请前往「渠道管理」。": "Lưu ý: Ánh xạ endpoint chỉ dùng để hiển thị trong \"Chợ mô hình\" và không ảnh hưởng đến việc gọi thực tế. Để cấu hình gọi thực tế, vui lòng vào \"Quản lý kênh\".",
+    "更强模型": "Mô Hình Mạnh Mẽ Hơn",
+    "更低价格": "Giá Thấp Hơn",
+    "更易落地": "Triển Khai Dễ Dàng Hơn",
+    "致力于为开发者提供快速、便捷的 Web API 接口调用方案，打造稳定且易于使用的 API 接口平台，一站式集成几乎所有 AI 大模型。": "Cam kết cung cấp cho các nhà phát triển giải pháp gọi giao diện Web API nhanh chóng và tiện lợi, xây dựng nền tảng API ổn định và dễ sử dụng với tích hợp một cửa hầu hết các mô hình AI lớn."
   }
 }

@@ -62,10 +62,23 @@ import { UserContext } from '../../context/User';
 import { StatusContext } from '../../context/Status';
 import { useTranslation } from 'react-i18next';
 import { SiDiscord } from 'react-icons/si';
+import { House } from 'lucide-react';
+import loginImage from './login.png';
+import NotificationButton from '../layout/headerbar/NotificationButton';
+import ThemeToggle from '../layout/headerbar/ThemeToggle';
+import LanguageSelector from '../layout/headerbar/LanguageSelector';
+import NoticeModal from '../layout/NoticeModal';
+import { useNotifications } from '../../hooks/common/useNotifications';
+import { useTheme, useSetTheme } from '../../context/Theme';
+import { useIsMobile } from '../../hooks/common/useIsMobile';
 
 const RegisterForm = () => {
   let navigate = useNavigate();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const isMobile = useIsMobile();
+  const theme = useTheme();
+  const setTheme = useSetTheme();
+
   const githubButtonTextKeyByState = {
     idle: '使用 GitHub 继续',
     redirecting: '正在跳转 GitHub...',
@@ -103,6 +116,10 @@ const RegisterForm = () => {
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [hasUserAgreement, setHasUserAgreement] = useState(false);
   const [hasPrivacyPolicy, setHasPrivacyPolicy] = useState(false);
+  const [showUserAgreementModal, setShowUserAgreementModal] = useState(false);
+  const [showPrivacyPolicyModal, setShowPrivacyPolicyModal] = useState(false);
+  const [userAgreementContent, setUserAgreementContent] = useState('');
+  const [privacyPolicyContent, setPrivacyPolicyContent] = useState('');
   const [githubButtonState, setGithubButtonState] = useState('idle');
   const [githubButtonDisabled, setGithubButtonDisabled] = useState(false);
   const githubTimeoutRef = useRef(null);
@@ -110,6 +127,15 @@ const RegisterForm = () => {
 
   const logo = getLogo();
   const systemName = getSystemName();
+
+  // 通知功能
+  const {
+    noticeVisible,
+    unreadCount,
+    handleNoticeOpen,
+    handleNoticeClose,
+    getUnreadKeys,
+  } = useNotifications(statusState);
 
   let affCode = new URLSearchParams(window.location.search).get('aff');
   if (affCode) {
@@ -161,6 +187,68 @@ const RegisterForm = () => {
       }
     };
   }, []);
+
+  // 主题切换处理
+  const handleThemeToggle = (newTheme) => {
+    setTheme(newTheme);
+  };
+
+  // 语言切换处理
+  const handleLanguageChange = (lang) => {
+    i18n.changeLanguage(lang);
+  };
+
+  // 获取用户协议内容
+  const fetchUserAgreement = async () => {
+    try {
+      const res = await API.get('/api/user-agreement');
+      if (res.data.success) {
+        setUserAgreementContent(res.data.data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch user agreement:', error);
+    }
+  };
+
+  // 获取隐私政策内容
+  const fetchPrivacyPolicy = async () => {
+    try {
+      const res = await API.get('/api/privacy-policy');
+      if (res.data.success) {
+        setPrivacyPolicyContent(res.data.data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch privacy policy:', error);
+    }
+  };
+
+  // 显示用户协议模态框
+  const handleShowUserAgreement = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    fetchUserAgreement();
+    setShowUserAgreementModal(true);
+  };
+
+  // 显示隐私政策模态框
+  const handleShowPrivacyPolicy = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    fetchPrivacyPolicy();
+    setShowPrivacyPolicyModal(true);
+  };
+
+  // 同意用户协议并继续
+  const handleAgreeUserAgreement = () => {
+    setAgreedToTerms(true);
+    setShowUserAgreementModal(false);
+  };
+
+  // 同意隐私政策并继续
+  const handleAgreePrivacyPolicy = () => {
+    setAgreedToTerms(true);
+    setShowPrivacyPolicyModal(false);
+  };
 
   const onWeChatLoginClicked = () => {
     setWechatLoading(true);
@@ -515,22 +603,22 @@ const RegisterForm = () => {
   const renderEmailRegisterForm = () => {
     return (
       <div className='flex flex-col items-center'>
-        <div className='w-full max-w-md'>
-          <div className='flex items-center justify-center mb-6 gap-2'>
-            <img src={logo} alt='Logo' className='h-10 rounded-full' />
-            <Title heading={3} className='!text-gray-800'>
-              {systemName}
+        <div className='w-full'>
+          <div className='flex items-center justify-center mb-6 gap-3'>
+            <img src={logo} alt='Logo' className='h-12 rounded-full' />
+            <Title heading={1} className='!text-gray-800 dark:!text-gray-200 !text-3xl !font-bold'>
+              Polo API
             </Title>
           </div>
 
-          <Card className='border-0 !rounded-2xl overflow-hidden'>
-            <div className='flex justify-center pt-6 pb-2'>
-              <Title heading={3} className='text-gray-800 dark:text-gray-200'>
-                {t('注 册')}
+          <div className='w-full max-w-md mx-auto'>
+            <div className='flex justify-center mb-10'>
+              <Title heading={2} className='text-gray-800 dark:text-gray-200 font-bold !text-2xl'>
+                {t('用户注册')}
               </Title>
             </div>
-            <div className='px-2 py-8'>
-              <Form className='space-y-3'>
+            <div className='space-y-4'>
+              <Form className='space-y-6'>
                 <Form.Input
                   field='username'
                   label={t('用户名')}
@@ -538,6 +626,10 @@ const RegisterForm = () => {
                   name='username'
                   onChange={(value) => handleChange('username', value)}
                   prefix={<IconUser />}
+                  className='!rounded-lg'
+                  style={{ height: '56px' }}
+                  inputStyle={{ fontSize: '16px', height: '56px', padding: '0 16px' }}
+                  labelStyle={{ fontSize: '15px', fontWeight: '500', marginBottom: '8px' }}
                 />
 
                 <Form.Input
@@ -548,6 +640,10 @@ const RegisterForm = () => {
                   mode='password'
                   onChange={(value) => handleChange('password', value)}
                   prefix={<IconLock />}
+                  className='!rounded-lg'
+                  style={{ height: '56px' }}
+                  inputStyle={{ fontSize: '16px', height: '56px', padding: '0 16px' }}
+                  labelStyle={{ fontSize: '15px', fontWeight: '500', marginBottom: '8px' }}
                 />
 
                 <Form.Input
@@ -558,6 +654,10 @@ const RegisterForm = () => {
                   mode='password'
                   onChange={(value) => handleChange('password2', value)}
                   prefix={<IconLock />}
+                  className='!rounded-lg'
+                  style={{ height: '56px' }}
+                  inputStyle={{ fontSize: '16px', height: '56px', padding: '0 16px' }}
+                  labelStyle={{ fontSize: '15px', fontWeight: '500', marginBottom: '8px' }}
                 />
 
                 {showEmailVerification && (
@@ -570,6 +670,10 @@ const RegisterForm = () => {
                       type='email'
                       onChange={(value) => handleChange('email', value)}
                       prefix={<IconMail />}
+                      className='!rounded-lg'
+                      style={{ height: '56px' }}
+                      inputStyle={{ fontSize: '16px', height: '56px', padding: '0 16px' }}
+                      labelStyle={{ fontSize: '15px', fontWeight: '500', marginBottom: '8px' }}
                       suffix={
                         <Button
                           onClick={sendVerificationCode}
@@ -591,27 +695,30 @@ const RegisterForm = () => {
                         handleChange('verification_code', value)
                       }
                       prefix={<IconKey />}
+                      className='!rounded-lg'
+                      style={{ height: '56px' }}
+                      inputStyle={{ fontSize: '16px', height: '56px', padding: '0 16px' }}
+                      labelStyle={{ fontSize: '15px', fontWeight: '500', marginBottom: '8px' }}
                     />
                   </>
                 )}
 
                 {(hasUserAgreement || hasPrivacyPolicy) && (
-                  <div className='pt-4'>
+                  <div className='flex items-center pt-2'>
                     <Checkbox
                       checked={agreedToTerms}
                       onChange={(e) => setAgreedToTerms(e.target.checked)}
                     >
-                      <Text size='small' className='text-gray-600'>
+                      <Text size='big' className='text-gray-400'>
                         {t('我已阅读并同意')}
                         {hasUserAgreement && (
                           <>
                             <a
-                              href='/user-agreement'
-                              target='_blank'
-                              rel='noopener noreferrer'
-                              className='text-blue-600 hover:text-blue-800 mx-1'
+                              href='#'
+                              onClick={handleShowUserAgreement}
+                              className='text-blue-600 hover:text-blue-800 mx-1 cursor-pointer'
                             >
-                              {t('用户协议')}
+                              {t('《用户协议》')}
                             </a>
                           </>
                         )}
@@ -619,12 +726,11 @@ const RegisterForm = () => {
                         {hasPrivacyPolicy && (
                           <>
                             <a
-                              href='/privacy-policy'
-                              target='_blank'
-                              rel='noopener noreferrer'
-                              className='text-blue-600 hover:text-blue-800 mx-1'
+                              href='#'
+                              onClick={handleShowPrivacyPolicy}
+                              className='text-blue-600 hover:text-blue-800 mx-1 cursor-pointer'
                             >
-                              {t('隐私政策')}
+                              {t('《隐私政策》')}
                             </a>
                           </>
                         )}
@@ -633,12 +739,13 @@ const RegisterForm = () => {
                   </div>
                 )}
 
-                <div className='space-y-2 pt-2'>
+                <div className='space-y-3 pt-6'>
                   <Button
                     theme='solid'
-                    className='w-full !rounded-full'
+                    className='w-full !rounded-full h-14 text-lg font-semibold shadow-lg hover:shadow-xl transition-all'
                     type='primary'
                     htmlType='submit'
+                    size='large'
                     onClick={handleSubmit}
                     loading={registerLoading}
                     disabled={
@@ -687,7 +794,7 @@ const RegisterForm = () => {
                 </Text>
               </div>
             </div>
-          </Card>
+          </div>
         </div>
       </div>
     );
@@ -733,17 +840,99 @@ const RegisterForm = () => {
   };
 
   return (
-    <div className='relative overflow-hidden bg-gray-100 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8'>
-      {/* 背景模糊晕染球 */}
-      <div
-        className='blur-ball blur-ball-indigo'
-        style={{ top: '-80px', right: '-80px', transform: 'none' }}
+    <>
+      {/* 公告模态框 */}
+      <NoticeModal
+        visible={noticeVisible}
+        onClose={handleNoticeClose}
+        isMobile={isMobile}
+        defaultTab={unreadCount > 0 ? 'system' : 'inApp'}
+        unreadKeys={getUnreadKeys()}
       />
-      <div
-        className='blur-ball blur-ball-teal'
-        style={{ top: '50%', left: '-120px' }}
-      />
-      <div className='w-full max-w-sm mt-[60px]'>
+
+      <div className='min-h-screen flex'>
+      {/* 左侧 - 品牌展示区 */}
+      <div className='hidden lg:flex lg:w-1/2 relative overflow-hidden'>
+        {/* 背景图片 */}
+        <div
+          className='absolute inset-0 bg-cover bg-center bg-no-repeat'
+          style={{ backgroundImage: `url(${loginImage})` }}
+        >
+          {/* 渐变遮罩 */}
+          <div className='absolute inset-0 bg-gradient-to-br from-blue-400/80 via-blue-500/70 to-blue-600/80'></div>
+        </div>
+
+        {/* 内容区 */}
+        <div className='relative z-10 flex flex-col justify-start items-center px-24 pt-32 pb-24 text-white h-full group'>
+          {/* Logo和标题 */}
+          <div className='text-center transition-all duration-500 group-hover:transform group-hover:scale-105'>
+            {/* Polo API 标题 - 渐变色 */}
+            <h1 className='text-6xl font-bold mb-8 transition-all duration-300' style={{ textShadow: '0 2px 10px rgba(0,0,0,0.1)' }}>
+              <span style={{
+                background: 'linear-gradient(135deg, #60a5fa 0%, #93c5fd 50%, #60a5fa 100%)',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+                backgroundClip: 'text'
+              }}>
+                Polo
+              </span>
+              <span className='ml-3' style={{
+                background: 'linear-gradient(135deg, #c084fc 0%, #e9d5ff 50%, #c084fc 100%)',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+                backgroundClip: 'text'
+              }}>
+                API
+              </span>
+            </h1>
+
+            {/* 标语 - 白色文字带阴影 */}
+            <h2 className='text-3xl font-bold mb-8 text-white transition-all duration-500 group-hover:tracking-wider' style={{ textShadow: '0 2px 8px rgba(0,0,0,0.15)' }}>
+              {t('更强模型')} {t('更低价格')} {t('更易落地')}
+            </h2>
+
+            {/* 描述文字 - 白色半透明 */}
+            <p className='text-base text-white/95 leading-relaxed max-w-xl mx-auto transition-all duration-500 group-hover:text-white' style={{ textShadow: '0 1px 4px rgba(0,0,0,0.1)' }}>
+              {t('致力于为开发者提供快速、便捷的 Web API 接口调用方案，打造稳定且易于使用的 API 接口平台，一站式集成几乎所有 AI 大模型。')}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* 右侧 - 注册表单区 */}
+      <div className='w-full lg:w-1/2 flex flex-col bg-white dark:bg-zinc-900 relative'>
+        {/* 顶部导航图标 */}
+        <div className='absolute top-6 right-6 flex items-center gap-2 md:gap-3 z-10'>
+          {/* 首页按钮 */}
+          <Link
+            to='/'
+            className='inline-flex items-center justify-center w-9 h-9 rounded-full bg-semi-color-fill-0 dark:bg-semi-color-fill-1 hover:bg-semi-color-fill-1 dark:hover:bg-semi-color-fill-2 transition-colors'
+            title={t('返回首页')}
+          >
+            <House size={18} className='text-current' />
+          </Link>
+
+          {/* 公告按钮 */}
+          <NotificationButton
+            unreadCount={unreadCount}
+            onNoticeOpen={handleNoticeOpen}
+            t={t}
+          />
+
+          {/* 主题切换 */}
+          <ThemeToggle theme={theme} onThemeToggle={handleThemeToggle} t={t} />
+
+          {/* 语言选择 */}
+          <LanguageSelector
+            currentLang={i18n.language}
+            onLanguageChange={handleLanguageChange}
+            t={t}
+          />
+        </div>
+
+        {/* 表单内容区 */}
+        <div className='flex-1 flex items-center justify-center p-8 overflow-y-auto'>
+          <div className='w-full max-w-md'>
         {showEmailRegister ||
         !(
           status.github_oauth ||
@@ -757,6 +946,50 @@ const RegisterForm = () => {
           : renderOAuthOptions()}
         {renderWeChatLoginModal()}
 
+        {/* 用户协议模态框 */}
+        <Modal
+          title={t('用户协议')}
+          visible={showUserAgreementModal}
+          onCancel={() => setShowUserAgreementModal(false)}
+          width={700}
+          centered
+          footer={
+            <div className='flex justify-end'>
+              <Button type='primary' onClick={handleAgreeUserAgreement}>
+                {t('同意并继续')}
+              </Button>
+            </div>
+          }
+        >
+          <div
+            className='overflow-y-auto p-4 text-base leading-loose whitespace-pre-wrap'
+            style={{ maxHeight: 'calc(66.67vh - 120px)' }}
+            dangerouslySetInnerHTML={{ __html: userAgreementContent }}
+          />
+        </Modal>
+
+        {/* 隐私政策模态框 */}
+        <Modal
+          title={t('隐私政策')}
+          visible={showPrivacyPolicyModal}
+          onCancel={() => setShowPrivacyPolicyModal(false)}
+          width={700}
+          centered
+          footer={
+            <div className='flex justify-end'>
+              <Button type='primary' onClick={handleAgreePrivacyPolicy}>
+                {t('同意并继续')}
+              </Button>
+            </div>
+          }
+        >
+          <div
+            className='overflow-y-auto p-4 text-base leading-loose whitespace-pre-wrap'
+            style={{ maxHeight: 'calc(66.67vh - 120px)' }}
+            dangerouslySetInnerHTML={{ __html: privacyPolicyContent }}
+          />
+        </Modal>
+
         {turnstileEnabled && (
           <div className='flex justify-center mt-6'>
             <Turnstile
@@ -767,8 +1000,11 @@ const RegisterForm = () => {
             />
           </div>
         )}
+          </div>
+        </div>
       </div>
     </div>
+    </>
   );
 };
 

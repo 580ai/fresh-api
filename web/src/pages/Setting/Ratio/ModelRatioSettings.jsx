@@ -41,6 +41,7 @@ export default function ModelRatioSettings(props) {
   const [loading, setLoading] = useState(false);
   const [inputs, setInputs] = useState({
     ModelPrice: '',
+    SoraPrice: '',
     ModelRatio: '',
     CacheRatio: '',
     CompletionRatio: '',
@@ -159,6 +160,28 @@ export default function ModelRatioSettings(props) {
                 },
               ]}
               onChange={(value) => setInputs({ ...inputs, ModelPrice: value })}
+            />
+          </Col>
+        </Row>
+        <Row gutter={16}>
+          <Col xs={24} sm={16}>
+            <Form.TextArea
+                label={t('Sora阶梯计费配置')}
+                extraText={t('345')}
+                placeholder={t(
+                    '123456',
+                )}
+                field={'SoraPrice'}
+                autosize={{ minRows: 6, maxRows: 12 }}
+                trigger='blur'
+                stopValidateWithError
+                rules={[
+                  {
+                    validator: (rule, value) => verifyJSON(value),
+                    message: '不是合法的 JSON 字符串',
+                  },
+                ]}
+                onChange={(value) => setInputs({ ...inputs, SoraPrice: value })}
             />
           </Col>
         </Row>

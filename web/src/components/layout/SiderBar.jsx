@@ -21,7 +21,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { getLucideIcon } from '../../helpers/render';
-import { ChevronLeft } from 'lucide-react';
+import { PanelLeftClose } from 'lucide-react';
 import { useSidebarCollapsed } from '../../hooks/common/useSidebarCollapsed';
 import { useSidebar } from '../../hooks/common/useSidebar';
 import { useMinimumLoadingTime } from '../../hooks/common/useMinimumLoadingTime';
@@ -79,7 +79,7 @@ const SiderBar = ({ onNavigate = () => {} }) => {
             : 'tableHiddle',
       },
       {
-        text: t('令牌管理'),
+        text: t('API令牌'),
         itemKey: 'token',
         to: '/token',
       },
@@ -196,7 +196,7 @@ const SiderBar = ({ onNavigate = () => {} }) => {
   const chatMenuItems = useMemo(() => {
     const items = [
       {
-        text: t('操练场'),
+        text: t('体验中心'),
         itemKey: 'playground',
         to: '/playground',
       },
@@ -489,7 +489,7 @@ const SiderBar = ({ onNavigate = () => {} }) => {
           loading={showSkeleton}
           type='button'
           width={collapsed ? 36 : 156}
-          height={24}
+          height={36}
           className='w-full'
         >
           <Button
@@ -497,8 +497,8 @@ const SiderBar = ({ onNavigate = () => {} }) => {
             type='tertiary'
             size='small'
             icon={
-              <ChevronLeft
-                size={16}
+              <PanelLeftClose
+                size={25}
                 strokeWidth={2.5}
                 color='var(--semi-color-text-2)'
                 style={{
@@ -510,7 +510,7 @@ const SiderBar = ({ onNavigate = () => {} }) => {
             icononly={collapsed}
             style={
               collapsed
-                ? { width: 36, height: 24, padding: 0 }
+                ? { width: 36, height: 36, padding: 0 }
                 : { padding: '4px 12px', width: '100%' }
             }
           >

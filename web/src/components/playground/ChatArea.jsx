@@ -69,7 +69,7 @@ const ChatArea = ({
                 <MessageSquare size={20} className='text-white' />
               </div>
               <div>
-                <Typography.Title heading={5} className='!text-white mb-0'>
+                <Typography.Title heading={5} className='!text-white mb-0'>new
                   {t('AI 对话')}
                 </Typography.Title>
                 <Typography.Text className='!text-white/80 text-sm hidden sm:inline'>

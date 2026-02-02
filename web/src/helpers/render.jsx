@@ -60,17 +60,18 @@ import {
 } from '@lobehub/icons';
 
 import {
-  LayoutDashboard,
+  Airplay,
   TerminalSquare,
   MessageSquare,
-  Key,
+  KeyRound,
   BarChart3,
   Image as ImageIcon,
-  CheckSquare,
-  CreditCard,
+  Video,
+  Wallet,
   Layers,
   Gift,
   User,
+  Users,
   Settings,
   CircleUser,
   Package,
@@ -79,7 +80,7 @@ import {
 
 // 获取侧边栏Lucide图标组件
 export function getLucideIcon(key, selected = false) {
-  const size = 16;
+  const size = 30;
   const strokeWidth = 2;
   const SELECTED_COLOR = 'var(--semi-color-primary)';
   const iconColor = selected ? SELECTED_COLOR : 'currentColor';
@@ -92,26 +93,27 @@ export function getLucideIcon(key, selected = false) {
   // 根据不同的key返回不同的图标
   switch (key) {
     case 'detail':
-      return <LayoutDashboard {...commonProps} color={iconColor} />;
+      return <Airplay {...commonProps} color={iconColor} />;
     case 'playground':
       return <TerminalSquare {...commonProps} color={iconColor} />;
     case 'chat':
       return <MessageSquare {...commonProps} color={iconColor} />;
     case 'token':
-      return <Key {...commonProps} color={iconColor} />;
+      return <KeyRound {...commonProps} color={iconColor} />;
     case 'log':
       return <BarChart3 {...commonProps} color={iconColor} />;
     case 'midjourney':
       return <ImageIcon {...commonProps} color={iconColor} />;
     case 'task':
-      return <CheckSquare {...commonProps} color={iconColor} />;
+      return <Video {...commonProps} color={iconColor} />;
     case 'topup':
-      return <CreditCard {...commonProps} color={iconColor} />;
+      return <Wallet {...commonProps} color={iconColor} />;
     case 'channel':
       return <Layers {...commonProps} color={iconColor} />;
     case 'redemption':
       return <Gift {...commonProps} color={iconColor} />;
     case 'user':
+      return <Users {...commonProps} color={iconColor} />;
     case 'personal':
       return <User {...commonProps} color={iconColor} />;
     case 'models':

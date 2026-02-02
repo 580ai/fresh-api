@@ -56,10 +56,23 @@ import LinuxDoIcon from '../common/logo/LinuxDoIcon';
 import TwoFAVerification from './TwoFAVerification';
 import { useTranslation } from 'react-i18next';
 import { SiDiscord }from 'react-icons/si';
+import { House } from 'lucide-react';
+import loginImage from './login.png';
+import NotificationButton from '../layout/headerbar/NotificationButton';
+import ThemeToggle from '../layout/headerbar/ThemeToggle';
+import LanguageSelector from '../layout/headerbar/LanguageSelector';
+import NoticeModal from '../layout/NoticeModal';
+import { useNotifications } from '../../hooks/common/useNotifications';
+import { useTheme, useSetTheme } from '../../context/Theme';
+import { useIsMobile } from '../../hooks/common/useIsMobile';
 
 const LoginForm = () => {
   let navigate = useNavigate();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const isMobile = useIsMobile();
+  const theme = useTheme();
+  const setTheme = useSetTheme();
+
   const githubButtonTextKeyByState = {
     idle: '使用 GitHub 继续',
     redirecting: '正在跳转 GitHub...',
@@ -97,6 +110,10 @@ const LoginForm = () => {
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [hasUserAgreement, setHasUserAgreement] = useState(false);
   const [hasPrivacyPolicy, setHasPrivacyPolicy] = useState(false);
+  const [showUserAgreementModal, setShowUserAgreementModal] = useState(false);
+  const [showPrivacyPolicyModal, setShowPrivacyPolicyModal] = useState(false);
+  const [userAgreementContent, setUserAgreementContent] = useState('');
+  const [privacyPolicyContent, setPrivacyPolicyContent] = useState('');
   const [githubButtonState, setGithubButtonState] = useState('idle');
   const [githubButtonDisabled, setGithubButtonDisabled] = useState(false);
   const githubTimeoutRef = useRef(null);
@@ -104,6 +121,15 @@ const LoginForm = () => {
 
   const logo = getLogo();
   const systemName = getSystemName();
+
+  // 通知功能
+  const {
+    noticeVisible,
+    unreadCount,
+    handleNoticeOpen,
+    handleNoticeClose,
+    getUnreadKeys,
+  } = useNotifications(statusState);
 
   let affCode = new URLSearchParams(window.location.search).get('aff');
   if (affCode) {
@@ -149,6 +175,68 @@ const LoginForm = () => {
       showError(t('未登录或登录已过期，请重新登录'));
     }
   }, []);
+
+  // 主题切换处理（与顶部导航栏一致）
+  const handleThemeToggle = (newTheme) => {
+    setTheme(newTheme);
+  };
+
+  // 语言切换处理（与顶部导航栏一致）
+  const handleLanguageChange = (lang) => {
+    i18n.changeLanguage(lang);
+  };
+
+  // 获取用户协议内容
+  const fetchUserAgreement = async () => {
+    try {
+      const res = await API.get('/api/user-agreement');
+      if (res.data.success) {
+        setUserAgreementContent(res.data.data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch user agreement:', error);
+    }
+  };
+
+  // 获取隐私政策内容
+  const fetchPrivacyPolicy = async () => {
+    try {
+      const res = await API.get('/api/privacy-policy');
+      if (res.data.success) {
+        setPrivacyPolicyContent(res.data.data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch privacy policy:', error);
+    }
+  };
+
+  // 显示用户协议模态框
+  const handleShowUserAgreement = (e) => {
+    e.preventDefault();
+    e.stopPropagation(); // 阻止事件冒泡到 Checkbox
+    fetchUserAgreement();
+    setShowUserAgreementModal(true);
+  };
+
+  // 显示隐私政策模态框
+  const handleShowPrivacyPolicy = (e) => {
+    e.preventDefault();
+    e.stopPropagation(); // 阻止事件冒泡到 Checkbox
+    fetchPrivacyPolicy();
+    setShowPrivacyPolicyModal(true);
+  };
+
+  // 同意用户协议并继续
+  const handleAgreeUserAgreement = () => {
+    setAgreedToTerms(true);
+    setShowUserAgreementModal(false);
+  };
+
+  // 同意隐私政策并继续
+  const handleAgreePrivacyPolicy = () => {
+    setAgreedToTerms(true);
+    setShowPrivacyPolicyModal(false);
+  };
 
   const onWeChatLoginClicked = () => {
     if ((hasUserAgreement || hasPrivacyPolicy) && !agreedToTerms) {
@@ -464,38 +552,37 @@ const LoginForm = () => {
   const renderOAuthOptions = () => {
     return (
       <div className='flex flex-col items-center'>
-        <div className='w-full max-w-md'>
-          <div className='flex items-center justify-center mb-6 gap-2'>
+        <div className='w-full'>
+          <div className='flex items-center justify-center mb-8 gap-2'>
             <img src={logo} alt='Logo' className='h-10 rounded-full' />
-            <Title heading={3} className='!text-gray-800'>
-              {systemName}
+            <Title heading={2} className='!text-gray-800 dark:!text-gray-200'>
+              Polo API
             </Title>
           </div>
 
-          <Card className='border-0 !rounded-2xl overflow-hidden'>
-            <div className='flex justify-center pt-6 pb-2'>
-              <Title heading={3} className='text-gray-800 dark:text-gray-200'>
-                {t('登 录')}
+          <div className='w-full max-w-md mx-auto'>
+            <div className='flex justify-center mb-8'>
+              <Title heading={3} className='text-gray-800 dark:text-gray-200 font-semibold'>
+                {t('用户登录')}
               </Title>
             </div>
-            <div className='px-2 py-8'>
-              <div className='space-y-3'>
-                {status.wechat_login && (
-                  <Button
-                    theme='outline'
-                    className='w-full h-12 flex items-center justify-center !rounded-full border border-gray-200 hover:bg-gray-50 transition-colors'
-                    type='tertiary'
-                    icon={
-                      <Icon svg={<WeChatIcon />} style={{ color: '#07C160' }} />
-                    }
-                    onClick={onWeChatLoginClicked}
-                    loading={wechatLoading}
-                  >
-                    <span className='ml-3'>{t('使用 微信 继续')}</span>
-                  </Button>
-                )}
+            <div className='space-y-4'>
+              {status.wechat_login && (
+                <Button
+                  theme='outline'
+                  className='w-full h-12 flex items-center justify-center !rounded-full border border-gray-200 hover:bg-gray-50 transition-colors'
+                  type='tertiary'
+                  icon={
+                    <Icon svg={<WeChatIcon />} style={{ color: '#07C160' }} />
+                  }
+                  onClick={onWeChatLoginClicked}
+                  loading={wechatLoading}
+                >
+                  <span className='ml-3'>{t('使用 微信 继续')}</span>
+                </Button>
+              )}
 
-                {status.github_oauth && (
+              {status.github_oauth && (
                   <Button
                     theme='outline'
                     className='w-full h-12 flex items-center justify-center !rounded-full border border-gray-200 hover:bg-gray-50 transition-colors'
@@ -605,10 +692,9 @@ const LoginForm = () => {
                       {hasUserAgreement && (
                         <>
                           <a
-                            href='/user-agreement'
-                            target='_blank'
-                            rel='noopener noreferrer'
-                            className='text-blue-600 hover:text-blue-800 mx-1'
+                            href='#'
+                            onClick={handleShowUserAgreement}
+                            className='text-blue-600 hover:text-blue-800 mx-1 cursor-pointer'
                           >
                             {t('用户协议')}
                           </a>
@@ -618,16 +704,15 @@ const LoginForm = () => {
                       {hasPrivacyPolicy && (
                         <>
                           <a
-                            href='/privacy-policy'
-                            target='_blank'
-                            rel='noopener noreferrer'
-                            className='text-blue-600 hover:text-blue-800 mx-1'
+                            href='#'
+                            onClick={handleShowPrivacyPolicy}
+                            className='text-blue-600 hover:text-blue-800 mx-1 cursor-pointer'
                           >
                             {t('隐私政策')}
                           </a>
                         </>
-                        )}
-                      </Text>
+                      )}
+                    </Text>
                     </Checkbox>
                   </div>
                 )}
@@ -646,28 +731,29 @@ const LoginForm = () => {
                 </div>
               )}
             </div>
-          </Card>
+          </div>
         </div>
-      </div>
     );
   };
 
   const renderEmailLoginForm = () => {
     return (
       <div className='flex flex-col items-center'>
-        <div className='w-full max-w-md'>
-          <div className='flex items-center justify-center mb-6 gap-2'>
-            <img src={logo} alt='Logo' className='h-10 rounded-full' />
-            <Title heading={3}>{systemName}</Title>
+        <div className='w-full'>
+          <div className='flex items-center justify-center mb-6 gap-3'>
+            <img src={logo} alt='Logo' className='h-12 rounded-full' />
+            <Title heading={1} className='!text-gray-800 dark:!text-gray-200 !text-3xl !font-bold'>
+              Polo API
+            </Title>
           </div>
 
-          <Card className='border-0 !rounded-2xl overflow-hidden'>
-            <div className='flex justify-center pt-6 pb-2'>
-              <Title heading={3} className='text-gray-800 dark:text-gray-200'>
-                {t('登 录')}
+          <div className='w-full max-w-md mx-auto'>
+            <div className='flex justify-center mb-10'>
+              <Title heading={2} className='text-gray-800 dark:text-gray-200 font-bold !text-2xl'>
+                {t('用户登录')}
               </Title>
             </div>
-            <div className='px-2 py-8'>
+            <div className='space-y-4'>
               {status.passkey_login && passkeySupported && (
                 <Button
                   theme='outline'
@@ -680,43 +766,50 @@ const LoginForm = () => {
                   <span className='ml-3'>{t('使用 Passkey 登录')}</span>
                 </Button>
               )}
-              <Form className='space-y-3'>
+              <Form className='space-y-6'>
                 <Form.Input
                   field='username'
                   label={t('用户名或邮箱')}
-                  placeholder={t('请输入您的用户名或邮箱地址')}
                   name='username'
                   onChange={(value) => handleChange('username', value)}
                   prefix={<IconMail />}
+                  className='!rounded-lg'
+                  placeholder={t('请输入您的用户名或邮箱地址')}
+                  style={{ height: '56px' }}
+                  inputStyle={{ fontSize: '16px', height: '56px', padding: '0 16px' }}
+                  labelStyle={{ fontSize: '15px', fontWeight: '500', marginBottom: '8px' }}
                 />
 
                 <Form.Input
                   field='password'
                   label={t('密码')}
-                  placeholder={t('请输入您的密码')}
                   name='password'
                   mode='password'
                   onChange={(value) => handleChange('password', value)}
                   prefix={<IconLock />}
+                  className='!rounded-lg'
+                  placeholder={t('请输入您的密码')}
+                  style={{ height: '56px' }}
+                  inputStyle={{ fontSize: '16px', height: '56px', padding: '0 16px' }}
+                  labelStyle={{ fontSize: '15px', fontWeight: '500', marginBottom: '8px' }}
                 />
 
-                {(hasUserAgreement || hasPrivacyPolicy) && (
-                  <div className='pt-4'>
+                <div className='flex items-center justify-between pt-2'>
+                  {(hasUserAgreement || hasPrivacyPolicy) && (
                     <Checkbox
                       checked={agreedToTerms}
                       onChange={(e) => setAgreedToTerms(e.target.checked)}
                     >
-                      <Text size='small' className='text-gray-600'>
+                      <Text size='big' className='text-gray-400'>
                         {t('我已阅读并同意')}
                         {hasUserAgreement && (
                           <>
                             <a
-                              href='/user-agreement'
-                              target='_blank'
-                              rel='noopener noreferrer'
-                              className='text-blue-600 hover:text-blue-800 mx-1'
+                              href='#'
+                              onClick={handleShowUserAgreement}
+                              className='text-blue-600 hover:text-blue-800 mx-1 cursor-pointer'
                             >
-                              {t('用户协议')}
+                              {t('《用户协议》')}
                             </a>
                           </>
                         )}
@@ -724,41 +817,41 @@ const LoginForm = () => {
                         {hasPrivacyPolicy && (
                           <>
                             <a
-                              href='/privacy-policy'
-                              target='_blank'
-                              rel='noopener noreferrer'
-                              className='text-blue-600 hover:text-blue-800 mx-1'
+                              href='#'
+                              onClick={handleShowPrivacyPolicy}
+                              className='text-blue-600 hover:text-blue-800 mx-1 cursor-pointer'
                             >
-                              {t('隐私政策')}
+                              {t('《隐私政策》')}
                             </a>
                           </>
                         )}
                       </Text>
                     </Checkbox>
-                  </div>
-                )}
+                  )}
+                  <Button
+                    theme='borderless'
+                    type='tertiary'
+                    size='big'
+                    onClick={handleResetPasswordClick}
+                    loading={resetPasswordLoading}
+                    className='text-blue-600 hover:text-blue-800 mx-1'
+                  >
+                    {t('忘记密码？')}
+                  </Button>
+                </div>
 
-                <div className='space-y-2 pt-2'>
+                <div className='space-y-2 pt-6'>
                   <Button
                     theme='solid'
-                    className='w-full !rounded-full'
+                    className='w-full !rounded-full h-14 text-lg font-semibold shadow-lg hover:shadow-xl transition-all'
                     type='primary'
+                    size='large'
                     htmlType='submit'
                     onClick={handleSubmit}
                     loading={loginLoading}
                     disabled={(hasUserAgreement || hasPrivacyPolicy) && !agreedToTerms}
                   >
-                    {t('继续')}
-                  </Button>
-
-                  <Button
-                    theme='borderless'
-                    type='tertiary'
-                    className='w-full !rounded-full'
-                    onClick={handleResetPasswordClick}
-                    loading={resetPasswordLoading}
-                  >
-                    {t('忘记密码？')}
+                    {t('登录')}
                   </Button>
                 </div>
               </Form>
@@ -801,8 +894,31 @@ const LoginForm = () => {
                   </Text>
                 </div>
               )}
+
+              {/* 社交登录图标 */}
+              {(status.github_oauth || status.wechat_login) && (
+                <div className='mt-6 flex justify-center gap-4'>
+                  {status.github_oauth && (
+                    <button
+                      onClick={handleGitHubClick}
+                      disabled={githubButtonDisabled}
+                      className='w-10 h-10 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
+                    >
+                      <IconGithubLogo size='large' />
+                    </button>
+                  )}
+                  {status.wechat_login && (
+                    <button
+                      onClick={onWeChatLoginClicked}
+                      className='w-10 h-10 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center transition-colors'
+                    >
+                      <Icon svg={<WeChatIcon />} style={{ color: '#07C160' }} />
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
-          </Card>
+          </div>
         </div>
       </div>
     );
@@ -886,43 +1002,177 @@ const LoginForm = () => {
   };
 
   return (
-    <div className='relative overflow-hidden bg-gray-100 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8'>
-      {/* 背景模糊晕染球 */}
-      <div
-        className='blur-ball blur-ball-indigo'
-        style={{ top: '-80px', right: '-80px', transform: 'none' }}
+    <>
+      {/* 公告模态框 */}
+      <NoticeModal
+        visible={noticeVisible}
+        onClose={handleNoticeClose}
+        isMobile={isMobile}
+        defaultTab={unreadCount > 0 ? 'system' : 'inApp'}
+        unreadKeys={getUnreadKeys()}
       />
-      <div
-        className='blur-ball blur-ball-teal'
-        style={{ top: '50%', left: '-120px' }}
-      />
-      <div className='w-full max-w-sm mt-[60px]'>
-        {showEmailLogin ||
-        !(
-          status.github_oauth ||
-          status.discord_oauth ||
-          status.oidc_enabled ||
-          status.wechat_login ||
-          status.linuxdo_oauth ||
-          status.telegram_oauth
-        )
-          ? renderEmailLoginForm()
-          : renderOAuthOptions()}
-        {renderWeChatLoginModal()}
-        {render2FAModal()}
 
-        {turnstileEnabled && (
-          <div className='flex justify-center mt-6'>
-            <Turnstile
-              sitekey={turnstileSiteKey}
-              onVerify={(token) => {
-                setTurnstileToken(token);
-              }}
-            />
+      <div className='min-h-screen flex'>
+      {/* 左侧 - 品牌展示区 */}
+      <div className='hidden lg:flex lg:w-1/2 relative overflow-hidden'>
+        {/* 背景图片 */}
+        <div
+          className='absolute inset-0 bg-cover bg-center bg-no-repeat'
+          style={{ backgroundImage: `url(${loginImage})` }}
+        >
+          {/* 渐变遮罩 */}
+          <div className='absolute inset-0 bg-gradient-to-br from-blue-400/80 via-blue-500/70 to-blue-600/80'></div>
+        </div>
+
+        {/* 内容区 */}
+        <div className='relative z-10 flex flex-col justify-start items-center px-24 pt-32 pb-24 text-white h-full group'>
+          {/* Logo和标题 */}
+          <div className='text-center transition-all duration-500 group-hover:transform group-hover:scale-105'>
+            {/* Polo API 标题 - 渐变色 */}
+            <h1 className='text-6xl font-bold mb-8 transition-all duration-300' style={{ textShadow: '0 2px 10px rgba(0,0,0,0.1)' }}>
+              <span style={{
+                background: 'linear-gradient(135deg, #60a5fa 0%, #93c5fd 50%, #60a5fa 100%)',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+                backgroundClip: 'text'
+              }}>
+                Polo
+              </span>
+              <span className='ml-3' style={{
+                background: 'linear-gradient(135deg, #c084fc 0%, #e9d5ff 50%, #c084fc 100%)',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+                backgroundClip: 'text'
+              }}>
+                API
+              </span>
+            </h1>
+
+            {/* 标语 - 白色文字带阴影 */}
+            <h2 className='text-3xl font-bold mb-8 text-white transition-all duration-500 group-hover:tracking-wider' style={{ textShadow: '0 2px 8px rgba(0,0,0,0.15)' }}>
+              {t('更强模型')} {t('更低价格')} {t('更易落地')}
+            </h2>
+
+            {/* 描述文字 - 白色半透明 */}
+            <p className='text-base text-white/90 leading-relaxed max-w-xl mx-auto transition-all duration-500 group-hover:text-white' style={{ textShadow: '0 1px 4px rgba(0,0,0,0.1)' }}>
+              {t('致力于为开发者提供快速、便捷的 Web API 接口调用方案，打造稳定且易于使用的 API 接口平台，一站式集成几乎所有 AI 大模型。')}
+            </p>
           </div>
-        )}
+        </div>
+      </div>
+
+      {/* 右侧 - 登录表单区 */}
+      <div className='w-full lg:w-1/2 flex flex-col bg-white dark:bg-zinc-900 relative'>
+        {/* 顶部导航图标 */}
+        <div className='absolute top-6 right-6 flex items-center gap-2 md:gap-3 z-10'>
+          {/* 首页按钮 */}
+          <Link
+            to='/'
+            className='inline-flex items-center justify-center w-9 h-9 rounded-full bg-semi-color-fill-0 dark:bg-semi-color-fill-1 hover:bg-semi-color-fill-1 dark:hover:bg-semi-color-fill-2 transition-colors'
+            title={t('返回首页')}
+          >
+            <House size={18} className='text-current' />
+          </Link>
+
+          {/* 公告按钮 */}
+          <NotificationButton
+            unreadCount={unreadCount}
+            onNoticeOpen={handleNoticeOpen}
+            t={t}
+          />
+
+          {/* 主题切换按钮 */}
+          <ThemeToggle
+            theme={theme}
+            onThemeToggle={handleThemeToggle}
+            t={t}
+          />
+
+          {/* 语言选择器 */}
+          <LanguageSelector
+            currentLang={i18n.language}
+            onLanguageChange={handleLanguageChange}
+            t={t}
+          />
+        </div>
+
+        {/* 登录表单容器 */}
+        <div className='flex-1 flex items-center justify-center px-4 sm:px-6 lg:px-8 py-12'>
+          <div className='w-full max-w-md'>
+
+          {showEmailLogin ||
+          !(
+            status.github_oauth ||
+            status.discord_oauth ||
+            status.oidc_enabled ||
+            status.wechat_login ||
+            status.linuxdo_oauth ||
+            status.telegram_oauth
+          )
+            ? renderEmailLoginForm()
+            : renderOAuthOptions()}
+          {renderWeChatLoginModal()}
+          {render2FAModal()}
+
+          {/* 用户协议模态框 */}
+          <Modal
+            title={t('用户协议')}
+            visible={showUserAgreementModal}
+            onCancel={() => setShowUserAgreementModal(false)}
+            width={700}
+            centered
+            footer={
+              <div className='flex justify-end'>
+                <Button type='primary' onClick={handleAgreeUserAgreement}>
+                  {t('同意并继续')}
+                </Button>
+              </div>
+            }
+          >
+            <div
+              className='overflow-y-auto p-4 text-base leading-loose whitespace-pre-wrap'
+              style={{ maxHeight: 'calc(66.67vh - 120px)' }}
+              dangerouslySetInnerHTML={{ __html: userAgreementContent }}
+            />
+          </Modal>
+
+          {/* 隐私政策模态框 */}
+          <Modal
+            title={t('隐私政策')}
+            visible={showPrivacyPolicyModal}
+            onCancel={() => setShowPrivacyPolicyModal(false)}
+            width={700}
+            centered
+            footer={
+              <div className='flex justify-end'>
+                <Button type='primary' onClick={handleAgreePrivacyPolicy}>
+                  {t('同意并继续')}
+                </Button>
+              </div>
+            }
+          >
+            <div
+              className='overflow-y-auto p-4 text-base leading-loose whitespace-pre-wrap'
+              style={{ maxHeight: 'calc(66.67vh - 120px)' }}
+              dangerouslySetInnerHTML={{ __html: privacyPolicyContent }}
+            />
+          </Modal>
+
+          {turnstileEnabled && (
+            <div className='flex justify-center mt-6'>
+              <Turnstile
+                sitekey={turnstileSiteKey}
+                onVerify={(token) => {
+                  setTurnstileToken(token);
+                }}
+              />
+            </div>
+          )}
+          </div>
+        </div>
       </div>
     </div>
+    </>
   );
 };
 

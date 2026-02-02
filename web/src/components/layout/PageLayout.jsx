@@ -62,6 +62,9 @@ const PageLayout = () => {
 
   const shouldHideFooter = cardProPages.includes(location.pathname);
 
+  // 登录和注册页面隐藏导航栏和页脚
+  const isAuthPage = ['/login', '/register', '/reset'].includes(location.pathname);
+
   const shouldInnerPadding =
     location.pathname.includes('/console') &&
     !location.pathname.startsWith('/console/chat') &&
@@ -128,22 +131,24 @@ const PageLayout = () => {
         overflow: isMobile ? 'visible' : 'hidden',
       }}
     >
-      <Header
-        style={{
-          padding: 0,
-          height: 'auto',
-          lineHeight: 'normal',
-          position: 'fixed',
-          width: '100%',
-          top: 0,
-          zIndex: 100,
-        }}
-      >
-        <HeaderBar
-          onMobileMenuToggle={() => setDrawerOpen((prev) => !prev)}
-          drawerOpen={drawerOpen}
-        />
-      </Header>
+      {!isAuthPage && (
+        <Header
+          style={{
+            padding: 0,
+            height: 'auto',
+            lineHeight: 'normal',
+            position: 'fixed',
+            width: '100%',
+            top: 0,
+            zIndex: 100,
+          }}
+        >
+          <HeaderBar
+            onMobileMenuToggle={() => setDrawerOpen((prev) => !prev)}
+            drawerOpen={drawerOpen}
+          />
+        </Header>
+      )}
       <Layout
         style={{
           overflow: isMobile ? 'visible' : 'auto',
@@ -194,7 +199,7 @@ const PageLayout = () => {
           >
             <App />
           </Content>
-          {!shouldHideFooter && (
+          {!shouldHideFooter && !isAuthPage && (
             <Layout.Footer
               style={{
                 flex: '0 0 auto',
