@@ -67,7 +67,8 @@ const DraggableGroupSelect = ({
     return options.filter((opt) => {
       const label = (opt.label || '').toLowerCase();
       const value = (opt.value || '').toLowerCase();
-      return label.includes(lowerSearch) || value.includes(lowerSearch);
+      const name = (opt.name || '').toLowerCase();
+      return label.includes(lowerSearch) || value.includes(lowerSearch) || name.includes(lowerSearch);
     });
   }, [options, searchValue]);
 
@@ -145,6 +146,8 @@ const DraggableGroupSelect = ({
     const groupInfo = getGroupInfo(groupValue);
     const isDragging = draggedIndex === index;
     const isDragOver = dragOverIndex === index;
+    // 分组名：优先使用 name 字段，否则使用 value
+    const groupName = groupInfo.name || groupValue;
 
     return (
       <div
@@ -180,7 +183,7 @@ const DraggableGroupSelect = ({
           />
         )}
         <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--semi-color-primary)' }}>
-          {groupInfo.label || groupValue}
+          {groupName}
         </span>
         {groupInfo.ratio !== undefined && (
           <span style={{ fontSize: '12px', color: 'var(--semi-color-primary)', marginLeft: '4px' }}>
@@ -201,7 +204,7 @@ const DraggableGroupSelect = ({
   // 渲染下拉选项内容
   const renderPopoverContent = () => {
     return (
-      <div style={{ minWidth: '250px' }}>
+      <div style={{ minWidth: '300px' }}>
         {/* 搜索框 */}
         <div style={{ padding: '8px', borderBottom: '1px solid var(--semi-color-border)' }}>
           <Input
@@ -214,30 +217,59 @@ const DraggableGroupSelect = ({
           />
         </div>
         {/* 选项列表 */}
-        <div style={{ padding: '8px', maxHeight: '250px', overflowY: 'auto' }}>
+        <div style={{ padding: '8px', maxHeight: '300px', overflowY: 'auto' }}>
           {filteredOptions.map((opt) => {
             const isSelected = safeValue.includes(opt.value);
+            // 分组名：优先使用 name 字段，否则使用 value
+            const groupName = opt.name || opt.value;
+            // 描述：使用 label 字段
+            const groupDesc = opt.label;
             return (
               <div
                 key={opt.value}
                 style={{
                   display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  padding: '8px 12px',
+                  alignItems: 'flex-start',
+                  padding: '10px 12px',
                   cursor: 'pointer',
-                  borderRadius: '4px',
+                  borderRadius: '6px',
                   backgroundColor: isSelected ? 'var(--semi-color-primary-light-default)' : 'transparent',
+                  marginBottom: '4px',
+                  transition: 'background-color 0.2s',
                 }}
                 onClick={() => handleCheckboxChange(opt.value, !isSelected)}
+                onMouseEnter={(e) => {
+                  if (!isSelected) {
+                    e.currentTarget.style.backgroundColor = 'var(--semi-color-fill-0)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!isSelected) {
+                    e.currentTarget.style.backgroundColor = 'transparent';
+                  }
+                }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Checkbox checked={isSelected} />
-                  <span style={{ fontWeight: 500 }}>{opt.label}</span>
-                  {opt.ratio !== undefined && (
-                    <Tag size="small" color="blue">
-                      {opt.ratio}x
-                    </Tag>
+                <Checkbox checked={isSelected} style={{ marginTop: '2px' }} />
+                <div style={{ marginLeft: '8px', flex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontWeight: 600, fontSize: '14px', color: 'var(--semi-color-text-0)' }}>
+                      {groupName}
+                    </span>
+                    {opt.ratio !== undefined && (
+                      <Tag size="small" color="blue">
+                        {opt.ratio}x
+                      </Tag>
+                    )}
+                  </div>
+                  {groupDesc && groupDesc !== groupName && (
+                    <div style={{
+                      fontSize: '12px',
+                      color: 'var(--semi-color-text-2)',
+                      marginTop: '4px',
+                      lineHeight: '1.4',
+                    }}>
+                      {groupDesc}
+                    </div>
                   )}
                 </div>
               </div>

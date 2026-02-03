@@ -91,7 +91,7 @@ export default defineConfig({
         changeOrigin: true,
       },
       '/api': {
-        target: 'https://poloai.top',
+        target: 'http://localhost:3000',
         changeOrigin: true,
       },
       '/mj': {

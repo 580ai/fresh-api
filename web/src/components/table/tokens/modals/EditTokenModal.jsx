@@ -133,17 +133,20 @@ const EditTokenModal = (props) => {
       let localGroupOptions = Object.entries(data).map(([group, info]) => ({
         label: info.desc,
         value: group,
+        name: group,  // 分组名
         ratio: info.ratio,
+        order: info.order !== undefined ? info.order : 999,
       }));
-      if (statusState?.status?.default_use_auto_group) {
-        if (localGroupOptions.some((group) => group.value === 'auto')) {
-          localGroupOptions.sort((a, b) => (a.value === 'auto' ? -1 : 1));
+      // 按 order 排序，auto 分组（order=-1）放在最前面（如果启用了默认使用auto）
+      localGroupOptions.sort((a, b) => {
+        // 如果启用了默认使用auto分组，auto放最前面
+        if (statusState?.status?.default_use_auto_group) {
+          if (a.value === 'auto') return -1;
+          if (b.value === 'auto') return 1;
         }
-      }
+        return a.order - b.order;
+      });
       setGroups(localGroupOptions);
-      // if (statusState?.status?.default_use_auto_group && formApiRef.current) {
-      //   formApiRef.current.setValue('group', 'auto');
-      // }
     } else {
       showError(t(message));
     }

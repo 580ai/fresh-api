@@ -22,6 +22,7 @@ import { Card, Spin, Tabs } from '@douyinfe/semi-ui';
 import { useTranslation } from 'react-i18next';
 
 import GroupRatioSettings from '../../pages/Setting/Ratio/GroupRatioSettings';
+import GroupOrderSettings from '../../pages/Setting/Ratio/GroupOrderSettings';
 import ModelRatioSettings from '../../pages/Setting/Ratio/ModelRatioSettings';
 import ModelSettingsVisualEditor from '../../pages/Setting/Ratio/ModelSettingsVisualEditor';
 import ModelRatioNotSetEditor from '../../pages/Setting/Ratio/ModelRationNotSetEditor';
@@ -39,6 +40,7 @@ const RatioSetting = () => {
     CompletionRatio: '',
     GroupRatio: '',
     GroupGroupRatio: '',
+    GroupOrder: '',
     ImageRatio: '',
     AudioRatio: '',
     AudioCompletionRatio: '',
@@ -104,6 +106,9 @@ const RatioSetting = () => {
           </Tabs.TabPane>
           <Tabs.TabPane tab={t('分组倍率设置')} itemKey='group'>
             <GroupRatioSettings options={inputs} refresh={onRefresh} />
+          </Tabs.TabPane>
+          <Tabs.TabPane tab={t('分组排序')} itemKey='group_order'>
+            <GroupOrderSettings options={inputs} refresh={onRefresh} />
           </Tabs.TabPane>
           <Tabs.TabPane tab={t('可视化倍率设置')} itemKey='visual'>
             <ModelSettingsVisualEditor options={inputs} refresh={onRefresh} />

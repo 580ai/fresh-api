@@ -192,7 +192,11 @@ export const processGroupsData = (data, userGroup) => {
     value: group,
     ratio: info.ratio,
     fullLabel: info.desc,
+    order: info.order !== undefined ? info.order : 999,
   }));
+
+  // 按 order 排序
+  groupOptions.sort((a, b) => a.order - b.order);
 
   if (groupOptions.length === 0) {
     groupOptions = [
@@ -203,6 +207,7 @@ export const processGroupsData = (data, userGroup) => {
       },
     ];
   } else if (userGroup) {
+    // 如果有用户分组，将其移到最前面
     const userGroupIndex = groupOptions.findIndex((g) => g.value === userGroup);
     if (userGroupIndex > -1) {
       const userGroupOption = groupOptions.splice(userGroupIndex, 1)[0];
