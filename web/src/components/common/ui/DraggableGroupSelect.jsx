@@ -17,9 +17,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React, { useState, useRef, useCallback } from 'react';
-import { Tag, Checkbox, Popover, Typography } from '@douyinfe/semi-ui';
-import { IconClose, IconHandle, IconChevronDown } from '@douyinfe/semi-icons';
+import React, { useState, useRef, useCallback, useMemo } from 'react';
+import { Tag, Checkbox, Popover, Typography, Input } from '@douyinfe/semi-ui';
+import { IconClose, IconHandle, IconChevronDown, IconSearch } from '@douyinfe/semi-icons';
 import { useTranslation } from 'react-i18next';
 
 const { Text } = Typography;
@@ -44,6 +44,7 @@ const DraggableGroupSelect = ({
   const [draggedIndex, setDraggedIndex] = useState(null);
   const [dragOverIndex, setDragOverIndex] = useState(null);
   const [popoverVisible, setPopoverVisible] = useState(false);
+  const [searchValue, setSearchValue] = useState('');
   const dragNodeRef = useRef(null);
 
   // 确保 value 是数组
@@ -56,6 +57,19 @@ const DraggableGroupSelect = ({
     },
     [options]
   );
+
+  // 过滤后的选项（根据搜索值）
+  const filteredOptions = useMemo(() => {
+    if (!searchValue.trim()) {
+      return options;
+    }
+    const lowerSearch = searchValue.toLowerCase().trim();
+    return options.filter((opt) => {
+      const label = (opt.label || '').toLowerCase();
+      const value = (opt.value || '').toLowerCase();
+      return label.includes(lowerSearch) || value.includes(lowerSearch);
+    });
+  }, [options, searchValue]);
 
   // 处理选择变化
   const handleCheckboxChange = (optValue, checked) => {
@@ -187,40 +201,59 @@ const DraggableGroupSelect = ({
   // 渲染下拉选项内容
   const renderPopoverContent = () => {
     return (
-      <div style={{ padding: '8px', minWidth: '200px', maxHeight: '300px', overflowY: 'auto' }}>
-        {options.map((opt) => {
-          const isSelected = safeValue.includes(opt.value);
-          return (
-            <div
-              key={opt.value}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                padding: '8px 12px',
-                cursor: 'pointer',
-                borderRadius: '4px',
-                backgroundColor: isSelected ? 'var(--semi-color-primary-light-default)' : 'transparent',
-              }}
-              onClick={() => handleCheckboxChange(opt.value, !isSelected)}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Checkbox checked={isSelected} />
-                <span style={{ fontWeight: 500 }}>{opt.label}</span>
-                {opt.ratio !== undefined && (
-                  <Tag size="small" color="blue">
-                    {opt.ratio}x
-                  </Tag>
-                )}
+      <div style={{ minWidth: '250px' }}>
+        {/* 搜索框 */}
+        <div style={{ padding: '8px', borderBottom: '1px solid var(--semi-color-border)' }}>
+          <Input
+            prefix={<IconSearch />}
+            placeholder={t('搜索分组')}
+            value={searchValue}
+            onChange={setSearchValue}
+            showClear
+            autofocus
+          />
+        </div>
+        {/* 选项列表 */}
+        <div style={{ padding: '8px', maxHeight: '250px', overflowY: 'auto' }}>
+          {filteredOptions.map((opt) => {
+            const isSelected = safeValue.includes(opt.value);
+            return (
+              <div
+                key={opt.value}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '8px 12px',
+                  cursor: 'pointer',
+                  borderRadius: '4px',
+                  backgroundColor: isSelected ? 'var(--semi-color-primary-light-default)' : 'transparent',
+                }}
+                onClick={() => handleCheckboxChange(opt.value, !isSelected)}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Checkbox checked={isSelected} />
+                  <span style={{ fontWeight: 500 }}>{opt.label}</span>
+                  {opt.ratio !== undefined && (
+                    <Tag size="small" color="blue">
+                      {opt.ratio}x
+                    </Tag>
+                  )}
+                </div>
               </div>
+            );
+          })}
+          {filteredOptions.length === 0 && options.length > 0 && (
+            <div style={{ padding: '8px', color: 'var(--semi-color-text-2)', textAlign: 'center' }}>
+              {t('未找到匹配的分组')}
             </div>
-          );
-        })}
-        {options.length === 0 && (
-          <div style={{ padding: '8px', color: 'var(--semi-color-text-2)', textAlign: 'center' }}>
-            {t('暂无可选分组')}
-          </div>
-        )}
+          )}
+          {options.length === 0 && (
+            <div style={{ padding: '8px', color: 'var(--semi-color-text-2)', textAlign: 'center' }}>
+              {t('暂无可选分组')}
+            </div>
+          )}
+        </div>
       </div>
     );
   };
@@ -248,7 +281,13 @@ const DraggableGroupSelect = ({
       {/* 分组选择下拉框 */}
       <Popover
         visible={popoverVisible}
-        onVisibleChange={setPopoverVisible}
+        onVisibleChange={(visible) => {
+          setPopoverVisible(visible);
+          // 关闭时清空搜索值
+          if (!visible) {
+            setSearchValue('');
+          }
+        }}
         content={renderPopoverContent()}
         trigger="click"
         position="bottomLeft"
