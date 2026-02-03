@@ -483,6 +483,7 @@ func GenRelayInfo(c *gin.Context, relayFormat types.RelayFormat, request dto.Req
 		err = errors.New("request is not a OpenAIResponsesRequest")
 	case types.RelayFormatTask:
 		info = genBaseRelayInfo(c, nil)
+		info.InitChannelMeta(c)
 	case types.RelayFormatMjProxy:
 		info = genBaseRelayInfo(c, nil)
 	default:

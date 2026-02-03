@@ -79,6 +79,9 @@ func Distribute() func(c *gin.Context) {
 					return
 				}
 				var selectGroup string
+				// Use the full token group string (may contain multiple groups separated by comma)
+				// for multi-group retry support
+				tokenGroup := common.GetContextKeyString(c, constant.ContextKeyTokenGroup)
 				usingGroup := common.GetContextKeyString(c, constant.ContextKeyUsingGroup)
 				// check path is /pg/chat/completions
 				if strings.HasPrefix(c.Request.URL.Path, "/pg/chat/completions") {
@@ -93,6 +96,7 @@ func Distribute() func(c *gin.Context) {
 							abortWithOpenAiMessage(c, http.StatusForbidden, "无权访问该分组")
 							return
 						}
+						tokenGroup = playgroundRequest.Group
 						usingGroup = playgroundRequest.Group
 						common.SetContextKey(c, constant.ContextKeyUsingGroup, usingGroup)
 					}
@@ -100,13 +104,15 @@ func Distribute() func(c *gin.Context) {
 				channel, selectGroup, err = service.CacheGetRandomSatisfiedChannel(&service.RetryParam{
 					Ctx:        c,
 					ModelName:  modelRequest.Model,
-					TokenGroup: usingGroup,
+					TokenGroup: tokenGroup,
 					Retry:      common.GetPointer(0),
 				})
 				if err != nil {
-					showGroup := usingGroup
-					if usingGroup == "auto" {
+					showGroup := tokenGroup
+					if tokenGroup == "auto" {
 						showGroup = fmt.Sprintf("auto(%s)", selectGroup)
+					} else if selectGroup != "" && selectGroup != tokenGroup {
+						showGroup = fmt.Sprintf("%s (tried: %s)", tokenGroup, selectGroup)
 					}
 					message := fmt.Sprintf("获取分组 %s 下模型 %s 的可用渠道失败（distributor）: %s", showGroup, modelRequest.Model, err.Error())
 					// 如果错误，但是渠道不为空，说明是数据库一致性问题
@@ -118,8 +124,17 @@ func Distribute() func(c *gin.Context) {
 					return
 				}
 				if channel == nil {
-					abortWithOpenAiMessage(c, http.StatusServiceUnavailable, fmt.Sprintf("分组 %s 下模型 %s 无可用渠道（distributor）", usingGroup, modelRequest.Model), types.ErrorCodeModelNotFound)
+					showGroup := tokenGroup
+					if selectGroup != "" && selectGroup != tokenGroup {
+						showGroup = fmt.Sprintf("%s (last tried: %s)", tokenGroup, selectGroup)
+					}
+					abortWithOpenAiMessage(c, http.StatusServiceUnavailable, fmt.Sprintf("分组 %s 下模型 %s 无可用渠道（distributor）", showGroup, modelRequest.Model), types.ErrorCodeModelNotFound)
 					return
+				}
+				// Update the using group to the actually selected group for correct logging
+				// 更新使用的分组为实际选择的分组，以便日志记录正确
+				if selectGroup != "" {
+					common.SetContextKey(c, constant.ContextKeyUsingGroup, selectGroup)
 				}
 			}
 		}
