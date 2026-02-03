@@ -722,18 +722,13 @@ const EditChannelModal = (props) => {
       if (res === undefined) {
         return;
       }
+      // 后端已按 GroupOrder 排序，直接使用
       const groups = res.data.data.map((group) => ({
         label: group,
         value: group,
       }));
       setGroupOptions(groups);
-      // 对分组进行字母排序
-      const sorted = [...groups].sort((a, b) => {
-        const labelA = (a.label || '').toString().toLowerCase();
-        const labelB = (b.label || '').toString().toLowerCase();
-        return labelA.localeCompare(labelB);
-      });
-      setSortedGroupOptions(sorted);
+      setSortedGroupOptions(groups);
     } catch (error) {
       showError(error.message);
     }
