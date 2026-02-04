@@ -39,9 +39,27 @@ const ModelPricingTable = ({
     ? modelData.enable_groups
     : [];
   const autoChain = autoGroups.filter((g) => modelEnableGroups.includes(g));
+
+  // 检查是否有特殊价格（分辨率价格）
+  const hasSpecialPrices =
+    modelData?.special_prices &&
+    Object.keys(modelData.special_prices).length > 0;
+
+  // 分辨率顺序
+  const sizeOrder = ['1k', '2k', '4k'];
+  const availableSizes = hasSpecialPrices
+    ? sizeOrder.filter((size) => modelData.special_prices[size] !== undefined)
+    : [];
+
+  // 格式化价格显示
+  const formatPrice = (price) => {
+    if (price === null || price === undefined) return '-';
+    const symbol = currency === 'CNY' ? '¥' : '$';
+    return `${symbol}${price.toFixed(4)}`;
+  };
+
   const renderGroupPriceTable = () => {
     // 仅展示模型可用的分组：模型 enable_groups 与用户可用分组的交集
-
     const availableGroups = Object.keys(usableGroup || {})
       .filter((g) => g !== '')
       .filter((g) => g !== 'auto')
@@ -64,7 +82,7 @@ const ModelPricingTable = ({
       const groupRatioValue =
         groupRatio && groupRatio[group] ? groupRatio[group] : 1;
 
-      return {
+      const rowData = {
         key: group,
         group: group,
         ratio: groupRatioValue,
@@ -81,6 +99,17 @@ const ModelPricingTable = ({
             : '-',
         fixedPrice: modelData?.quota_type === 1 ? priceData.price : '-',
       };
+
+      // 如果有特殊价格，计算每个分辨率的价格（基础价格 × 分组倍率）
+      if (hasSpecialPrices && modelData?.quota_type === 1) {
+        rowData.specialPrices = {};
+        availableSizes.forEach((size) => {
+          const basePrice = modelData.special_prices[size];
+          rowData.specialPrices[size] = basePrice * groupRatioValue;
+        });
+      }
+
+      return rowData;
     });
 
     // 定义表格列
@@ -155,15 +184,38 @@ const ModelPricingTable = ({
           ),
         },
       );
+    } else if (hasSpecialPrices && availableSizes.length > 0) {
+      // 按次计费 + 有特殊价格（分辨率价格）- 嵌套两列：分辨率 + 价格
+      columns.push({
+        title: t('价格'),
+        dataIndex: 'specialPrices',
+        render: (specialPrices) => (
+          <div className='flex flex-col gap-1'>
+            {availableSizes.map((size) => (
+              <div key={size} className='flex items-center justify-between gap-4'>
+                <Tag color='white' size='small' shape='circle'>
+                  {size.toUpperCase()}
+                </Tag>
+                <div className='text-right'>
+                  <span className='font-semibold text-orange-600'>
+                    {formatPrice(specialPrices[size])}
+                  </span>
+                  <span className='text-xs text-gray-500 ml-1'>/ {t('次')}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        ),
+      });
     } else {
-      // 按次计费
+      // 按次计费（无特殊价格）
       columns.push({
         title: t('价格'),
         dataIndex: 'fixedPrice',
         render: (text) => (
           <>
             <div className='font-semibold text-orange-600'>{text}</div>
-            <div className='text-xs text-gray-500'>/ 次</div>
+            <div className='text-xs text-gray-500'>/ {t('次')}</div>
           </>
         ),
       });

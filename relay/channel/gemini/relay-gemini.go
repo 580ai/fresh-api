@@ -275,6 +275,10 @@ func CovertOpenAI2Gemini(c *gin.Context, textRequest dto.GeneralOpenAIRequest, i
 					}
 					if imageSize, ok := imageConfig["image_size"]; ok {
 						geminiImageConfig["imageSize"] = imageSize
+						// 存储 image_size 到 context 用于计费（不修改原值）
+						if imageSizeStr, ok := imageSize.(string); ok {
+							c.Set("gemini_image_size", imageSizeStr)
+						}
 					}
 
 					if len(geminiImageConfig) > 0 {

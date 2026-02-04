@@ -674,6 +674,68 @@ export const calculateModelPrice = ({
 
   if (record.quota_type === 1) {
     // 按次计费
+    // 检查是否有特殊价格（分辨率价格）
+    const hasSpecialPrices =
+      record.special_prices && Object.keys(record.special_prices).length > 0;
+
+    if (hasSpecialPrices) {
+      // 有特殊价格时，使用最低分辨率（1k）的价格
+      const sizeOrder = ['1k', '2k', '4k'];
+      let minBasePrice = null;
+      for (const size of sizeOrder) {
+        if (record.special_prices[size] !== undefined) {
+          minBasePrice = record.special_prices[size];
+          break;
+        }
+      }
+      if (minBasePrice === null) {
+        minBasePrice = parseFloat(record.model_price) || 0;
+      }
+
+      // 找到所有可用分组中倍率最小的
+      let minGroupRatio = usedGroupRatio;
+      if (
+        Array.isArray(record.enable_groups) &&
+        record.enable_groups.length > 0
+      ) {
+        record.enable_groups.forEach((g) => {
+          const r = groupRatio[g];
+          if (r !== undefined && r < minGroupRatio) {
+            minGroupRatio = r;
+          }
+        });
+      }
+
+      // 最低价格 = 最低分辨率价格 × 最低分组倍率
+      const minPrice = minBasePrice * minGroupRatio;
+
+      let symbol = '$';
+      if (currency === 'CNY') {
+        symbol = '¥';
+      } else if (currency === 'CUSTOM') {
+        try {
+          const statusStr = localStorage.getItem('status');
+          if (statusStr) {
+            const s = JSON.parse(statusStr);
+            symbol = s?.custom_currency_symbol || '¤';
+          } else {
+            symbol = '¤';
+          }
+        } catch (e) {
+          symbol = '¤';
+        }
+      }
+
+      return {
+        price: `${symbol}${minPrice.toFixed(4)}`,
+        isPerToken: false,
+        usedGroup,
+        usedGroupRatio,
+        hasSpecialPrices: true,
+        minPriceLabel: sizeOrder.find((s) => record.special_prices[s] !== undefined)?.toUpperCase() || '1K',
+      };
+    }
+
     const priceUSD = parseFloat(record.model_price) * usedGroupRatio;
     const displayVal = displayPrice(priceUSD);
 
@@ -704,6 +766,17 @@ export const formatPriceInfo = (priceData, t) => {
         </span>
         <span style={{ color: 'var(--semi-color-text-1)' }}>
           {t('输出')} {priceData.completionPrice}/{priceData.unitLabel}
+        </span>
+      </>
+    );
+  }
+
+  // 有特殊价格时，显示最低价格起
+  if (priceData.hasSpecialPrices) {
+    return (
+      <>
+        <span style={{ color: 'var(--semi-color-text-1)' }}>
+          {priceData.price} {t('起')}
         </span>
       </>
     );

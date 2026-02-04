@@ -2,6 +2,7 @@ package relay
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -58,6 +59,16 @@ func GeminiHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 	geminiReq, ok := info.Request.(*dto.GeminiChatRequest)
 	if !ok {
 		return types.NewErrorWithStatusCode(fmt.Errorf("invalid request type, expected *dto.GeminiChatRequest, got %T", info.Request), types.ErrorCodeInvalidRequest, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
+	}
+
+	// 从 generationConfig.imageConfig 获取 imageSize 用于特殊模型计费
+	if geminiReq.GenerationConfig.ImageConfig != nil && len(geminiReq.GenerationConfig.ImageConfig) > 0 {
+		var imageConfig struct {
+			ImageSize string `json:"imageSize"`
+		}
+		if err := json.Unmarshal(geminiReq.GenerationConfig.ImageConfig, &imageConfig); err == nil && imageConfig.ImageSize != "" {
+			c.Set("gemini_image_size", imageConfig.ImageSize)
+		}
 	}
 
 	request, err := common.DeepCopy(geminiReq)

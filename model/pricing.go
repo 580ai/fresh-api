@@ -27,6 +27,7 @@ type Pricing struct {
 	CompletionRatio        float64                 `json:"completion_ratio"`
 	EnableGroup            []string                `json:"enable_groups"`
 	SupportedEndpointTypes []constant.EndpointType `json:"supported_endpoint_types"`
+	SpecialPrices          map[string]float64      `json:"special_prices,omitempty"`
 }
 
 type PricingVendor struct {
@@ -290,6 +291,10 @@ func updatePricing() {
 			pricing.ModelRatio = modelRatio
 			pricing.CompletionRatio = ratio_setting.GetCompletionRatio(model)
 			pricing.QuotaType = 0
+		}
+		// 填充特殊模型价格（如分辨率价格）
+		if specialPrices, ok := ratio_setting.GetSpecialModelPrice(model); ok {
+			pricing.SpecialPrices = specialPrices
 		}
 		pricingMap = append(pricingMap, pricing)
 	}

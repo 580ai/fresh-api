@@ -256,6 +256,25 @@ func postConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usage 
 	modelPrice := relayInfo.PriceData.ModelPrice
 	cachedCreationRatio := relayInfo.PriceData.CacheCreationRatio
 
+	// 检查是否有特殊模型价格配置（如 Gemini 图像分辨率价格）
+	// 只针对配置了特殊价格的模型进行处理
+	if specialPrices, ok := ratio_setting.GetSpecialModelPrice(modelName); ok && len(specialPrices) > 0 {
+		// 获取 image_size 参数，默认为 "1k"
+		imageSize := ctx.GetString("gemini_image_size")
+		if imageSize == "" {
+			imageSize = "1k"
+		}
+		// 转小写进行比较
+		imageSizeLower := strings.ToLower(imageSize)
+		// 根据 image_size 获取对应价格
+		if price, exists := specialPrices[imageSizeLower]; exists {
+			modelPrice = price
+			relayInfo.PriceData.ModelPrice = price
+			relayInfo.PriceData.UsePrice = true
+			extraContent = append(extraContent, fmt.Sprintf("使用特殊模型价格: %s=$%.4f", imageSize, price))
+		}
+	}
+
 	// Convert values to decimal for precise calculation
 	dPromptTokens := decimal.NewFromInt(int64(promptTokens))
 	dCacheTokens := decimal.NewFromInt(int64(cacheTokens))
