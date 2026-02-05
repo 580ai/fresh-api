@@ -211,13 +211,13 @@ const renderSuccessRate = (stats, t) => {
     successColor = 'lime';
   }
 
-  let timeoutColor = 'green';
+  let timeoutColor = 'blue';
   if (timeout_rate > 20) {
-    timeoutColor = 'red';
+    timeoutColor = 'purple';
   } else if (timeout_rate > 10) {
-    timeoutColor = 'orange';
+    timeoutColor = 'indigo';
   } else if (timeout_rate > 5) {
-    timeoutColor = 'yellow';
+    timeoutColor = 'cyan';
   }
 
   return (
