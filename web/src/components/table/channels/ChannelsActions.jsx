@@ -36,6 +36,7 @@ const ChannelsActions = ({
   fixChannelsAbilities,
   updateAllChannelsBalance,
   deleteAllDisabledChannels,
+  refreshSelectedChannelsStats,
   compactMode,
   setCompactMode,
   idSort,
@@ -84,6 +85,16 @@ const ChannelsActions = ({
             className='w-full md:w-auto'
           >
             {t('批量设置标签')}
+          </Button>
+
+          <Button
+            size='small'
+            disabled={!enableBatchDelete}
+            type='tertiary'
+            onClick={() => refreshSelectedChannelsStats()}
+            className='w-full md:w-auto'
+          >
+            {t('刷新成功率')}
           </Button>
 
           <Dropdown

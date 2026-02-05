@@ -50,6 +50,7 @@ export default function GeneralSettings(props) {
     'general_setting.custom_currency_symbol': '¤',
     'general_setting.custom_currency_exchange_rate': '',
     'general_setting.max_retry_per_group': 2,
+    'channel_stats_setting.refresh_interval_minutes': 5,
     QuotaPerUnit: '',
     RetryTimes: '',
     USDExchangeRate: '',
@@ -304,6 +305,18 @@ export default function GeneralSettings(props) {
                   checkedText='｜'
                   uncheckedText='〇'
                   onChange={handleFieldChange('SelfUseModeEnabled')}
+                />
+              </Col>
+              <Col xs={24} sm={12} md={8} lg={8} xl={8}>
+                <Form.InputNumber
+                  field={'channel_stats_setting.refresh_interval_minutes'}
+                  label={t('渠道成功率统计刷新间隔')}
+                  initValue={5}
+                  min={0}
+                  suffix={t('分钟')}
+                  placeholder={''}
+                  extraText={t('设置为0则禁用，统计最近24小时数据')}
+                  onChange={handleFieldChange('channel_stats_setting.refresh_interval_minutes')}
                 />
               </Col>
             </Row>

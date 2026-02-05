@@ -44,6 +44,7 @@ const OperationSetting = () => {
     USDExchangeRate: 0,
     RetryTimes: 0,
     'general_setting.quota_display_type': 'USD',
+    'channel_stats_setting.refresh_interval_minutes': 5,
     DisplayTokenStatEnabled: false,
     DefaultCollapseSidebar: false,
     DemoSiteEnabled: false,

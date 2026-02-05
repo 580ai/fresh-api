@@ -16,6 +16,7 @@ import (
 	"github.com/QuantumNous/new-api/relay/channel/gemini"
 	"github.com/QuantumNous/new-api/relay/channel/ollama"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 
 	"github.com/gin-gonic/gin"
 )
@@ -2086,6 +2087,20 @@ func OllamaVersion(c *gin.Context) {
 		"success": true,
 		"data": gin.H{
 			"version": version,
+		},
+	})
+}
+
+// GetChannelStats 获取渠道统计数据
+func GetChannelStats(c *gin.Context) {
+	stats := operation_setting.GetAllChannelStats()
+	updatedAt := operation_setting.GetChannelStatsUpdatedAt()
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data": gin.H{
+			"stats":      stats,
+			"updated_at": updatedAt,
 		},
 	})
 }

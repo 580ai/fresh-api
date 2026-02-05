@@ -187,6 +187,53 @@ const renderResponseTime = (responseTime, t) => {
   }
 };
 
+// 渲染成功率
+const renderSuccessRate = (stats, t) => {
+  if (!stats) {
+    return (
+      <Tag color='grey' shape='circle'>
+        {t('暂无数据')}
+      </Tag>
+    );
+  }
+
+  const { success_rate, total_count, success_count, fail_count } = stats;
+  const successRateStr = success_rate?.toFixed(1) || '0.0';
+  const failRate = total_count > 0 ? (100 - success_rate).toFixed(1) : '0.0';
+
+  let successColor = 'green';
+  if (success_rate < 50) {
+    successColor = 'orange';
+  } else if (success_rate < 80) {
+    successColor = 'yellow';
+  } else if (success_rate < 95) {
+    successColor = 'lime';
+  }
+
+  return (
+    <Tooltip
+      content={
+        <div>
+          <div>{t('总请求')}: {total_count}</div>
+          <div>{t('成功')}: {success_count}</div>
+          <div>{t('失败')}: {fail_count}</div>
+          <div className='text-xs text-gray-400 mt-1'>{t('最近24小时')}</div>
+        </div>
+      }
+    >
+      <Space spacing={4}>
+        <Tag color={successColor} shape='circle'>
+          {successRateStr}%
+        </Tag>
+        <span>/</span>
+        <Tag color='red' shape='circle'>
+          {failRate}%
+        </Tag>
+      </Space>
+    </Tooltip>
+  );
+};
+
 export const getChannelsColumns = ({
   t,
   COLUMN_KEYS,
@@ -213,6 +260,12 @@ export const getChannelsColumns = ({
       key: COLUMN_KEYS.ID,
       title: t('ID'),
       dataIndex: 'id',
+    },
+    {
+      key: COLUMN_KEYS.SUCCESS_RATE,
+      title: t('成功率/失败率'),
+      dataIndex: 'stats',
+      render: (text, record, index) => <div>{renderSuccessRate(record.stats, t)}</div>,
     },
     {
       key: COLUMN_KEYS.NAME,

@@ -410,3 +410,55 @@ func DeleteOldLog(ctx context.Context, targetTimestamp int64, limit int) (int64,
 
 	return total, nil
 }
+
+// ChannelStatResult 渠道统计查询结果
+type ChannelStatResult struct {
+	ChannelId    int `gorm:"column:channel_id"`
+	TotalCount   int `gorm:"column:total_count"`
+	SuccessCount int `gorm:"column:success_count"`
+	FailCount    int `gorm:"column:fail_count"`
+}
+
+// GetChannelStatsFromLogs 从日志中获取最近24小时的渠道统计数据（仅统计已启用的渠道）
+func GetChannelStatsFromLogs() (map[int]*ChannelStatResult, error) {
+	// 先获取所有已启用的渠道ID
+	var enabledChannelIds []int
+	if err := DB.Model(&Channel{}).Where("status = ?", 1).Pluck("id", &enabledChannelIds).Error; err != nil {
+		return nil, err
+	}
+
+	if len(enabledChannelIds) == 0 {
+		return make(map[int]*ChannelStatResult), nil
+	}
+
+	// 计算24小时前的时间戳
+	startTime := time.Now().Add(-24 * time.Hour).Unix()
+
+	var results []ChannelStatResult
+
+	// 使用 SQL 聚合查询，按渠道分组统计，仅统计已启用的渠道
+	err := LOG_DB.Table("logs").
+		Select(`
+			channel_id,
+			COUNT(*) as total_count,
+			SUM(CASE WHEN type = ? THEN 1 ELSE 0 END) as success_count,
+			SUM(CASE WHEN type = ? THEN 1 ELSE 0 END) as fail_count
+		`, LogTypeConsume, LogTypeError).
+		Where("channel_id IN ?", enabledChannelIds).
+		Where("created_at >= ?", startTime).
+		Where("type IN ?", []int{LogTypeConsume, LogTypeError}).
+		Group("channel_id").
+		Find(&results).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	// 转换为 map
+	statsMap := make(map[int]*ChannelStatResult)
+	for i := range results {
+		statsMap[results[i].ChannelId] = &results[i]
+	}
+
+	return statsMap, nil
+}

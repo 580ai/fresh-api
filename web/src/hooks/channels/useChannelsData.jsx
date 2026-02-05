@@ -93,6 +93,9 @@ export const useChannelsData = () => {
   const [showMultiKeyManageModal, setShowMultiKeyManageModal] = useState(false);
   const [currentMultiKeyChannel, setCurrentMultiKeyChannel] = useState(null);
 
+  // Channel stats cache
+  const [channelStats, setChannelStats] = useState({});
+
   // Refs
   const requestCounter = useRef(0);
   const allSelectingRef = useRef(false);
@@ -112,6 +115,7 @@ export const useChannelsData = () => {
     TYPE: 'type',
     STATUS: 'status',
     RESPONSE_TIME: 'response_time',
+    SUCCESS_RATE: 'success_rate',
     BALANCE: 'balance',
     PRIORITY: 'priority',
     WEIGHT: 'weight',
@@ -151,6 +155,7 @@ export const useChannelsData = () => {
       [COLUMN_KEYS.TYPE]: true,
       [COLUMN_KEYS.STATUS]: true,
       [COLUMN_KEYS.RESPONSE_TIME]: true,
+      [COLUMN_KEYS.SUCCESS_RATE]: true,
       [COLUMN_KEYS.BALANCE]: true,
       [COLUMN_KEYS.PRIORITY]: true,
       [COLUMN_KEYS.WEIGHT]: true,
@@ -206,12 +211,16 @@ export const useChannelsData = () => {
   };
 
   // Data formatting
-  const setChannelFormat = (channels, enableTagMode) => {
+  const setChannelFormat = (channels, enableTagMode, stats = channelStats) => {
     let channelDates = [];
     let channelTags = {};
 
     for (let i = 0; i < channels.length; i++) {
       channels[i].key = '' + channels[i].id;
+      // Merge stats data
+      if (stats && stats[channels[i].id]) {
+        channels[i].stats = stats[channels[i].id];
+      }
       if (!enableTagMode) {
         channelDates.push(channels[i]);
       } else {
@@ -287,6 +296,20 @@ export const useChannelsData = () => {
     };
   };
 
+  // Fetch channel stats
+  const fetchChannelStats = async () => {
+    try {
+      const res = await API.get('/api/channel/stats');
+      if (res?.data?.success && res.data.data?.stats) {
+        setChannelStats(res.data.data.stats);
+        return res.data.data.stats;
+      }
+    } catch (e) {
+      // Silently fail - stats are optional
+    }
+    return channelStats;
+  };
+
   // Load channels
   const loadChannels = async (
     page,
@@ -317,9 +340,14 @@ export const useChannelsData = () => {
     setLoading(true);
     const typeParam = typeKey !== 'all' ? `&type=${typeKey}` : '';
     const statusParam = statusF !== 'all' ? `&status=${statusF}` : '';
-    const res = await API.get(
-      `/api/channel/?p=${page}&page_size=${pageSize}&id_sort=${idSort}&tag_mode=${enableTagMode}${typeParam}${statusParam}`,
-    );
+
+    // Fetch channels and stats in parallel
+    const [res, stats] = await Promise.all([
+      API.get(
+        `/api/channel/?p=${page}&page_size=${pageSize}&id_sort=${idSort}&tag_mode=${enableTagMode}${typeParam}${statusParam}`,
+      ),
+      fetchChannelStats(),
+    ]);
 
     if (res === undefined || reqId !== requestCounter.current) {
       return;
@@ -335,7 +363,7 @@ export const useChannelsData = () => {
         );
         setTypeCounts({ ...type_counts, all: sumAll });
       }
-      setChannelFormat(items, enableTagMode);
+      setChannelFormat(items, enableTagMode, stats);
       setChannelCount(total);
     } else {
       showError(message);
@@ -369,9 +397,15 @@ export const useChannelsData = () => {
 
       const typeParam = typeKey !== 'all' ? `&type=${typeKey}` : '';
       const statusParam = statusF !== 'all' ? `&status=${statusF}` : '';
-      const res = await API.get(
-        `/api/channel/search?keyword=${searchKeyword}&group=${searchGroup}&model=${searchModel}&id_sort=${sortFlag}&tag_mode=${enableTagMode}&p=${page}&page_size=${pageSz}${typeParam}${statusParam}`,
-      );
+
+      // Fetch search results and stats in parallel
+      const [res, stats] = await Promise.all([
+        API.get(
+          `/api/channel/search?keyword=${searchKeyword}&group=${searchGroup}&model=${searchModel}&id_sort=${sortFlag}&tag_mode=${enableTagMode}&p=${page}&page_size=${pageSz}${typeParam}${statusParam}`,
+        ),
+        fetchChannelStats(),
+      ]);
+
       const { success, message, data } = res.data;
       if (success) {
         const { items = [], total = 0, type_counts = {} } = data;
@@ -380,7 +414,7 @@ export const useChannelsData = () => {
           0,
         );
         setTypeCounts({ ...type_counts, all: sumAll });
-        setChannelFormat(items, enableTagMode);
+        setChannelFormat(items, enableTagMode, stats);
         setChannelCount(total);
         setActivePage(page);
       } else {
@@ -709,6 +743,44 @@ export const useChannelsData = () => {
       await refresh();
     } else {
       showError(message);
+    }
+  };
+
+  // 刷新选中渠道的成功率/失败率
+  const refreshSelectedChannelsStats = async () => {
+    if (selectedChannels.length === 0) {
+      showError(t('请先选择要刷新统计的渠道！'));
+      return;
+    }
+    setLoading(true);
+    try {
+      const stats = await fetchChannelStats();
+      // 更新选中渠道的统计数据
+      setChannels((prevChannels) => {
+        return prevChannels.map((channel) => {
+          if (stats && stats[channel.id]) {
+            return { ...channel, stats: stats[channel.id] };
+          }
+          // 处理子渠道（标签模式）
+          if (channel.children) {
+            return {
+              ...channel,
+              children: channel.children.map((child) => {
+                if (stats && stats[child.id]) {
+                  return { ...child, stats: stats[child.id] };
+                }
+                return child;
+              }),
+            };
+          }
+          return channel;
+        });
+      });
+      showSuccess(t('已刷新渠道统计数据！'));
+    } catch (e) {
+      showError(t('刷新统计数据失败'));
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -1106,6 +1178,7 @@ export const useChannelsData = () => {
     batchDeleteChannels,
     testAllChannels,
     deleteAllDisabledChannels,
+    refreshSelectedChannelsStats,
     updateAllChannelsBalance,
     updateChannelBalance,
     fixChannelsAbilities,
