@@ -232,6 +232,29 @@ export const getPricingTableColumns = ({
     render: (text, record, index) => {
       const priceData = getPriceData(record);
 
+      // 文本模型阶梯价格
+      if (priceData.hasTextModelPrice) {
+        return (
+          <div className='space-y-1'>
+            <div className='text-gray-700'>
+              {t('输入')} {priceData.inputPrice} / 1{priceData.unitLabel} tokens {t('起')}
+            </div>
+            <div className='text-gray-700'>
+              {t('输出')} {priceData.outputPrice} / 1{priceData.unitLabel} tokens {t('起')}
+            </div>
+          </div>
+        );
+      }
+
+      // 特殊价格（分辨率价格）
+      if (priceData.hasSpecialPrices) {
+        return (
+          <div className='text-gray-700'>
+            {priceData.price} {t('起')}
+          </div>
+        );
+      }
+
       if (priceData.isPerToken) {
         return (
           <div className='space-y-1'>

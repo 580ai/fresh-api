@@ -15,19 +15,20 @@ import (
 )
 
 type Pricing struct {
-	ModelName              string                  `json:"model_name"`
-	Description            string                  `json:"description,omitempty"`
-	Icon                   string                  `json:"icon,omitempty"`
-	Tags                   string                  `json:"tags,omitempty"`
-	VendorID               int                     `json:"vendor_id,omitempty"`
-	QuotaType              int                     `json:"quota_type"`
-	ModelRatio             float64                 `json:"model_ratio"`
-	ModelPrice             float64                 `json:"model_price"`
-	OwnerBy                string                  `json:"owner_by"`
-	CompletionRatio        float64                 `json:"completion_ratio"`
-	EnableGroup            []string                `json:"enable_groups"`
-	SupportedEndpointTypes []constant.EndpointType `json:"supported_endpoint_types"`
-	SpecialPrices          map[string]float64      `json:"special_prices,omitempty"`
+	ModelName              string                        `json:"model_name"`
+	Description            string                        `json:"description,omitempty"`
+	Icon                   string                        `json:"icon,omitempty"`
+	Tags                   string                        `json:"tags,omitempty"`
+	VendorID               int                           `json:"vendor_id,omitempty"`
+	QuotaType              int                           `json:"quota_type"`
+	ModelRatio             float64                       `json:"model_ratio"`
+	ModelPrice             float64                       `json:"model_price"`
+	OwnerBy                string                        `json:"owner_by"`
+	CompletionRatio        float64                       `json:"completion_ratio"`
+	EnableGroup            []string                      `json:"enable_groups"`
+	SupportedEndpointTypes []constant.EndpointType       `json:"supported_endpoint_types"`
+	SpecialPrices          map[string]float64            `json:"special_prices,omitempty"`
+	TextModelPrice         *ratio_setting.TextModelPrice `json:"text_model_price,omitempty"`
 }
 
 type PricingVendor struct {
@@ -295,6 +296,10 @@ func updatePricing() {
 		// 填充特殊模型价格（如分辨率价格）
 		if specialPrices, ok := ratio_setting.GetSpecialModelPrice(model); ok {
 			pricing.SpecialPrices = specialPrices
+		}
+		// 填充文本模型阶梯价格
+		if textModelPrice, ok := ratio_setting.GetTextModelPrice(model); ok {
+			pricing.TextModelPrice = &textModelPrice
 		}
 		pricingMap = append(pricingMap, pricing)
 	}

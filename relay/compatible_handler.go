@@ -40,6 +40,14 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 		return types.NewError(fmt.Errorf("failed to copy request to GeneralOpenAIRequest: %w", err), types.ErrorCodeInvalidRequest, types.ErrOptionWithSkipRetry())
 	}
 
+	// 提取 enable_thinking 参数用于文本模型阶梯计费
+	if len(request.EnableThinking) > 0 {
+		var enableThinking bool
+		if err := common.Unmarshal(request.EnableThinking, &enableThinking); err == nil {
+			c.Set("enable_thinking", enableThinking)
+		}
+	}
+
 	if request.WebSearchOptions != nil {
 		c.Set("chat_completion_web_search_context_size", request.WebSearchOptions.SearchContextSize)
 	}
@@ -272,6 +280,38 @@ func postConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usage 
 			relayInfo.PriceData.ModelPrice = price
 			relayInfo.PriceData.UsePrice = true
 			extraContent = append(extraContent, fmt.Sprintf("使用特殊模型价格: %s=$%.4f", imageSize, price))
+		}
+	}
+
+	// 检查是否有文本模型阶梯价格配置
+	// 根据输入 token 数量和是否启用思考模式进行阶梯计费
+	if _, hasTextModelPrice := ratio_setting.GetTextModelPrice(modelName); hasTextModelPrice {
+		enableThinking := ctx.GetBool("enable_thinking")
+		inputPrice, outputPrice, found := ratio_setting.GetTextModelTierPrice(modelName, promptTokens, enableThinking)
+		if found {
+			// 使用阶梯价格计算
+			// 价格单位是 $/1M tokens，需要转换
+			dInputPrice := decimal.NewFromFloat(inputPrice)
+			dOutputPrice := decimal.NewFromFloat(outputPrice)
+			dPromptTokensForTier := decimal.NewFromInt(int64(promptTokens))
+			dCompletionTokensForTier := decimal.NewFromInt(int64(completionTokens))
+
+			// 计算输入和输出的费用 (价格 * tokens / 1000000)
+			inputCost := dInputPrice.Mul(dPromptTokensForTier).Div(decimal.NewFromInt(1000000))
+			outputCost := dOutputPrice.Mul(dCompletionTokensForTier).Div(decimal.NewFromInt(1000000))
+			totalCost := inputCost.Add(outputCost)
+
+			// 设置为使用价格模式
+			modelPrice = totalCost.InexactFloat64()
+			relayInfo.PriceData.ModelPrice = modelPrice
+			relayInfo.PriceData.UsePrice = true
+
+			thinkingMode := "非思考"
+			if enableThinking {
+				thinkingMode = "思考"
+			}
+			extraContent = append(extraContent, fmt.Sprintf("使用文本模型阶梯价格(%s模式): 输入=$%.4f/1M, 输出=$%.4f/1M, 总价=$%.6f",
+				thinkingMode, inputPrice, outputPrice, modelPrice))
 		}
 	}
 

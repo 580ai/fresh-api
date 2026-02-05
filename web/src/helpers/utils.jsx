@@ -628,7 +628,84 @@ export const calculateModelPrice = ({
     }
   }
 
-  // 2. 根据计费类型计算价格
+  // 获取货币符号
+  const getCurrencySymbol = () => {
+    if (currency === 'CNY') {
+      return '¥';
+    } else if (currency === 'CUSTOM') {
+      try {
+        const statusStr = localStorage.getItem('status');
+        if (statusStr) {
+          const s = JSON.parse(statusStr);
+          return s?.custom_currency_symbol || '¤';
+        }
+        return '¤';
+      } catch (e) {
+        return '¤';
+      }
+    }
+    return '$';
+  };
+
+  const symbol = getCurrencySymbol();
+
+  // 2. 检查是否有文本模型阶梯价格
+  const hasTextModelPrice =
+    record.text_model_price &&
+    ((record.text_model_price.tiers && record.text_model_price.tiers.length > 0) ||
+      (record.text_model_price.thinking_tiers && record.text_model_price.thinking_tiers.length > 0));
+
+  if (hasTextModelPrice) {
+    // 找到所有阶梯中的最低输入价格和对应的输出价格
+    const tiers = record.text_model_price.tiers || [];
+    const thinkingTiers = record.text_model_price.thinking_tiers || [];
+    const allTiers = [...tiers, ...thinkingTiers];
+
+    let minInputPrice = Number.POSITIVE_INFINITY;
+    let minOutputPrice = 0;
+    allTiers.forEach((tier) => {
+      if (tier.input < minInputPrice) {
+        minInputPrice = tier.input;
+        minOutputPrice = tier.output;
+      }
+    });
+
+    // 找到所有可用分组中倍率最小的
+    let minGroupRatio = usedGroupRatio;
+    if (
+      Array.isArray(record.enable_groups) &&
+      record.enable_groups.length > 0
+    ) {
+      record.enable_groups.forEach((g) => {
+        const r = groupRatio[g];
+        if (r !== undefined && r < minGroupRatio) {
+          minGroupRatio = r;
+        }
+      });
+    }
+
+    // 最低价格 = 最低阶梯价格 × 最低分组倍率
+    // 价格单位是 $/1M tokens
+    let minInput = minInputPrice * minGroupRatio;
+    let minOutput = minOutputPrice * minGroupRatio;
+    // 如果是 CNY，需要转换
+    if (currency === 'CNY') {
+      minInput = minInput * 7;
+      minOutput = minOutput * 7;
+    }
+
+    return {
+      inputPrice: `${symbol}${minInput.toFixed(precision)}`,
+      outputPrice: `${symbol}${minOutput.toFixed(precision)}`,
+      unitLabel: 'M',
+      isPerToken: true,
+      usedGroup,
+      usedGroupRatio,
+      hasTextModelPrice: true,
+    };
+  }
+
+  // 3. 根据计费类型计算价格
   if (record.quota_type === 0) {
     // 按量计费
     const inputRatioPriceUSD = record.model_ratio * 2 * usedGroupRatio;
@@ -646,22 +723,6 @@ export const calculateModelPrice = ({
     const numCompletion =
       parseFloat(rawDisplayCompletion.replace(/[^0-9.]/g, '')) / unitDivisor;
 
-    let symbol = '$';
-    if (currency === 'CNY') {
-      symbol = '¥';
-    } else if (currency === 'CUSTOM') {
-      try {
-        const statusStr = localStorage.getItem('status');
-        if (statusStr) {
-          const s = JSON.parse(statusStr);
-          symbol = s?.custom_currency_symbol || '¤';
-        } else {
-          symbol = '¤';
-        }
-      } catch (e) {
-        symbol = '¤';
-      }
-    }
     return {
       inputPrice: `${symbol}${numInput.toFixed(precision)}`,
       completionPrice: `${symbol}${numCompletion.toFixed(precision)}`,
@@ -709,23 +770,6 @@ export const calculateModelPrice = ({
       // 最低价格 = 最低分辨率价格 × 最低分组倍率
       const minPrice = minBasePrice * minGroupRatio;
 
-      let symbol = '$';
-      if (currency === 'CNY') {
-        symbol = '¥';
-      } else if (currency === 'CUSTOM') {
-        try {
-          const statusStr = localStorage.getItem('status');
-          if (statusStr) {
-            const s = JSON.parse(statusStr);
-            symbol = s?.custom_currency_symbol || '¤';
-          } else {
-            symbol = '¤';
-          }
-        } catch (e) {
-          symbol = '¤';
-        }
-      }
-
       return {
         price: `${symbol}${minPrice.toFixed(4)}`,
         isPerToken: false,
@@ -758,6 +802,20 @@ export const calculateModelPrice = ({
 
 // 格式化价格信息（用于卡片视图）
 export const formatPriceInfo = (priceData, t) => {
+  // 有文本模型阶梯价格时，显示最低输入和输出价格起
+  if (priceData.hasTextModelPrice) {
+    return (
+      <>
+        <span style={{ color: 'var(--semi-color-text-1)' }}>
+          {t('输入')} {priceData.inputPrice}/{priceData.unitLabel} {t('起')}
+        </span>
+        <span style={{ color: 'var(--semi-color-text-1)' }}>
+          {t('输出')} {priceData.outputPrice}/{priceData.unitLabel} {t('起')}
+        </span>
+      </>
+    );
+  }
+
   if (priceData.isPerToken) {
     return (
       <>

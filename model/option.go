@@ -437,6 +437,8 @@ func updateOptionMap(key string, value string) (err error) {
 		err = ratio_setting.UpdateAudioCompletionRatioByJSONString(value)
 	case "SpecialModelPrice":
 		err = ratio_setting.UpdateSpecialModelPriceByJSONString(value)
+	case "TextModelPrice":
+		err = ratio_setting.UpdateTextModelPriceByJSONString(value)
 	case "TopUpLink":
 		common.TopUpLink = value
 	//case "ChatLink":

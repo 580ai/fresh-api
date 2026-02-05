@@ -28,6 +28,7 @@ import ModelSettingsVisualEditor from '../../pages/Setting/Ratio/ModelSettingsVi
 import ModelRatioNotSetEditor from '../../pages/Setting/Ratio/ModelRationNotSetEditor';
 import UpstreamRatioSync from '../../pages/Setting/Ratio/UpstreamRatioSync';
 import SpecialModelPriceSettings from '../../pages/Setting/Ratio/SpecialModelPriceSettings';
+import TextModelPriceSettings from '../../pages/Setting/Ratio/TextModelPriceSettings';
 
 import { API, showError, toBoolean } from '../../helpers';
 
@@ -122,6 +123,9 @@ const RatioSetting = () => {
           </Tabs.TabPane>
           <Tabs.TabPane tab={t('特殊模型定价')} itemKey='special_model'>
             <SpecialModelPriceSettings options={inputs} refresh={onRefresh} />
+          </Tabs.TabPane>
+          <Tabs.TabPane tab={t('文本模型阶梯定价')} itemKey='text_model_price'>
+            <TextModelPriceSettings options={inputs} refresh={onRefresh} />
           </Tabs.TabPane>
         </Tabs>
       </Card>
