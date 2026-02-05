@@ -51,6 +51,8 @@ export default function GeneralSettings(props) {
     'general_setting.custom_currency_exchange_rate': '',
     'general_setting.max_retry_per_group': 2,
     'channel_stats_setting.refresh_interval_minutes': 5,
+    'channel_stats_setting.stream_timeout_seconds': 10,
+    'channel_stats_setting.non_stream_timeout_seconds': 30,
     QuotaPerUnit: '',
     RetryTimes: '',
     USDExchangeRate: '',
@@ -307,10 +309,20 @@ export default function GeneralSettings(props) {
                   onChange={handleFieldChange('SelfUseModeEnabled')}
                 />
               </Col>
+            </Row>
+            <Row>
+              <Button size='default' onClick={onSubmit}>
+                {t('保存通用设置')}
+              </Button>
+            </Row>
+          </Form.Section>
+
+          <Form.Section text={t('渠道成功率设置')}>
+            <Row gutter={16}>
               <Col xs={24} sm={12} md={8} lg={8} xl={8}>
                 <Form.InputNumber
                   field={'channel_stats_setting.refresh_interval_minutes'}
-                  label={t('渠道成功率统计刷新间隔')}
+                  label={t('统计刷新间隔')}
                   initValue={5}
                   min={0}
                   suffix={t('分钟')}
@@ -319,10 +331,34 @@ export default function GeneralSettings(props) {
                   onChange={handleFieldChange('channel_stats_setting.refresh_interval_minutes')}
                 />
               </Col>
+              <Col xs={24} sm={12} md={8} lg={8} xl={8}>
+                <Form.InputNumber
+                  field={'channel_stats_setting.stream_timeout_seconds'}
+                  label={t('流式首字超时时间')}
+                  initValue={10}
+                  min={1}
+                  suffix={t('秒')}
+                  placeholder={''}
+                  extraText={t('流式请求超过此时间视为超时')}
+                  onChange={handleFieldChange('channel_stats_setting.stream_timeout_seconds')}
+                />
+              </Col>
+              <Col xs={24} sm={12} md={8} lg={8} xl={8}>
+                <Form.InputNumber
+                  field={'channel_stats_setting.non_stream_timeout_seconds'}
+                  label={t('非流式超时时间')}
+                  initValue={30}
+                  min={1}
+                  suffix={t('秒')}
+                  placeholder={''}
+                  extraText={t('非流式请求超过此时间视为超时')}
+                  onChange={handleFieldChange('channel_stats_setting.non_stream_timeout_seconds')}
+                />
+              </Col>
             </Row>
             <Row>
               <Button size='default' onClick={onSubmit}>
-                {t('保存通用设置')}
+                {t('保存渠道成功率设置')}
               </Button>
             </Row>
           </Form.Section>

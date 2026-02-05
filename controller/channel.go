@@ -2091,7 +2091,7 @@ func OllamaVersion(c *gin.Context) {
 	})
 }
 
-// GetChannelStats 获取渠道统计数据
+// GetChannelStats 获取渠道统计数据（从缓存获取，仅已启用的渠道）
 func GetChannelStats(c *gin.Context) {
 	stats := operation_setting.GetAllChannelStats()
 	updatedAt := operation_setting.GetChannelStatsUpdatedAt()
@@ -2101,6 +2101,47 @@ func GetChannelStats(c *gin.Context) {
 		"data": gin.H{
 			"stats":      stats,
 			"updated_at": updatedAt,
+		},
+	})
+}
+
+// RefreshChannelStats 手动刷新渠道统计数据（实时查询，包括禁用的渠道）
+func RefreshChannelStats(c *gin.Context) {
+	// 查询所有渠道的统计数据（包括禁用的）
+	results, err := model.GetAllChannelStatsFromLogs()
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": err.Error(),
+		})
+		return
+	}
+
+	// 转换为 ChannelStats 格式
+	stats := make(map[int]*operation_setting.ChannelStats)
+	for channelId, result := range results {
+		successRate := float64(0)
+		timeoutRate := float64(0)
+		if result.TotalCount > 0 {
+			successRate = float64(result.SuccessCount) / float64(result.TotalCount) * 100
+			timeoutRate = float64(result.TimeoutCount) / float64(result.TotalCount) * 100
+		}
+		stats[channelId] = &operation_setting.ChannelStats{
+			ChannelID:    channelId,
+			TotalCount:   result.TotalCount,
+			SuccessCount: result.SuccessCount,
+			FailCount:    result.FailCount,
+			TimeoutCount: result.TimeoutCount,
+			SuccessRate:  successRate,
+			TimeoutRate:  timeoutRate,
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data": gin.H{
+			"stats":      stats,
+			"updated_at": time.Now().Unix(),
 		},
 	})
 }

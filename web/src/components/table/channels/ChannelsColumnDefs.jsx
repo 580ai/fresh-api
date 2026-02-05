@@ -197,9 +197,10 @@ const renderSuccessRate = (stats, t) => {
     );
   }
 
-  const { success_rate, total_count, success_count, fail_count } = stats;
+  const { success_rate, total_count, success_count, fail_count, timeout_count, timeout_rate } = stats;
   const successRateStr = success_rate?.toFixed(1) || '0.0';
   const failRate = total_count > 0 ? (100 - success_rate).toFixed(1) : '0.0';
+  const timeoutRateStr = timeout_rate?.toFixed(1) || '0.0';
 
   let successColor = 'green';
   if (success_rate < 50) {
@@ -210,6 +211,15 @@ const renderSuccessRate = (stats, t) => {
     successColor = 'lime';
   }
 
+  let timeoutColor = 'green';
+  if (timeout_rate > 20) {
+    timeoutColor = 'red';
+  } else if (timeout_rate > 10) {
+    timeoutColor = 'orange';
+  } else if (timeout_rate > 5) {
+    timeoutColor = 'yellow';
+  }
+
   return (
     <Tooltip
       content={
@@ -217,6 +227,7 @@ const renderSuccessRate = (stats, t) => {
           <div>{t('总请求')}: {total_count}</div>
           <div>{t('成功')}: {success_count}</div>
           <div>{t('失败')}: {fail_count}</div>
+          <div>{t('超时')}: {timeout_count || 0}</div>
           <div className='text-xs text-gray-400 mt-1'>{t('最近24小时')}</div>
         </div>
       }
@@ -228,6 +239,10 @@ const renderSuccessRate = (stats, t) => {
         <span>/</span>
         <Tag color='red' shape='circle'>
           {failRate}%
+        </Tag>
+        <span>/</span>
+        <Tag color={timeoutColor} shape='circle'>
+          {timeoutRateStr}%
         </Tag>
       </Space>
     </Tooltip>
@@ -263,7 +278,7 @@ export const getChannelsColumns = ({
     },
     {
       key: COLUMN_KEYS.SUCCESS_RATE,
-      title: t('成功率/失败率'),
+      title: t('成功/失败/超时'),
       dataIndex: 'stats',
       render: (text, record, index) => <div>{renderSuccessRate(record.stats, t)}</div>,
     },

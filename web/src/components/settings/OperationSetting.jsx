@@ -45,6 +45,8 @@ const OperationSetting = () => {
     RetryTimes: 0,
     'general_setting.quota_display_type': 'USD',
     'channel_stats_setting.refresh_interval_minutes': 5,
+    'channel_stats_setting.stream_timeout_seconds': 10,
+    'channel_stats_setting.non_stream_timeout_seconds': 30,
     DisplayTokenStatEnabled: false,
     DefaultCollapseSidebar: false,
     DemoSiteEnabled: false,

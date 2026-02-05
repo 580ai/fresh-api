@@ -11,6 +11,10 @@ import (
 type ChannelStatsSetting struct {
 	// 统计刷新间隔（分钟），0 表示禁用
 	RefreshIntervalMinutes int `json:"refresh_interval_minutes"`
+	// 流式首字超时时间（秒）
+	StreamTimeoutSeconds int `json:"stream_timeout_seconds"`
+	// 非流式超时时间（秒）
+	NonStreamTimeoutSeconds int `json:"non_stream_timeout_seconds"`
 }
 
 // ChannelStats 单个渠道的统计数据
@@ -19,12 +23,16 @@ type ChannelStats struct {
 	TotalCount   int     `json:"total_count"`   // 总请求数
 	SuccessCount int     `json:"success_count"` // 成功数
 	FailCount    int     `json:"fail_count"`    // 失败数
+	TimeoutCount int     `json:"timeout_count"` // 超时数
 	SuccessRate  float64 `json:"success_rate"`  // 成功率 (0-100)
+	TimeoutRate  float64 `json:"timeout_rate"`  // 超时率 (0-100)
 }
 
 // 默认配置
 var channelStatsSetting = ChannelStatsSetting{
-	RefreshIntervalMinutes: 5, // 默认5分钟刷新一次
+	RefreshIntervalMinutes:  5,  // 默认5分钟刷新一次
+	StreamTimeoutSeconds:    10, // 默认流式首字超时10秒
+	NonStreamTimeoutSeconds: 30, // 默认非流式超时30秒
 }
 
 // 渠道统计缓存
@@ -50,6 +58,22 @@ func GetRefreshIntervalMinutes() int {
 		return 0
 	}
 	return channelStatsSetting.RefreshIntervalMinutes
+}
+
+// GetStreamTimeoutSeconds 获取流式首字超时时间（秒）
+func GetStreamTimeoutSeconds() int {
+	if channelStatsSetting.StreamTimeoutSeconds <= 0 {
+		return 10 // 默认10秒
+	}
+	return channelStatsSetting.StreamTimeoutSeconds
+}
+
+// GetNonStreamTimeoutSeconds 获取非流式超时时间（秒）
+func GetNonStreamTimeoutSeconds() int {
+	if channelStatsSetting.NonStreamTimeoutSeconds <= 0 {
+		return 30 // 默认30秒
+	}
+	return channelStatsSetting.NonStreamTimeoutSeconds
 }
 
 // IsChannelStatsEnabled 是否启用渠道统计

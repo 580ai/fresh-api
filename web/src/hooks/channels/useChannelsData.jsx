@@ -296,7 +296,7 @@ export const useChannelsData = () => {
     };
   };
 
-  // Fetch channel stats
+  // Fetch channel stats (from cache, only enabled channels)
   const fetchChannelStats = async () => {
     try {
       const res = await API.get('/api/channel/stats');
@@ -306,6 +306,20 @@ export const useChannelsData = () => {
       }
     } catch (e) {
       // Silently fail - stats are optional
+    }
+    return channelStats;
+  };
+
+  // Refresh channel stats (real-time query, all channels including disabled)
+  const refreshChannelStatsFromServer = async () => {
+    try {
+      const res = await API.post('/api/channel/stats/refresh');
+      if (res?.data?.success && res.data.data?.stats) {
+        setChannelStats(res.data.data.stats);
+        return res.data.data.stats;
+      }
+    } catch (e) {
+      // Silently fail
     }
     return channelStats;
   };
@@ -746,7 +760,7 @@ export const useChannelsData = () => {
     }
   };
 
-  // 刷新选中渠道的成功率/失败率
+  // 刷新选中渠道的成功率/失败率（实时查询，包括禁用的渠道）
   const refreshSelectedChannelsStats = async () => {
     if (selectedChannels.length === 0) {
       showError(t('请先选择要刷新统计的渠道！'));
@@ -754,7 +768,8 @@ export const useChannelsData = () => {
     }
     setLoading(true);
     try {
-      const stats = await fetchChannelStats();
+      // 使用实时刷新接口，包括禁用的渠道
+      const stats = await refreshChannelStatsFromServer();
       // 更新选中渠道的统计数据
       setChannels((prevChannels) => {
         return prevChannels.map((channel) => {

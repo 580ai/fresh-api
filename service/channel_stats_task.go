@@ -72,15 +72,19 @@ func runChannelStatsOnce() {
 	stats := make(map[int]*operation_setting.ChannelStats)
 	for channelId, result := range results {
 		successRate := float64(0)
+		timeoutRate := float64(0)
 		if result.TotalCount > 0 {
 			successRate = float64(result.SuccessCount) / float64(result.TotalCount) * 100
+			timeoutRate = float64(result.TimeoutCount) / float64(result.TotalCount) * 100
 		}
 		stats[channelId] = &operation_setting.ChannelStats{
 			ChannelID:    channelId,
 			TotalCount:   result.TotalCount,
 			SuccessCount: result.SuccessCount,
 			FailCount:    result.FailCount,
+			TimeoutCount: result.TimeoutCount,
 			SuccessRate:  successRate,
+			TimeoutRate:  timeoutRate,
 		}
 	}
 

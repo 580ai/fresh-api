@@ -9,6 +9,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/QuantumNous/new-api/types"
 
 	"github.com/gin-gonic/gin"
@@ -417,39 +418,80 @@ type ChannelStatResult struct {
 	TotalCount   int `gorm:"column:total_count"`
 	SuccessCount int `gorm:"column:success_count"`
 	FailCount    int `gorm:"column:fail_count"`
+	TimeoutCount int `gorm:"column:timeout_count"`
 }
 
 // GetChannelStatsFromLogs 从日志中获取最近24小时的渠道统计数据（仅统计已启用的渠道）
 func GetChannelStatsFromLogs() (map[int]*ChannelStatResult, error) {
-	// 先获取所有已启用的渠道ID
-	var enabledChannelIds []int
-	if err := DB.Model(&Channel{}).Where("status = ?", 1).Pluck("id", &enabledChannelIds).Error; err != nil {
-		return nil, err
-	}
+	return GetChannelStatsFromLogsWithFilter(true)
+}
 
-	if len(enabledChannelIds) == 0 {
-		return make(map[int]*ChannelStatResult), nil
-	}
+// GetAllChannelStatsFromLogs 从日志中获取最近24小时的所有渠道统计数据（包括禁用的渠道）
+func GetAllChannelStatsFromLogs() (map[int]*ChannelStatResult, error) {
+	return GetChannelStatsFromLogsWithFilter(false)
+}
+
+// GetChannelStatsFromLogsWithFilter 从日志中获取最近24小时的渠道统计数据
+// onlyEnabled: true 只统计已启用的渠道，false 统计所有渠道
+func GetChannelStatsFromLogsWithFilter(onlyEnabled bool) (map[int]*ChannelStatResult, error) {
+	// 获取超时配置
+	streamTimeout := operation_setting.GetStreamTimeoutSeconds()
+	nonStreamTimeout := operation_setting.GetNonStreamTimeoutSeconds()
 
 	// 计算24小时前的时间戳
 	startTime := time.Now().Add(-24 * time.Hour).Unix()
 
 	var results []ChannelStatResult
 
-	// 使用 SQL 聚合查询，按渠道分组统计，仅统计已启用的渠道
-	err := LOG_DB.Table("logs").
-		Select(`
+	// 使用 SQL 聚合查询，按渠道分组统计
+	// 超时判断：流式请求用 other 字段中的 frt（毫秒），非流式请求用 use_time（秒）
+	// 判断日志数据库类型：如果 LOG_SQL_DSN 为空则使用主数据库类型
+	isPostgres := common.LogSqlType == common.DatabaseTypePostgreSQL || (common.LogSqlType == common.DatabaseTypeSQLite && common.UsingPostgreSQL)
+	var selectSQL string
+	if isPostgres {
+		// PostgreSQL: 使用 ->> 提取 JSON 字段，frt 是毫秒需要除以 1000
+		selectSQL = `
 			channel_id,
 			COUNT(*) as total_count,
 			SUM(CASE WHEN type = ? THEN 1 ELSE 0 END) as success_count,
-			SUM(CASE WHEN type = ? THEN 1 ELSE 0 END) as fail_count
-		`, LogTypeConsume, LogTypeError).
-		Where("channel_id IN ?", enabledChannelIds).
+			SUM(CASE WHEN type = ? THEN 1 ELSE 0 END) as fail_count,
+			SUM(CASE WHEN type = ? AND (
+				(is_stream = true AND COALESCE((other::json->>'frt')::numeric, 0) / 1000 > ?) OR
+				(is_stream = false AND use_time > ?)
+			) THEN 1 ELSE 0 END) as timeout_count
+		`
+	} else {
+		// MySQL/SQLite: 使用 JSON_EXTRACT，frt 是毫秒需要除以 1000
+		selectSQL = `
+			channel_id,
+			COUNT(*) as total_count,
+			SUM(CASE WHEN type = ? THEN 1 ELSE 0 END) as success_count,
+			SUM(CASE WHEN type = ? THEN 1 ELSE 0 END) as fail_count,
+			SUM(CASE WHEN type = ? AND (
+				(is_stream = 1 AND COALESCE(JSON_EXTRACT(other, '$.frt'), 0) / 1000 > ?) OR
+				(is_stream = 0 AND use_time > ?)
+			) THEN 1 ELSE 0 END) as timeout_count
+		`
+	}
+	query := LOG_DB.Table("logs").
+		Select(selectSQL, LogTypeConsume, LogTypeError, LogTypeConsume, streamTimeout, nonStreamTimeout).
+		Where("channel_id > 0").
 		Where("created_at >= ?", startTime).
-		Where("type IN ?", []int{LogTypeConsume, LogTypeError}).
-		Group("channel_id").
-		Find(&results).Error
+		Where("type IN ?", []int{LogTypeConsume, LogTypeError})
 
+	// 如果只统计已启用的渠道，添加过滤条件
+	if onlyEnabled {
+		var enabledChannelIds []int
+		if err := DB.Model(&Channel{}).Where("status = ?", 1).Pluck("id", &enabledChannelIds).Error; err != nil {
+			return nil, err
+		}
+		if len(enabledChannelIds) == 0 {
+			return make(map[int]*ChannelStatResult), nil
+		}
+		query = query.Where("channel_id IN ?", enabledChannelIds)
+	}
+
+	err := query.Group("channel_id").Find(&results).Error
 	if err != nil {
 		return nil, err
 	}
