@@ -17,35 +17,30 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Button,
   Card,
   Col,
-  Form,
   Row,
   Spin,
   Typography,
   InputNumber,
+  Input,
+  Popconfirm,
+  Empty,
 } from '@douyinfe/semi-ui';
-import { IconImage } from '@douyinfe/semi-icons';
+import { IconImage, IconPlus, IconDelete } from '@douyinfe/semi-icons';
 import { API, showError, showSuccess, showWarning } from '../../../helpers';
 import { useTranslation } from 'react-i18next';
 
-const { Title, Text } = Typography;
+const { Text } = Typography;
 
-// 特殊模型配置列表
-const SPECIAL_MODELS = [
-  {
-    name: 'gemini-3-pro-image-preview',
-    label: 'Gemini 3 Pro Image Preview',
-    description: '图像生成模型，支持不同分辨率定价',
-    priceKeys: [
-      { key: '1k', label: '1K', description: '默认分辨率' },
-      { key: '2k', label: '2K', description: '中等分辨率' },
-      { key: '4k', label: '4K', description: '高分辨率' },
-    ],
-  },
+// 默认的价格键配置
+const DEFAULT_PRICE_KEYS = [
+  { key: '1k', label: '1K', description: '默认分辨率' },
+  { key: '2k', label: '2K', description: '中等分辨率' },
+  { key: '4k', label: '4K', description: '高分辨率' },
 ];
 
 export default function SpecialModelPriceSettings(props) {
@@ -53,7 +48,7 @@ export default function SpecialModelPriceSettings(props) {
   const [loading, setLoading] = useState(false);
   const [specialModelPrice, setSpecialModelPrice] = useState({});
   const [originalData, setOriginalData] = useState({});
-  const refForm = useRef();
+  const [newModelName, setNewModelName] = useState('');
 
   // 解析配置数据
   useEffect(() => {
@@ -72,6 +67,38 @@ export default function SpecialModelPriceSettings(props) {
     }
   }, [props.options]);
 
+  // 获取所有已配置的模型列表
+  const getModelList = () => {
+    return Object.keys(specialModelPrice);
+  };
+
+  // 添加新模型
+  const handleAddModel = () => {
+    const trimmedName = newModelName.trim();
+    if (!trimmedName) {
+      showWarning(t('请输入模型名称'));
+      return;
+    }
+    if (specialModelPrice[trimmedName]) {
+      showWarning(t('该模型已存在'));
+      return;
+    }
+    setSpecialModelPrice((prev) => ({
+      ...prev,
+      [trimmedName]: {},
+    }));
+    setNewModelName('');
+  };
+
+  // 删除模型
+  const handleDeleteModel = (modelName) => {
+    setSpecialModelPrice((prev) => {
+      const newData = { ...prev };
+      delete newData[modelName];
+      return newData;
+    });
+  };
+
   // 更新单个模型的价格
   const handlePriceChange = (modelName, priceKey, value) => {
     setSpecialModelPrice((prev) => {
@@ -81,10 +108,6 @@ export default function SpecialModelPriceSettings(props) {
       }
       if (value === null || value === undefined || value === '') {
         delete newData[modelName][priceKey];
-        // 如果模型下没有任何价格了，删除整个模型
-        if (Object.keys(newData[modelName]).length === 0) {
-          delete newData[modelName];
-        }
       } else {
         newData[modelName][priceKey] = value;
       }
@@ -127,68 +150,101 @@ export default function SpecialModelPriceSettings(props) {
     }
   }
 
+  const modelList = getModelList();
+
   return (
     <Spin spinning={loading}>
       <div style={{ marginBottom: 15 }}>
         <Text type='secondary'>
           {t(
-            '在此处配置特殊模型的价格，如图像生成模型的不同分辨率价格。配置后将在价格页面的模型详情中展示。',
+            '在此处配置特殊模型的价格，如图像生成模型的不同分辨率价格。配置后将在价格页面的模型详情中展示，并在调用时按配置价格计费。',
           )}
         </Text>
       </div>
 
-      {SPECIAL_MODELS.map((model) => (
-        <Card
-          key={model.name}
-          style={{ marginBottom: 16 }}
-          title={
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <IconImage style={{ color: 'var(--semi-color-primary)' }} />
-              <span>{model.label}</span>
-            </div>
-          }
-        >
-          <Text type='secondary' style={{ display: 'block', marginBottom: 16 }}>
-            {t(model.description)}
-          </Text>
-          <Text
-            type='tertiary'
-            size='small'
-            style={{ display: 'block', marginBottom: 16 }}
+      {/* 添加新模型 */}
+      <Card style={{ marginBottom: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <Input
+            placeholder={t('输入模型名称，如 gemini-3-pro-image-preview')}
+            value={newModelName}
+            onChange={setNewModelName}
+            onEnterPress={handleAddModel}
+            style={{ flex: 1 }}
+          />
+          <Button
+            type='primary'
+            icon={<IconPlus />}
+            onClick={handleAddModel}
           >
-            {t('模型名称')}: <code>{model.name}</code>
-          </Text>
+            {t('添加模型')}
+          </Button>
+        </div>
+      </Card>
 
-          <Row gutter={16}>
-            {model.priceKeys.map((priceConfig) => (
-              <Col xs={24} sm={8} key={priceConfig.key}>
-                <div style={{ marginBottom: 16 }}>
-                  <div style={{ marginBottom: 4 }}>
-                    <Text strong>{priceConfig.label}</Text>
-                    <Text type='tertiary' size='small' style={{ marginLeft: 8 }}>
-                      {t(priceConfig.description)}
-                    </Text>
-                  </div>
-                  <InputNumber
-                    placeholder={t('输入价格')}
-                    prefix='$'
-                    suffix={t('/次')}
-                    min={0}
-                    step={0.001}
-                    style={{ width: '100%' }}
-                    value={getPriceValue(model.name, priceConfig.key)}
-                    onChange={(value) =>
-                      handlePriceChange(model.name, priceConfig.key, value)
-                    }
-                  />
+      {/* 模型列表 */}
+      {modelList.length === 0 ? (
+        <Empty
+          image={<IconImage style={{ fontSize: 48, color: 'var(--semi-color-text-2)' }} />}
+          title={t('暂无特殊模型配置')}
+          description={t('点击上方按钮添加需要特殊定价的模型')}
+        />
+      ) : (
+        modelList.map((modelName) => (
+          <Card
+            key={modelName}
+            style={{ marginBottom: 16 }}
+            title={
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <IconImage style={{ color: 'var(--semi-color-primary)' }} />
+                  <span>{modelName}</span>
                 </div>
-              </Col>
-            ))}
-          </Row>
-        </Card>
-      ))}
+                <Popconfirm
+                  title={t('确定删除该模型配置吗？')}
+                  onConfirm={() => handleDeleteModel(modelName)}
+                >
+                  <Button
+                    type='danger'
+                    theme='borderless'
+                    icon={<IconDelete />}
+                    size='small'
+                  />
+                </Popconfirm>
+              </div>
+            }
+          >
+            <Row gutter={16}>
+              {DEFAULT_PRICE_KEYS.map((priceConfig) => (
+                <Col xs={24} sm={8} key={priceConfig.key}>
+                  <div style={{ marginBottom: 16 }}>
+                    <div style={{ marginBottom: 4 }}>
+                      <Text strong>{priceConfig.label}</Text>
+                      <Text type='tertiary' size='small' style={{ marginLeft: 8 }}>
+                        {t(priceConfig.description)}
+                      </Text>
+                    </div>
+                    <InputNumber
+                      placeholder={t('输入价格')}
+                      prefix='$'
+                      suffix={t('/次')}
+                      min={0}
+                      step={0.001}
+                      style={{ width: '100%' }}
+                      value={getPriceValue(modelName, priceConfig.key)}
+                      onChange={(value) =>
+                        handlePriceChange(modelName, priceConfig.key, value)
+                      }
+                    />
+                  </div>
+                </Col>
+              ))}
+            </Row>
+          </Card>
+        ))
+      )}
 
-      <Button type='primary' onClick={onSubmit}>
+      <Button type='primary' onClick={onSubmit} disabled={modelList.length === 0}>
         {t('保存特殊模型价格设置')}
       </Button>
     </Spin>
