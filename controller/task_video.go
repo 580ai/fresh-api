@@ -251,6 +251,7 @@ func updateVideoSingleTask(ctx context.Context, adaptor channel.TaskAdaptor, cha
 		if quota != 0 {
 			if preStatus != model.TaskStatusFailure {
 				shouldRefund = true
+				task.Quota = 0 // 清零防止重复退款，Update() 会将此值保存到数据库
 			} else {
 				logger.LogWarn(ctx, fmt.Sprintf("Task %s already in failure status, skip refund", task.TaskID))
 			}
