@@ -216,6 +216,15 @@ func SetApiRouter(router *gin.Engine) {
 		logRoute.GET("/self", middleware.UserAuth(), controller.GetUserLogs)
 		logRoute.GET("/self/search", middleware.UserAuth(), controller.SearchUserLogs)
 
+		// 操作日志路由
+		operationLogRoute := apiRouter.Group("/operation_log")
+		operationLogRoute.Use(middleware.AdminAuth())
+		{
+			operationLogRoute.GET("/", controller.GetAllOperationLogs)
+			operationLogRoute.DELETE("/", controller.DeleteHistoryOperationLogs)
+			operationLogRoute.GET("/options", controller.GetOperationLogOptions)
+		}
+
 		dataRoute := apiRouter.Group("/data")
 		dataRoute.GET("/", middleware.AdminAuth(), controller.GetAllQuotaDates)
 		dataRoute.GET("/self", middleware.UserAuth(), controller.GetUserQuotaDates)

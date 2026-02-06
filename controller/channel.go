@@ -68,6 +68,26 @@ func clearChannelInfo(channel *model.Channel) {
 	}
 }
 
+// sanitizeChannelForLog 清理渠道敏感信息用于日志记录
+func sanitizeChannelForLog(channel *model.Channel) map[string]any {
+	if channel == nil {
+		return nil
+	}
+	return map[string]any{
+		"id":           channel.Id,
+		"name":         channel.Name,
+		"type":         channel.Type,
+		"status":       channel.Status,
+		"groups":       channel.Group,
+		"models":       channel.Models,
+		"priority":     channel.Priority,
+		"weight":       channel.Weight,
+		"tag":          channel.Tag,
+		"base_url":     channel.GetBaseURL(),
+		"is_multi_key": channel.ChannelInfo.IsMultiKey,
+	}
+}
+
 func GetAllChannels(c *gin.Context) {
 	pageInfo := common.GetPageQuery(c)
 	channelData := make([]*model.Channel, 0)
@@ -793,6 +813,15 @@ func AddChannel(c *gin.Context) {
 		return
 	}
 	service.ResetProxyClientCache()
+
+	// 记录操作日志
+	userId := c.GetInt("id")
+	for _, ch := range channels {
+		model.RecordOperationLog(c, userId, model.OperationModuleChannel, model.OperationActionCreate,
+			strconv.Itoa(ch.Id), ch.Name, nil, sanitizeChannelForLog(&ch),
+			fmt.Sprintf("创建渠道: %s", ch.Name))
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
@@ -802,6 +831,10 @@ func AddChannel(c *gin.Context) {
 
 func DeleteChannel(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
+
+	// 先获取渠道信息用于日志记录
+	oldChannel, _ := model.GetChannelById(id, false)
+
 	channel := model.Channel{Id: id}
 	err := channel.Delete()
 	if err != nil {
@@ -809,6 +842,17 @@ func DeleteChannel(c *gin.Context) {
 		return
 	}
 	model.InitChannelCache()
+
+	// 记录操作日志
+	userId := c.GetInt("id")
+	channelName := ""
+	if oldChannel != nil {
+		channelName = oldChannel.Name
+	}
+	model.RecordOperationLog(c, userId, model.OperationModuleChannel, model.OperationActionDelete,
+		strconv.Itoa(id), channelName, sanitizeChannelForLog(oldChannel), nil,
+		fmt.Sprintf("删除渠道: %s (ID: %d)", channelName, id))
+
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
@@ -1097,6 +1141,13 @@ func UpdateChannel(c *gin.Context) {
 	}
 	model.InitChannelCache()
 	service.ResetProxyClientCache()
+
+	// 记录操作日志
+	userId := c.GetInt("id")
+	model.RecordOperationLog(c, userId, model.OperationModuleChannel, model.OperationActionUpdate,
+		strconv.Itoa(channel.Id), channel.Name, sanitizeChannelForLog(originChannel), sanitizeChannelForLog(&channel.Channel),
+		fmt.Sprintf("更新渠道: %s (ID: %d)", channel.Name, channel.Id))
+
 	channel.Key = ""
 	clearChannelInfo(&channel.Channel)
 	c.JSON(http.StatusOK, gin.H{

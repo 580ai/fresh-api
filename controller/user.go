@@ -272,6 +272,22 @@ func Register(c *gin.Context) {
 	return
 }
 
+// sanitizeUserForLog 用于清理用户数据，移除敏感信息后用于操作日志记录
+func sanitizeUserForLog(user *model.User) map[string]interface{} {
+	return map[string]interface{}{
+		"id":           user.Id,
+		"username":     user.Username,
+		"display_name": user.DisplayName,
+		"role":         user.Role,
+		"status":       user.Status,
+		"email":        user.Email,
+		"group":        user.Group,
+		"quota":        user.Quota,
+		"used_quota":   user.UsedQuota,
+		"remark":       user.Remark,
+	}
+}
+
 func GetAllUsers(c *gin.Context) {
 	pageInfo := common.GetPageQuery(c)
 	users, total, err := model.GetAllUsers(pageInfo)
@@ -648,6 +664,12 @@ func UpdateUser(c *gin.Context) {
 	if originUser.Quota != updatedUser.Quota {
 		model.RecordLog(originUser.Id, model.LogTypeManage, fmt.Sprintf("管理员将用户额度从 %s修改为 %s", logger.LogQuota(originUser.Quota), logger.LogQuota(updatedUser.Quota)))
 	}
+
+	// 记录操作日志
+	model.RecordOperationLog(c, c.GetInt("id"), model.ModuleUser, model.ActionUpdate,
+		strconv.Itoa(originUser.Id), originUser.Username, sanitizeUserForLog(originUser), sanitizeUserForLog(&updatedUser),
+		fmt.Sprintf("更新用户: %s", originUser.Username))
+
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
@@ -796,14 +818,26 @@ func DeleteUser(c *gin.Context) {
 		})
 		return
 	}
+	// 先保存用户信息用于日志记录
+	deletedUserInfo := sanitizeUserForLog(originUser)
 	err = model.HardDeleteUserById(id)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
-			"success": true,
-			"message": "",
+			"success": false,
+			"message": err.Error(),
 		})
 		return
 	}
+
+	// 记录操作日志
+	model.RecordOperationLog(c, c.GetInt("id"), model.ModuleUser, model.ActionDelete,
+		strconv.Itoa(originUser.Id), originUser.Username, deletedUserInfo, nil,
+		fmt.Sprintf("删除用户: %s", originUser.Username))
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "",
+	})
 }
 
 func DeleteSelf(c *gin.Context) {
@@ -871,6 +905,11 @@ func CreateUser(c *gin.Context) {
 		return
 	}
 
+	// 记录操作日志
+	model.RecordOperationLog(c, c.GetInt("id"), model.ModuleUser, model.ActionCreate,
+		strconv.Itoa(cleanUser.Id), cleanUser.Username, nil, sanitizeUserForLog(&cleanUser),
+		fmt.Sprintf("创建用户: %s", cleanUser.Username))
+
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
@@ -935,6 +974,8 @@ func ManageUser(c *gin.Context) {
 			})
 			return
 		}
+		// 先保存用户信息用于日志记录
+		deletedUserInfo := sanitizeUserForLog(&user)
 		if err := user.Delete(); err != nil {
 			c.JSON(http.StatusOK, gin.H{
 				"success": false,
@@ -942,6 +983,15 @@ func ManageUser(c *gin.Context) {
 			})
 			return
 		}
+		// 记录删除操作日志
+		model.RecordOperationLog(c, c.GetInt("id"), model.ModuleUser, model.ActionDelete,
+			strconv.Itoa(user.Id), user.Username, deletedUserInfo, nil,
+			fmt.Sprintf("删除用户: %s", user.Username))
+		c.JSON(http.StatusOK, gin.H{
+			"success": true,
+			"message": "",
+		})
+		return
 	case "promote":
 		if myRole != common.RoleRootUser {
 			c.JSON(http.StatusOK, gin.H{
@@ -958,6 +1008,22 @@ func ManageUser(c *gin.Context) {
 			return
 		}
 		user.Role = common.RoleAdminUser
+	case "promote_root":
+		if myRole != common.RoleRootUser {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": "只有超级管理员才能提升其他用户为超级管理员",
+			})
+			return
+		}
+		if user.Role == common.RoleRootUser {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": "该用户已经是超级管理员",
+			})
+			return
+		}
+		user.Role = common.RoleRootUser
 	case "demote":
 		if user.Role == common.RoleRootUser {
 			c.JSON(http.StatusOK, gin.H{
@@ -980,6 +1046,30 @@ func ManageUser(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+
+	// 记录操作日志
+	var actionType string
+	var description string
+	switch req.Action {
+	case "disable":
+		actionType = model.ActionDisable
+		description = fmt.Sprintf("禁用用户: %s", user.Username)
+	case "enable":
+		actionType = model.ActionEnable
+		description = fmt.Sprintf("启用用户: %s", user.Username)
+	case "promote":
+		actionType = model.ActionUpdate
+		description = fmt.Sprintf("提升用户为管理员: %s", user.Username)
+	case "promote_root":
+		actionType = model.ActionUpdate
+		description = fmt.Sprintf("提升用户为超级管理员: %s", user.Username)
+	case "demote":
+		actionType = model.ActionUpdate
+		description = fmt.Sprintf("降级用户为普通用户: %s", user.Username)
+	}
+	model.RecordOperationLog(c, c.GetInt("id"), model.ModuleUser, actionType,
+		strconv.Itoa(user.Id), user.Username, nil, sanitizeUserForLog(&user), description)
+
 	clearUser := model.User{
 		Role:   user.Role,
 		Status: user.Status,

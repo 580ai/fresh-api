@@ -25,6 +25,13 @@ func AllOption() ([]*Option, error) {
 	return options, err
 }
 
+// GetOption 获取单个配置项的值
+func GetOption(key string) string {
+	common.OptionMapRWMutex.RLock()
+	defer common.OptionMapRWMutex.RUnlock()
+	return common.OptionMap[key]
+}
+
 func InitOptionMap() {
 	common.OptionMapRWMutex.Lock()
 	common.OptionMap = make(map[string]string)

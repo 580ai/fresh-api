@@ -47,6 +47,21 @@ export const useUsersData = () => {
   const { t } = useTranslation();
   const [compactMode, setCompactMode] = useTableCompactMode('users');
 
+  // 获取当前登录用户角色
+  const getCurrentUserRole = () => {
+    const raw = localStorage.getItem('user');
+    if (raw) {
+      try {
+        const user = JSON.parse(raw);
+        return user.role || 1;
+      } catch {
+        return 1;
+      }
+    }
+    return 1;
+  };
+  const currentUserRole = getCurrentUserRole();
+
   // State management
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -325,6 +340,7 @@ export const useUsersData = () => {
     userCount,
     searching,
     groupOptions,
+    currentUserRole,
 
     // Modal state
     showAddUser,

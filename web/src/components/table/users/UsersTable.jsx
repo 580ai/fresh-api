@@ -49,6 +49,7 @@ const UsersTable = (usersData) => {
     refresh,
     resetUserPasskey,
     resetUserTwoFA,
+    currentUserRole,
     t,
   } = usersData;
 
@@ -95,8 +96,8 @@ const UsersTable = (usersData) => {
   };
 
   // Modal confirm handlers
-  const handlePromoteConfirm = () => {
-    manageUser(modalUser.id, 'promote', modalUser);
+  const handlePromoteConfirm = (action) => {
+    manageUser(modalUser.id, action, modalUser);
     setShowPromoteModal(false);
   };
 
@@ -196,6 +197,7 @@ const UsersTable = (usersData) => {
         onCancel={() => setShowPromoteModal(false)}
         onConfirm={handlePromoteConfirm}
         user={modalUser}
+        currentUserRole={currentUserRole}
         t={t}
       />
 

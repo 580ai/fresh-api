@@ -38,6 +38,7 @@ const routerMap = {
   topup: '/console/topup',
   user: '/console/user',
   log: '/console/log',
+  operation_log: '/console/operation_log',
   midjourney: '/console/midjourney',
   setting: '/console/setting',
   about: '/about',
@@ -163,12 +164,12 @@ const SiderBar = ({ onNavigate = () => {} }) => {
     const shouldShowModule = (moduleKey) => {
       // 超级管理员可以看到所有模块
       if (isSuperAdminUser) return true;
-      
-      // 普通管理员（role=10）只能看到兑换码管理和用户管理
+
+      // 普通管理员（role=10）只能看到兑换码管理、用户管理和操作日志
       if (userRole === 10) {
-        return moduleKey === 'redemption' || moduleKey === 'user';
+        return moduleKey === 'redemption' || moduleKey === 'user' || moduleKey === 'operation_log';
       }
-      
+
       // 其他用户看不到任何admin模块
       return false;
     };
@@ -179,6 +180,12 @@ const SiderBar = ({ onNavigate = () => {} }) => {
         itemKey: 'channel',
         to: '/channel',
         className: shouldShowModule('channel') ? '' : 'tableHiddle',
+      },
+      {
+        text: t('操作日志'),
+        itemKey: 'operation_log',
+        to: '/operation_log',
+        className: shouldShowModule('operation_log') ? '' : 'tableHiddle',
       },
       {
         text: t('模型管理'),

@@ -12,6 +12,21 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// sanitizeTokenForLog 用于清理令牌数据，移除敏感信息后用于操作日志记录
+func sanitizeTokenForLog(token *model.Token) map[string]interface{} {
+	return map[string]interface{}{
+		"id":                   token.Id,
+		"name":                 token.Name,
+		"user_id":              token.UserId,
+		"status":               token.Status,
+		"expired_time":         token.ExpiredTime,
+		"remain_quota":         token.RemainQuota,
+		"unlimited_quota":      token.UnlimitedQuota,
+		"model_limits_enabled": token.ModelLimitsEnabled,
+		"group":                token.Group,
+	}
+}
+
 func GetAllTokens(c *gin.Context) {
 	userId := c.GetInt("id")
 	pageInfo := common.GetPageQuery(c)
@@ -197,6 +212,12 @@ func AddToken(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+
+	// 记录操作日志
+	model.RecordOperationLog(c, c.GetInt("id"), model.ModuleToken, model.ActionCreate,
+		strconv.Itoa(cleanToken.Id), cleanToken.Name, nil, sanitizeTokenForLog(&cleanToken),
+		fmt.Sprintf("创建令牌: %s", cleanToken.Name))
+
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
@@ -207,11 +228,25 @@ func AddToken(c *gin.Context) {
 func DeleteToken(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
 	userId := c.GetInt("id")
+	// 获取令牌信息用于日志记录
+	token, _ := model.GetTokenByIds(id, userId)
+	var tokenInfo map[string]interface{}
+	var tokenName string
+	if token != nil {
+		tokenInfo = sanitizeTokenForLog(token)
+		tokenName = token.Name
+	}
 	err := model.DeleteTokenById(id, userId)
 	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
+
+	// 记录操作日志
+	model.RecordOperationLog(c, c.GetInt("id"), model.ModuleToken, model.ActionDelete,
+		strconv.Itoa(id), tokenName, tokenInfo, nil,
+		fmt.Sprintf("删除令牌: %s", tokenName))
+
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
@@ -257,6 +292,8 @@ func UpdateToken(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+	// 保存旧值用于日志记录
+	oldTokenInfo := sanitizeTokenForLog(cleanToken)
 	if token.Status == common.TokenStatusEnabled {
 		if cleanToken.Status == common.TokenStatusExpired && cleanToken.ExpiredTime <= common.GetTimestamp() && cleanToken.ExpiredTime != -1 {
 			c.JSON(http.StatusOK, gin.H{
@@ -292,6 +329,12 @@ func UpdateToken(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+
+	// 记录操作日志
+	model.RecordOperationLog(c, c.GetInt("id"), model.ModuleToken, model.ActionUpdate,
+		strconv.Itoa(cleanToken.Id), cleanToken.Name, oldTokenInfo, sanitizeTokenForLog(cleanToken),
+		fmt.Sprintf("更新令牌: %s", cleanToken.Name))
+
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
@@ -318,6 +361,12 @@ func DeleteTokenBatch(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+
+	// 记录操作日志
+	model.RecordOperationLog(c, c.GetInt("id"), model.ModuleToken, model.ActionDelete,
+		fmt.Sprintf("%v", tokenBatch.Ids), fmt.Sprintf("批量删除%d个令牌", count), nil, nil,
+		fmt.Sprintf("批量删除令牌: %d个", count))
+
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",

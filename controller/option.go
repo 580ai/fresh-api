@@ -260,11 +260,22 @@ func UpdateOption(c *gin.Context) {
 			return
 		}
 	}
+
+	// 获取旧值用于日志记录
+	oldValue := model.GetOption(option.Key)
+
 	err = model.UpdateOption(option.Key, option.Value.(string))
 	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
+
+	// 记录操作日志
+	userId := c.GetInt("id")
+	model.RecordOperationLog(c, userId, model.OperationModuleOption, model.OperationActionUpdate,
+		option.Key, option.Key, oldValue, option.Value.(string),
+		fmt.Sprintf("修改系统参数: %s", option.Key))
+
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",

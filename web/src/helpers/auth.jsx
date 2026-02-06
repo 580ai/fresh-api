@@ -32,13 +32,13 @@ export function authHeader() {
   }
 }
 
-// 检查是否是超级管理员（userID = 1）
+// 检查是否是超级管理员（role = 100）
 export function isSuperAdmin() {
   try {
     const raw = localStorage.getItem('user');
     if (!raw) return false;
     const user = JSON.parse(raw);
-    return user && user.id === 1;
+    return user && user.role === 100;
   } catch (e) {
     return false;
   }
@@ -77,7 +77,7 @@ export function AdminRoute({ children }) {
   return <Navigate to='/forbidden' replace />;
 }
 
-// 超级管理员路由保护 - 只允许 userID = 1 的用户访问
+// 超级管理员路由保护 - 只允许 role = 100 的用户访问
 export function SuperAdminRoute({ children }) {
   const raw = localStorage.getItem('user');
   if (!raw) {
@@ -85,7 +85,7 @@ export function SuperAdminRoute({ children }) {
   }
   try {
     const user = JSON.parse(raw);
-    if (user && user.id === 1) {
+    if (user && user.role === 100) {
       return children;
     }
   } catch (e) {
