@@ -23,18 +23,31 @@ import {
   copy,
   showError,
   showNotice,
+  showInfo,
   getLogo,
   getSystemName,
 } from '../../helpers';
-import { useSearchParams, Link } from 'react-router-dom';
+import { useSearchParams, Link, useNavigate } from 'react-router-dom';
 import { Button, Card, Form, Typography, Banner } from '@douyinfe/semi-ui';
 import { IconMail, IconLock, IconCopy } from '@douyinfe/semi-icons';
 import { useTranslation } from 'react-i18next';
 
 const { Text, Title } = Typography;
 
+const isPhoneMode = import.meta.env.VITE_PHONE_REGISTER === 'true';
+
 const PasswordResetConfirm = () => {
   const { t } = useTranslation();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (isPhoneMode) {
+      showInfo(t('请使用手机号验证码方式重置密码'));
+      setTimeout(() => {
+        navigate('/reset');
+      }, 2000);
+    }
+  }, [navigate, t]);
   const [inputs, setInputs] = useState({
     email: '',
     token: '',
@@ -101,6 +114,16 @@ const PasswordResetConfirm = () => {
       showError(message);
     }
     setLoading(false);
+  }
+
+  if (isPhoneMode) {
+    return (
+      <div className='flex items-center justify-center min-h-screen bg-gray-100'>
+        <div className='text-center'>
+          <p className='text-gray-600'>{t('正在跳转到密码重置页面...')}</p>
+        </div>
+      </div>
+    );
   }
 
   return (

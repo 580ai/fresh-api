@@ -1,3 +1,21 @@
+/*
+Copyright (C) 2025 QuantumNous
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as
+published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+For commercial licensing, please contact support@quantumnous.com
+*/
 import React, { useContext, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -24,6 +42,8 @@ import { useTranslation } from 'react-i18next';
 
 const { Title, Text } = Typography;
 
+const isPhoneMode = import.meta.env.VITE_PHONE_REGISTER === 'true';
+
 const RegisterForm = () => {
   let navigate = useNavigate();
   const { t } = useTranslation();
@@ -33,6 +53,7 @@ const RegisterForm = () => {
     password2: '',
     email: '',
     verification_code: '',
+    code: '',
   });
   const { username, password, password2 } = inputs;
   const [, userDispatch] = useContext(UserContext);
@@ -43,7 +64,7 @@ const RegisterForm = () => {
   const [registerLoading, setRegisterLoading] = useState(false);
   const [verificationCodeLoading, setVerificationCodeLoading] = useState(false);
   const [disableButton, setDisableButton] = useState(false);
-  const [countdown, setCountdown] = useState(30);
+  const [countdown, setCountdown] = useState(isPhoneMode ? 60 : 30);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
 
   const logo = getLogo();
@@ -71,7 +92,7 @@ const RegisterForm = () => {
       }, 1000);
     } else if (countdown === 0) {
       setDisableButton(false);
-      setCountdown(30);
+      setCountdown(isPhoneMode ? 60 : 30);
     }
     return () => clearInterval(countdownInterval);
   }, [disableButton, countdown]);
@@ -80,11 +101,32 @@ const RegisterForm = () => {
     setInputs((inputs) => ({ ...inputs, [name]: value }));
   }
 
+  const validatePhone = (phone) => {
+    const pattern = /^1[3-9]\d{9}$/;
+    return pattern.test(phone);
+  };
+
   const handleSubmit = async (ignoreCheck = false) => {
     if (!ignoreCheck && !agreedToTerms) {
       setShowAgreementModal(true);
       return;
     }
+
+    if (isPhoneMode) {
+      if (!username) {
+        showError('请输入手机号');
+        return;
+      }
+      if (!validatePhone(username)) {
+        showError('请输入正确的手机号格式');
+        return;
+      }
+      if (!inputs.code) {
+        showError('请输入验证码');
+        return;
+      }
+    }
+
     if (password.length < 8) {
       showInfo('密码长度不得小于 8 位！');
       return;
@@ -100,18 +142,34 @@ const RegisterForm = () => {
 
     setRegisterLoading(true);
     try {
-      const affCode = localStorage.getItem('aff');
-      const registerData = { ...inputs, aff_code: affCode };
-      const res = await API.post(`/api/user/register?turnstile=${turnstileToken}`, registerData);
-      const { success, message } = res.data;
-      if (success) {
-        showSuccess('注册成功！');
-        navigate('/login');
+      if (isPhoneMode) {
+        const res = await API.post('/code/register/verify', {
+          username: username,
+          code: inputs.code,
+          password: password,
+        });
+        const { success, message } = res.data;
+        if (success) {
+          showSuccess('注册成功！');
+          navigate('/login');
+        } else {
+          showError(message || '注册失败');
+        }
       } else {
-        showError(message);
+        const affCode = localStorage.getItem('aff');
+        const registerData = { ...inputs, aff_code: affCode };
+        const res = await API.post(`/api/user/register?turnstile=${turnstileToken}`, registerData);
+        const { success, message } = res.data;
+        if (success) {
+          showSuccess('注册成功！');
+          navigate('/login');
+        } else {
+          showError(message);
+        }
       }
     } catch (error) {
-      showError('注册失败，请重试');
+      const errorMsg = error.response?.data?.message || '注册失败，请重试';
+      showError(errorMsg);
     } finally {
       setRegisterLoading(false);
     }
@@ -126,40 +184,109 @@ const RegisterForm = () => {
   };
 
   const sendVerificationCode = async () => {
-    if (!inputs.email) {
-      showInfo('请输入邮箱地址');
-      return;
-    };
-    setVerificationCodeLoading(true);
-    try {
-      const res = await API.get(`/api/verification?email=${inputs.email}&turnstile=${turnstileToken}`);
-      const { success, message } = res.data;
-      if (success) {
-        showSuccess('验证码发送成功！');
-        setDisableButton(true);
-      } else {
-        showError(message);
+    if (isPhoneMode) {
+      if (!inputs.username) {
+        showInfo('请输入手机号');
+        return;
       }
-    } catch (error) {
-      showError('发送验证码失败');
-    } finally {
-      setVerificationCodeLoading(false);
+      if (!validatePhone(inputs.username)) {
+        showError('请输入正确的手机号格式');
+        return;
+      }
+      if (turnstileEnabled && turnstileToken === '') {
+        showInfo('请稍后几秒重试，Turnstile 正在检查用户环境！');
+        return;
+      }
+      setVerificationCodeLoading(true);
+      try {
+        const res = await API.post('/code/register', {
+          username: inputs.username,
+        });
+        const { success, message } = res.data;
+        if (success) {
+          showSuccess('验证码已发送，请查看短信！');
+          setDisableButton(true);
+        } else {
+          showError(message || '发送验证码失败');
+        }
+      } catch (error) {
+        const errorMsg = error.response?.data?.message || '发送验证码失败，请重试';
+        showError(errorMsg);
+      } finally {
+        setVerificationCodeLoading(false);
+      }
+    } else {
+      if (!inputs.email) {
+        showInfo('请输入邮箱地址');
+        return;
+      }
+      setVerificationCodeLoading(true);
+      try {
+        const res = await API.get(`/api/verification?email=${inputs.email}&turnstile=${turnstileToken}`);
+        const { success, message } = res.data;
+        if (success) {
+          showSuccess('验证码发送成功！');
+          setDisableButton(true);
+        } else {
+          showError(message);
+        }
+      } catch (error) {
+        showError('发送验证码失败');
+      } finally {
+        setVerificationCodeLoading(false);
+      }
     }
   };
 
   const renderRegisterForm = () => (
     <div className="w-full">
       <Form className="space-y-3">
-        <div className="space-y-1">
-          <Text strong type="secondary" size="small">{t('用户名')}</Text>
-          <Form.Input
-            noLabel
-            field="username"
-            placeholder={t('请输入用户名')}
-            onChange={(v) => handleChange('username', v)}
-            style={{ backgroundColor: '#F0F4FF', border: 'none', height: '45px', borderRadius: '12px' }}
-          />
-        </div>
+        {isPhoneMode ? (
+          <>
+            <div className="space-y-1">
+              <Text strong type="secondary" size="small">{t('手机号')}</Text>
+              <Form.Input
+                noLabel
+                field="username"
+                placeholder={t('请输入手机号')}
+                onChange={(v) => handleChange('username', v)}
+                style={{ backgroundColor: '#F0F4FF', border: 'none', height: '45px', borderRadius: '12px' }}
+                suffix={
+                  <Button
+                    onClick={sendVerificationCode}
+                    loading={verificationCodeLoading}
+                    disabled={disableButton || verificationCodeLoading}
+                    size="small"
+                    theme="borderless"
+                  >
+                    {disableButton ? `${countdown}s` : t('获取验证码')}
+                  </Button>
+                }
+              />
+            </div>
+            <div className="space-y-1">
+              <Text strong type="secondary" size="small">{t('验证码')}</Text>
+              <Form.Input
+                noLabel
+                field="code"
+                placeholder={t('请输入验证码')}
+                onChange={(v) => handleChange('code', v)}
+                style={{ backgroundColor: '#F0F4FF', border: 'none', height: '45px', borderRadius: '12px' }}
+              />
+            </div>
+          </>
+        ) : (
+          <div className="space-y-1">
+            <Text strong type="secondary" size="small">{t('用户名')}</Text>
+            <Form.Input
+              noLabel
+              field="username"
+              placeholder={t('请输入用户名')}
+              onChange={(v) => handleChange('username', v)}
+              style={{ backgroundColor: '#F0F4FF', border: 'none', height: '45px', borderRadius: '12px' }}
+            />
+          </div>
+        )}
         <div className="space-y-1">
           <Text strong type="secondary" size="small">{t('密码')}</Text>
           <Form.Input
@@ -183,7 +310,7 @@ const RegisterForm = () => {
           />
         </div>
 
-        {showEmailVerification && (
+        {!isPhoneMode && showEmailVerification && (
           <>
             <div className="space-y-1">
               <Text strong type="secondary" size="small">{t('邮箱')}</Text>
@@ -267,7 +394,7 @@ const RegisterForm = () => {
   return (
     <div className="h-screen w-full flex bg-white overflow-hidden font-sans">
       {/* --- 左侧背景区域 (48% 宽度) --- */}
-      <div 
+      <div
         className="hidden lg:block lg:w-[48%] h-full relative"
         style={{
             backgroundImage: 'url("/login.png")',
@@ -293,9 +420,6 @@ const RegisterForm = () => {
 
         <div className="w-full max-w-sm">
           <div className="flex flex-col items-center mb-8 text-center">
-            {/* <div className="p-4 bg-white shadow-xl rounded-2xl mb-4 border border-gray-50">
-              <img src={logo} alt="Logo" className="h-10 w-10 object-contain" />
-            </div> */}
             <Title heading={1} className="!m-0 text-gray-800">{systemName}</Title>
             <Text type="secondary" className="mt-1">{t('注 册')}</Text>
           </div>
