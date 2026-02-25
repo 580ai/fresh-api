@@ -2,14 +2,12 @@ package model
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"os"
-	"strings"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
-	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/QuantumNous/new-api/types"
 
 	"github.com/gin-gonic/gin"
@@ -19,8 +17,8 @@ import (
 )
 
 type Log struct {
-	Id               int    `json:"id" gorm:"index:idx_created_at_id,priority:1"`
-	UserId           int    `json:"user_id" gorm:"index"`
+	Id               int    `json:"id" gorm:"index:idx_created_at_id,priority:1;index:idx_user_id_id,priority:2"`
+	UserId           int    `json:"user_id" gorm:"index;index:idx_user_id_id,priority:1"`
 	CreatedAt        int64  `json:"created_at" gorm:"bigint;index:idx_created_at_id,priority:2;index:idx_created_at_type"`
 	Type             int    `json:"type" gorm:"index:idx_created_at_type"`
 	Content          string `json:"content"`
@@ -37,6 +35,7 @@ type Log struct {
 	TokenId          int    `json:"token_id" gorm:"default:0;index"`
 	Group            string `json:"group" gorm:"index"`
 	Ip               string `json:"ip" gorm:"index;default:''"`
+	RequestId        string `json:"request_id,omitempty" gorm:"type:varchar(64);index:idx_logs_request_id;default:''"`
 	Other            string `json:"other"`
 }
 
@@ -51,7 +50,7 @@ const (
 	LogTypeRefund  = 6
 )
 
-func formatUserLogs(logs []*Log) {
+func formatUserLogs(logs []*Log, startIdx int) {
 	for i := range logs {
 		logs[i].ChannelName = ""
 		var otherMap map[string]interface{}
@@ -59,24 +58,16 @@ func formatUserLogs(logs []*Log) {
 		if otherMap != nil {
 			// Remove admin-only debug fields.
 			delete(otherMap, "admin_info")
-			delete(otherMap, "request_conversion")
+			delete(otherMap, "reject_reason")
 		}
 		logs[i].Other = common.MapToJsonStr(otherMap)
-		logs[i].Id = logs[i].Id % 1024
+		logs[i].Id = startIdx + i + 1
 	}
 }
 
-func GetLogByKey(key string) (logs []*Log, err error) {
-	if os.Getenv("LOG_SQL_DSN") != "" {
-		var tk Token
-		if err = DB.Model(&Token{}).Where(logKeyCol+"=?", strings.TrimPrefix(key, "sk-")).First(&tk).Error; err != nil {
-			return nil, err
-		}
-		err = LOG_DB.Model(&Log{}).Where("token_id=?", tk.Id).Find(&logs).Error
-	} else {
-		err = LOG_DB.Joins("left join tokens on tokens.id = logs.token_id").Where("tokens.key = ?", strings.TrimPrefix(key, "sk-")).Find(&logs).Error
-	}
-	formatUserLogs(logs)
+func GetLogByTokenId(tokenId int) (logs []*Log, err error) {
+	err = LOG_DB.Model(&Log{}).Where("token_id = ?", tokenId).Order("id desc").Limit(common.MaxRecentItems).Find(&logs).Error
+	formatUserLogs(logs, 0)
 	return logs, err
 }
 
@@ -102,6 +93,7 @@ func RecordErrorLog(c *gin.Context, userId int, channelId int, modelName string,
 	isStream bool, group string, other map[string]interface{}) {
 	logger.LogInfo(c, fmt.Sprintf("record error log: userId=%d, channelId=%d, modelName=%s, tokenName=%s, content=%s", userId, channelId, modelName, tokenName, content))
 	username := c.GetString("username")
+	requestId := c.GetString(common.RequestIdKey)
 	otherStr := common.MapToJsonStr(other)
 	// 判断是否需要记录 IP
 	needRecordIp := false
@@ -132,7 +124,8 @@ func RecordErrorLog(c *gin.Context, userId int, channelId int, modelName string,
 			}
 			return ""
 		}(),
-		Other: otherStr,
+		RequestId: requestId,
+		Other:     otherStr,
 	}
 	err := LOG_DB.Create(log).Error
 	if err != nil {
@@ -161,6 +154,7 @@ func RecordConsumeLog(c *gin.Context, userId int, params RecordConsumeLogParams)
 	}
 	logger.LogInfo(c, fmt.Sprintf("record consume log: userId=%d, params=%s", userId, common.GetJsonString(params)))
 	username := c.GetString("username")
+	requestId := c.GetString(common.RequestIdKey)
 	otherStr := common.MapToJsonStr(params.Other)
 	// 判断是否需要记录 IP
 	needRecordIp := false
@@ -191,7 +185,8 @@ func RecordConsumeLog(c *gin.Context, userId int, params RecordConsumeLogParams)
 			}
 			return ""
 		}(),
-		Other: otherStr,
+		RequestId: requestId,
+		Other:     otherStr,
 	}
 	err := LOG_DB.Create(log).Error
 	if err != nil {
@@ -204,7 +199,50 @@ func RecordConsumeLog(c *gin.Context, userId int, params RecordConsumeLogParams)
 	}
 }
 
-func GetAllLogs(logType int, startTimestamp int64, endTimestamp int64, modelName string, username string, tokenName string, startIdx int, num int, channel int, group string) (logs []*Log, total int64, err error) {
+type RecordTaskBillingLogParams struct {
+	UserId    int
+	LogType   int
+	Content   string
+	ChannelId int
+	ModelName string
+	Quota     int
+	TokenId   int
+	Group     string
+	Other     map[string]interface{}
+}
+
+func RecordTaskBillingLog(params RecordTaskBillingLogParams) {
+	if params.LogType == LogTypeConsume && !common.LogConsumeEnabled {
+		return
+	}
+	username, _ := GetUsernameById(params.UserId, false)
+	tokenName := ""
+	if params.TokenId > 0 {
+		if token, err := GetTokenById(params.TokenId); err == nil {
+			tokenName = token.Name
+		}
+	}
+	log := &Log{
+		UserId:    params.UserId,
+		Username:  username,
+		CreatedAt: common.GetTimestamp(),
+		Type:      params.LogType,
+		Content:   params.Content,
+		TokenName: tokenName,
+		ModelName: params.ModelName,
+		Quota:     params.Quota,
+		ChannelId: params.ChannelId,
+		TokenId:   params.TokenId,
+		Group:     params.Group,
+		Other:     common.MapToJsonStr(params.Other),
+	}
+	err := LOG_DB.Create(log).Error
+	if err != nil {
+		common.SysLog("failed to record task billing log: " + err.Error())
+	}
+}
+
+func GetAllLogs(logType int, startTimestamp int64, endTimestamp int64, modelName string, username string, tokenName string, startIdx int, num int, channel int, group string, requestId string) (logs []*Log, total int64, err error) {
 	var tx *gorm.DB
 	if logType == LogTypeUnknown {
 		tx = LOG_DB
@@ -220,6 +258,9 @@ func GetAllLogs(logType int, startTimestamp int64, endTimestamp int64, modelName
 	}
 	if tokenName != "" {
 		tx = tx.Where("logs.token_name = ?", tokenName)
+	}
+	if requestId != "" {
+		tx = tx.Where("logs.request_id = ?", requestId)
 	}
 	if startTimestamp != 0 {
 		tx = tx.Where("logs.created_at >= ?", startTimestamp)
@@ -254,8 +295,24 @@ func GetAllLogs(logType int, startTimestamp int64, endTimestamp int64, modelName
 			Id   int    `gorm:"column:id"`
 			Name string `gorm:"column:name"`
 		}
-		if err = DB.Table("channels").Select("id, name").Where("id IN ?", channelIds.Items()).Find(&channels).Error; err != nil {
-			return logs, total, err
+		if common.MemoryCacheEnabled {
+			// Cache get channel
+			for _, channelId := range channelIds.Items() {
+				if cacheChannel, err := CacheGetChannel(channelId); err == nil {
+					channels = append(channels, struct {
+						Id   int    `gorm:"column:id"`
+						Name string `gorm:"column:name"`
+					}{
+						Id:   channelId,
+						Name: cacheChannel.Name,
+					})
+				}
+			}
+		} else {
+			// Bulk query channels from DB
+			if err = DB.Table("channels").Select("id, name").Where("id IN ?", channelIds.Items()).Find(&channels).Error; err != nil {
+				return logs, total, err
+			}
 		}
 		channelMap := make(map[int]string, len(channels))
 		for _, channel := range channels {
@@ -269,7 +326,9 @@ func GetAllLogs(logType int, startTimestamp int64, endTimestamp int64, modelName
 	return logs, total, err
 }
 
-func GetUserLogs(userId int, logType int, startTimestamp int64, endTimestamp int64, modelName string, tokenName string, startIdx int, num int, group string) (logs []*Log, total int64, err error) {
+const logSearchCountLimit = 10000
+
+func GetUserLogs(userId int, logType int, startTimestamp int64, endTimestamp int64, modelName string, tokenName string, startIdx int, num int, group string, requestId string) (logs []*Log, total int64, err error) {
 	var tx *gorm.DB
 	if logType == LogTypeUnknown {
 		tx = LOG_DB.Where("logs.user_id = ?", userId)
@@ -278,10 +337,17 @@ func GetUserLogs(userId int, logType int, startTimestamp int64, endTimestamp int
 	}
 
 	if modelName != "" {
-		tx = tx.Where("logs.model_name like ?", modelName)
+		modelNamePattern, err := sanitizeLikePattern(modelName)
+		if err != nil {
+			return nil, 0, err
+		}
+		tx = tx.Where("logs.model_name LIKE ? ESCAPE '!'", modelNamePattern)
 	}
 	if tokenName != "" {
 		tx = tx.Where("logs.token_name = ?", tokenName)
+	}
+	if requestId != "" {
+		tx = tx.Where("logs.request_id = ?", requestId)
 	}
 	if startTimestamp != 0 {
 		tx = tx.Where("logs.created_at >= ?", startTimestamp)
@@ -292,28 +358,19 @@ func GetUserLogs(userId int, logType int, startTimestamp int64, endTimestamp int
 	if group != "" {
 		tx = tx.Where("logs."+logGroupCol+" = ?", group)
 	}
-	err = tx.Model(&Log{}).Count(&total).Error
+	err = tx.Model(&Log{}).Limit(logSearchCountLimit).Count(&total).Error
 	if err != nil {
-		return nil, 0, err
+		common.SysError("failed to count user logs: " + err.Error())
+		return nil, 0, errors.New("查询日志失败")
 	}
 	err = tx.Order("logs.id desc").Limit(num).Offset(startIdx).Find(&logs).Error
 	if err != nil {
-		return nil, 0, err
+		common.SysError("failed to search user logs: " + err.Error())
+		return nil, 0, errors.New("查询日志失败")
 	}
 
-	formatUserLogs(logs)
+	formatUserLogs(logs, startIdx)
 	return logs, total, err
-}
-
-func SearchAllLogs(keyword string) (logs []*Log, err error) {
-	err = LOG_DB.Where("type = ? or content LIKE ?", keyword, keyword+"%").Order("id desc").Limit(common.MaxRecentItems).Find(&logs).Error
-	return logs, err
-}
-
-func SearchUserLogs(userId int, keyword string) (logs []*Log, err error) {
-	err = LOG_DB.Where("user_id = ? and type = ?", userId, keyword).Order("id desc").Limit(common.MaxRecentItems).Find(&logs).Error
-	formatUserLogs(logs)
-	return logs, err
 }
 
 type Stat struct {
@@ -322,7 +379,7 @@ type Stat struct {
 	Tpm   int `json:"tpm"`
 }
 
-func SumUsedQuota(logType int, startTimestamp int64, endTimestamp int64, modelName string, username string, tokenName string, channel int, group string) (stat Stat) {
+func SumUsedQuota(logType int, startTimestamp int64, endTimestamp int64, modelName string, username string, tokenName string, channel int, group string) (stat Stat, err error) {
 	tx := LOG_DB.Table("logs").Select("sum(quota) quota")
 
 	// 为rpm和tpm创建单独的查询
@@ -343,8 +400,12 @@ func SumUsedQuota(logType int, startTimestamp int64, endTimestamp int64, modelNa
 		tx = tx.Where("created_at <= ?", endTimestamp)
 	}
 	if modelName != "" {
-		tx = tx.Where("model_name like ?", modelName)
-		rpmTpmQuery = rpmTpmQuery.Where("model_name like ?", modelName)
+		modelNamePattern, err := sanitizeLikePattern(modelName)
+		if err != nil {
+			return stat, err
+		}
+		tx = tx.Where("model_name LIKE ? ESCAPE '!'", modelNamePattern)
+		rpmTpmQuery = rpmTpmQuery.Where("model_name LIKE ? ESCAPE '!'", modelNamePattern)
 	}
 	if channel != 0 {
 		tx = tx.Where("channel_id = ?", channel)
@@ -362,10 +423,16 @@ func SumUsedQuota(logType int, startTimestamp int64, endTimestamp int64, modelNa
 	rpmTpmQuery = rpmTpmQuery.Where("created_at >= ?", time.Now().Add(-60*time.Second).Unix())
 
 	// 执行查询
-	tx.Scan(&stat)
-	rpmTpmQuery.Scan(&stat)
+	if err := tx.Scan(&stat).Error; err != nil {
+		common.SysError("failed to query log stat: " + err.Error())
+		return stat, errors.New("查询统计数据失败")
+	}
+	if err := rpmTpmQuery.Scan(&stat).Error; err != nil {
+		common.SysError("failed to query rpm/tpm stat: " + err.Error())
+		return stat, errors.New("查询统计数据失败")
+	}
 
-	return stat
+	return stat, nil
 }
 
 func SumUsedToken(logType int, startTimestamp int64, endTimestamp int64, modelName string, username string, tokenName string) (token int) {
@@ -412,95 +479,77 @@ func DeleteOldLog(ctx context.Context, targetTimestamp int64, limit int) (int64,
 	return total, nil
 }
 
-// ChannelStatResult 渠道统计查询结果
-type ChannelStatResult struct {
-	ChannelId    int `gorm:"column:channel_id"`
-	TotalCount   int `gorm:"column:total_count"`
-	SuccessCount int `gorm:"column:success_count"`
-	FailCount    int `gorm:"column:fail_count"`
-	TimeoutCount int `gorm:"column:timeout_count"`
+// ChannelStatsResult 渠道统计结果
+type ChannelStatsResult struct {
+	TotalCount   int
+	SuccessCount int
+	FailCount    int
+	TimeoutCount int
 }
 
-// GetChannelStatsFromLogs 从日志中获取最近24小时的渠道统计数据（仅统计已启用的渠道）
-func GetChannelStatsFromLogs() (map[int]*ChannelStatResult, error) {
-	return GetChannelStatsFromLogsWithFilter(true)
-}
-
-// GetAllChannelStatsFromLogs 从日志中获取最近24小时的所有渠道统计数据（包括禁用的渠道）
-func GetAllChannelStatsFromLogs() (map[int]*ChannelStatResult, error) {
-	return GetChannelStatsFromLogsWithFilter(false)
-}
-
-// GetChannelStatsFromLogsWithFilter 从日志中获取最近24小时的渠道统计数据
-// onlyEnabled: true 只统计已启用的渠道，false 统计所有渠道
-func GetChannelStatsFromLogsWithFilter(onlyEnabled bool) (map[int]*ChannelStatResult, error) {
-	// 获取超时配置
-	streamTimeout := operation_setting.GetStreamTimeoutSeconds()
-	nonStreamTimeout := operation_setting.GetNonStreamTimeoutSeconds()
-
-	// 计算24小时前的时间戳
+// GetChannelStatsFromLogs 从日志中获取渠道统计数据（最近24小时）
+func GetChannelStatsFromLogs() (map[int]*ChannelStatsResult, error) {
+	// 最近24小时的时间戳
 	startTime := time.Now().Add(-24 * time.Hour).Unix()
 
-	var results []ChannelStatResult
-
-	// 使用 SQL 聚合查询，按渠道分组统计
-	// 超时判断：流式请求用 other 字段中的 frt（毫秒），非流式请求用 use_time（秒）
-	// 判断日志数据库类型：如果 LOG_SQL_DSN 为空则使用主数据库类型
-	isPostgres := common.LogSqlType == common.DatabaseTypePostgreSQL || (common.LogSqlType == common.DatabaseTypeSQLite && common.UsingPostgreSQL)
-	var selectSQL string
-	if isPostgres {
-		// PostgreSQL: 使用 ->> 提取 JSON 字段，frt 是毫秒需要除以 1000
-		selectSQL = `
-			channel_id,
-			COUNT(*) as total_count,
-			SUM(CASE WHEN type = ? THEN 1 ELSE 0 END) as success_count,
-			SUM(CASE WHEN type = ? THEN 1 ELSE 0 END) as fail_count,
-			SUM(CASE WHEN type = ? AND (
-				(is_stream = true AND COALESCE((other::json->>'frt')::numeric, 0) / 1000 > ?) OR
-				(is_stream = false AND use_time > ?)
-			) THEN 1 ELSE 0 END) as timeout_count
-		`
-	} else {
-		// MySQL/SQLite: 使用 JSON_EXTRACT，frt 是毫秒需要除以 1000
-		selectSQL = `
-			channel_id,
-			COUNT(*) as total_count,
-			SUM(CASE WHEN type = ? THEN 1 ELSE 0 END) as success_count,
-			SUM(CASE WHEN type = ? THEN 1 ELSE 0 END) as fail_count,
-			SUM(CASE WHEN type = ? AND (
-				(is_stream = 1 AND COALESCE(JSON_EXTRACT(other, '$.frt'), 0) / 1000 > ?) OR
-				(is_stream = 0 AND use_time > ?)
-			) THEN 1 ELSE 0 END) as timeout_count
-		`
+	// 查询消费日志统计
+	type consumeStats struct {
+		ChannelId int
+		Total     int
 	}
-	query := LOG_DB.Table("logs").
-		Select(selectSQL, LogTypeConsume, LogTypeError, LogTypeConsume, streamTimeout, nonStreamTimeout).
-		Where("channel_id > 0").
-		Where("created_at >= ?", startTime).
-		Where("type IN ?", []int{LogTypeConsume, LogTypeError})
-
-	// 如果只统计已启用的渠道，添加过滤条件
-	if onlyEnabled {
-		var enabledChannelIds []int
-		if err := DB.Model(&Channel{}).Where("status = ?", 1).Pluck("id", &enabledChannelIds).Error; err != nil {
-			return nil, err
-		}
-		if len(enabledChannelIds) == 0 {
-			return make(map[int]*ChannelStatResult), nil
-		}
-		query = query.Where("channel_id IN ?", enabledChannelIds)
-	}
-
-	err := query.Group("channel_id").Find(&results).Error
+	var consumeResults []consumeStats
+	err := LOG_DB.Model(&Log{}).
+		Select("channel_id, COUNT(*) as total").
+		Where("type = ? AND created_at >= ? AND channel_id > 0", LogTypeConsume, startTime).
+		Group("channel_id").
+		Scan(&consumeResults).Error
 	if err != nil {
 		return nil, err
 	}
 
-	// 转换为 map
-	statsMap := make(map[int]*ChannelStatResult)
-	for i := range results {
-		statsMap[results[i].ChannelId] = &results[i]
+	// 查询错误日志统计
+	type errorStats struct {
+		ChannelId int
+		Total     int
+	}
+	var errorResults []errorStats
+	err = LOG_DB.Model(&Log{}).
+		Select("channel_id, COUNT(*) as total").
+		Where("type = ? AND created_at >= ? AND channel_id > 0", LogTypeError, startTime).
+		Group("channel_id").
+		Scan(&errorResults).Error
+	if err != nil {
+		return nil, err
 	}
 
-	return statsMap, nil
+	// 合并统计结果
+	results := make(map[int]*ChannelStatsResult)
+
+	// 处理消费日志（成功的请求）
+	for _, r := range consumeResults {
+		if _, ok := results[r.ChannelId]; !ok {
+			results[r.ChannelId] = &ChannelStatsResult{}
+		}
+		results[r.ChannelId].SuccessCount = r.Total
+		results[r.ChannelId].TotalCount += r.Total
+	}
+
+	// 处理错误日志（失败的请求）
+	for _, r := range errorResults {
+		if _, ok := results[r.ChannelId]; !ok {
+			results[r.ChannelId] = &ChannelStatsResult{}
+		}
+		results[r.ChannelId].FailCount = r.Total
+		results[r.ChannelId].TotalCount += r.Total
+	}
+
+	// 注意：超时统计需要根据实际业务逻辑来判断
+	// 这里暂时将超时计入失败数，如果有专门的超时标记字段可以单独统计
+
+	return results, nil
+}
+
+// GetAllChannelStatsFromLogs 从日志中获取所有渠道统计数据（包括禁用的渠道，最近24小时）
+func GetAllChannelStatsFromLogs() (map[int]*ChannelStatsResult, error) {
+	return GetChannelStatsFromLogs()
 }

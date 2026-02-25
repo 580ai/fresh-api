@@ -37,6 +37,7 @@ const routerMap = {
   redemption: '/console/redemption',
   topup: '/console/topup',
   user: '/console/user',
+  subscription: '/console/subscription',
   log: '/console/log',
   operation_log: '/console/operation_log',
   midjourney: '/console/midjourney',
@@ -46,6 +47,7 @@ const routerMap = {
   pricing: '/pricing',
   task: '/console/task',
   models: '/console/models',
+  deployment: '/console/deployment',
   playground: '/console/playground',
   personal: '/console/personal',
 };
@@ -188,10 +190,22 @@ const SiderBar = ({ onNavigate = () => {} }) => {
         className: shouldShowModule('operation_log') ? '' : 'tableHiddle',
       },
       {
+        text: t('订阅管理'),
+        itemKey: 'subscription',
+        to: '/subscription',
+        className: isAdmin() ? '' : 'tableHiddle',
+      },
+      {
         text: t('模型管理'),
         itemKey: 'models',
         to: '/console/models',
         className: shouldShowModule('models') ? '' : 'tableHiddle',
+      },
+      {
+        text: t('模型部署'),
+        itemKey: 'deployment',
+        to: '/deployment',
+        className: isAdmin() ? '' : 'tableHiddle',
       },
       {
         text: t('兑换码管理'),
@@ -413,7 +427,6 @@ const SiderBar = ({ onNavigate = () => {} }) => {
       className='sidebar-container'
       style={{
         width: 'var(--sidebar-current-width)',
-        background: 'var(--semi-color-bg-0)',
       }}
     >
       <SkeletonWrapper

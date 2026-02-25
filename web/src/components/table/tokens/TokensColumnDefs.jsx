@@ -104,6 +104,7 @@ const renderGroupColumn = (text, record, t) => {
       >
         <Tag color='white' shape='circle'>
           {t('智能熔断')}
+          {record && record.cross_group_retry ? `(${t('跨分组')})` : ''}
         </Tag>
       </Tooltip>
     );

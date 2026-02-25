@@ -40,14 +40,6 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 		return types.NewError(fmt.Errorf("failed to copy request to GeneralOpenAIRequest: %w", err), types.ErrorCodeInvalidRequest, types.ErrOptionWithSkipRetry())
 	}
 
-	// 提取 enable_thinking 参数用于文本模型阶梯计费
-	if len(request.EnableThinking) > 0 {
-		var enableThinking bool
-		if err := common.Unmarshal(request.EnableThinking, &enableThinking); err == nil {
-			c.Set("enable_thinking", enableThinking)
-		}
-	}
-
 	if request.WebSearchOptions != nil {
 		c.Set("chat_completion_web_search_context_size", request.WebSearchOptions.SearchContextSize)
 	}
@@ -87,7 +79,7 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 	if info.RelayMode == relayconstant.RelayModeChatCompletions &&
 		!passThroughGlobal &&
 		!info.ChannelSetting.PassThroughBodyEnabled &&
-		shouldChatCompletionsViaResponses(info) {
+		service.ShouldChatCompletionsUseResponsesGlobal(info.ChannelId, info.ChannelType, info.OriginModelName) {
 		applySystemPromptIfNeeded(c, info, request)
 		usage, newApiErr := chatCompletionsViaResponses(c, info, adaptor, request)
 		if newApiErr != nil {
@@ -108,14 +100,16 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 	var requestBody io.Reader
 
 	if passThroughGlobal || info.ChannelSetting.PassThroughBodyEnabled {
-		body, err := common.GetRequestBody(c)
+		storage, err := common.GetBodyStorage(c)
 		if err != nil {
 			return types.NewErrorWithStatusCode(err, types.ErrorCodeReadRequestBodyFailed, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
 		}
 		if common.DebugEnabled {
-			println("requestBody: ", string(body))
+			if debugBytes, bErr := storage.Bytes(); bErr == nil {
+				println("requestBody: ", string(debugBytes))
+			}
 		}
-		requestBody = bytes.NewBuffer(body)
+		requestBody = common.ReaderOnly(storage)
 	} else {
 		convertedRequest, err := adaptor.ConvertOpenAIRequest(c, info, request)
 		if err != nil {
@@ -171,7 +165,7 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 		}
 
 		// remove disabled fields for OpenAI API
-		jsonData, err = relaycommon.RemoveDisabledFields(jsonData, info.ChannelOtherSettings)
+		jsonData, err = relaycommon.RemoveDisabledFields(jsonData, info.ChannelOtherSettings, info.ChannelSetting.PassThroughBodyEnabled)
 		if err != nil {
 			return types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
 		}
@@ -226,17 +220,8 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 	return nil
 }
 
-func shouldChatCompletionsViaResponses(info *relaycommon.RelayInfo) bool {
-	if info == nil {
-		return false
-	}
-	if info.RelayMode != relayconstant.RelayModeChatCompletions {
-		return false
-	}
-	return service.ShouldChatCompletionsUseResponsesGlobal(info.ChannelId, info.OriginModelName)
-}
-
 func postConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usage *dto.Usage, extraContent ...string) {
+	originUsage := usage
 	if usage == nil {
 		usage = &dto.Usage{
 			PromptTokens:     relayInfo.GetEstimatePromptTokens(),
@@ -245,6 +230,13 @@ func postConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usage 
 		}
 		extraContent = append(extraContent, "上游无计费信息")
 	}
+
+	if originUsage != nil {
+		service.ObserveChannelAffinityUsageCacheByRelayFormat(ctx, usage, relayInfo.GetFinalRequestRelayFormat())
+	}
+
+	adminRejectReason := common.GetContextKeyString(ctx, constant.ContextKeyAdminRejectReason)
+
 	useTimeSeconds := time.Now().Unix() - relayInfo.StartTime.Unix()
 	promptTokens := usage.PromptTokens
 	cacheTokens := usage.PromptTokensDetails.CachedTokens
@@ -263,57 +255,6 @@ func postConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usage 
 	groupRatio := relayInfo.PriceData.GroupRatioInfo.GroupRatio
 	modelPrice := relayInfo.PriceData.ModelPrice
 	cachedCreationRatio := relayInfo.PriceData.CacheCreationRatio
-
-	// 检查是否有特殊模型价格配置（如 Gemini 图像分辨率价格）
-	// 只针对配置了特殊价格的模型进行处理
-	if specialPrices, ok := ratio_setting.GetSpecialModelPrice(modelName); ok && len(specialPrices) > 0 {
-		// 获取 image_size 参数，默认为 "1k"
-		imageSize := ctx.GetString("gemini_image_size")
-		if imageSize == "" {
-			imageSize = "1k"
-		}
-		// 转小写进行比较
-		imageSizeLower := strings.ToLower(imageSize)
-		// 根据 image_size 获取对应价格
-		if price, exists := specialPrices[imageSizeLower]; exists {
-			modelPrice = price
-			relayInfo.PriceData.ModelPrice = price
-			relayInfo.PriceData.UsePrice = true
-			extraContent = append(extraContent, fmt.Sprintf("使用特殊模型价格: %s=$%.4f", imageSize, price))
-		}
-	}
-
-	// 检查是否有文本模型阶梯价格配置
-	// 根据输入 token 数量和是否启用思考模式进行阶梯计费
-	if _, hasTextModelPrice := ratio_setting.GetTextModelPrice(modelName); hasTextModelPrice {
-		enableThinking := ctx.GetBool("enable_thinking")
-		inputPrice, outputPrice, found := ratio_setting.GetTextModelTierPrice(modelName, promptTokens, enableThinking)
-		if found {
-			// 使用阶梯价格计算
-			// 价格单位是 $/1M tokens，需要转换
-			dInputPrice := decimal.NewFromFloat(inputPrice)
-			dOutputPrice := decimal.NewFromFloat(outputPrice)
-			dPromptTokensForTier := decimal.NewFromInt(int64(promptTokens))
-			dCompletionTokensForTier := decimal.NewFromInt(int64(completionTokens))
-
-			// 计算输入和输出的费用 (价格 * tokens / 1000000)
-			inputCost := dInputPrice.Mul(dPromptTokensForTier).Div(decimal.NewFromInt(1000000))
-			outputCost := dOutputPrice.Mul(dCompletionTokensForTier).Div(decimal.NewFromInt(1000000))
-			totalCost := inputCost.Add(outputCost)
-
-			// 设置为使用价格模式
-			modelPrice = totalCost.InexactFloat64()
-			relayInfo.PriceData.ModelPrice = modelPrice
-			relayInfo.PriceData.UsePrice = true
-
-			thinkingMode := "非思考"
-			if enableThinking {
-				thinkingMode = "思考"
-			}
-			extraContent = append(extraContent, fmt.Sprintf("使用文本模型阶梯价格(%s模式): 输入=$%.4f/1M, 输出=$%.4f/1M, 总价=$%.6f",
-				thinkingMode, inputPrice, outputPrice, modelPrice))
-		}
-	}
 
 	// Convert values to decimal for precise calculation
 	dPromptTokens := decimal.NewFromInt(int64(promptTokens))
@@ -395,7 +336,7 @@ func postConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usage 
 
 	var audioInputQuota decimal.Decimal
 	var audioInputPrice float64
-	isClaudeUsageSemantic := relayInfo.ChannelType == constant.ChannelTypeAnthropic
+	isClaudeUsageSemantic := relayInfo.GetFinalRequestRelayFormat() == types.RelayFormatClaude
 	if !relayInfo.PriceData.UsePrice {
 		baseTokens := dPromptTokens
 		// 减去 cached tokens
@@ -484,29 +425,8 @@ func postConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usage 
 		model.UpdateChannelUsedQuota(relayInfo.ChannelId, quota)
 	}
 
-	quotaDelta := quota - relayInfo.FinalPreConsumedQuota
-
-	//logger.LogInfo(ctx, fmt.Sprintf("request quota delta: %s", logger.FormatQuota(quotaDelta)))
-
-	if quotaDelta > 0 {
-		logger.LogInfo(ctx, fmt.Sprintf("预扣费后补扣费：%s（实际消耗：%s，预扣费：%s）",
-			logger.FormatQuota(quotaDelta),
-			logger.FormatQuota(quota),
-			logger.FormatQuota(relayInfo.FinalPreConsumedQuota),
-		))
-	} else if quotaDelta < 0 {
-		logger.LogInfo(ctx, fmt.Sprintf("预扣费后返还扣费：%s（实际消耗：%s，预扣费：%s）",
-			logger.FormatQuota(-quotaDelta),
-			logger.FormatQuota(quota),
-			logger.FormatQuota(relayInfo.FinalPreConsumedQuota),
-		))
-	}
-
-	if quotaDelta != 0 {
-		err := service.PostConsumeQuota(relayInfo, quotaDelta, relayInfo.FinalPreConsumedQuota, true)
-		if err != nil {
-			logger.LogError(ctx, "error consuming token remain quota: "+err.Error())
-		}
+	if err := service.SettleBilling(ctx, relayInfo, quota); err != nil {
+		logger.LogError(ctx, "error settling billing: "+err.Error())
 	}
 
 	logModel := modelName
@@ -520,6 +440,9 @@ func postConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usage 
 	}
 	logContent := strings.Join(extraContent, ", ")
 	other := service.GenerateTextOtherInfo(ctx, relayInfo, modelRatio, groupRatio, completionRatio, cacheTokens, cacheRatio, modelPrice, relayInfo.PriceData.GroupRatioInfo.GroupSpecialRatio)
+	if adminRejectReason != "" {
+		other["reject_reason"] = adminRejectReason
+	}
 	// For chat-based calls to the Claude model, tagging is required. Using Claude's rendering logs, the two approaches handle input rendering differently.
 	if isClaudeUsageSemantic {
 		other["claude"] = true

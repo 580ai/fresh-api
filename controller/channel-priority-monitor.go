@@ -275,7 +275,7 @@ func RunChannelPriorityMonitorOptimized(
 			}
 
 			tik := time.Now()
-			result := testChannel(ch, testModel, "")
+			result := testChannel(ch, testModel, "", false)
 			responseTime := time.Since(tik).Milliseconds()
 
 			testResult := &ChannelTestResult{

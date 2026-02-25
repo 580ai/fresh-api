@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import React, { lazy, Suspense, useContext, useMemo } from 'react';
-import { Route, Routes, useLocation } from 'react-router-dom';
+import { Route, Routes, useLocation, useParams } from 'react-router-dom';
 import Loading from './components/common/ui/Loading';
 import User from './pages/User';
 import { AuthRedirect, PrivateRoute, AdminRoute, SuperAdminRoute, AdminOrSuperAdminRoute } from './helpers';
@@ -43,7 +43,9 @@ import Midjourney from './pages/Midjourney';
 import Pricing from './pages/Pricing';
 import Task from './pages/Task';
 import ModelPage from './pages/Model';
+import ModelDeploymentPage from './pages/ModelDeployment';
 import Playground from './pages/Playground';
+import Subscription from './pages/Subscription';
 import OAuth2Callback from './components/auth/OAuth2Callback';
 import PersonalSetting from './components/settings/PersonalSetting';
 import Setup from './pages/Setup';
@@ -54,6 +56,11 @@ const Dashboard = lazy(() => import('./pages/Dashboard'));
 const About = lazy(() => import('./pages/About'));
 const UserAgreement = lazy(() => import('./pages/UserAgreement'));
 const PrivacyPolicy = lazy(() => import('./pages/PrivacyPolicy'));
+
+function DynamicOAuth2Callback() {
+  const { provider } = useParams();
+  return <OAuth2Callback type={provider} />;
+}
 
 function App() {
   const location = useLocation();
@@ -107,6 +114,22 @@ function App() {
             <SuperAdminRoute>
               <ModelPage />
             </SuperAdminRoute>
+          }
+        />
+        <Route
+          path='/console/deployment'
+          element={
+            <AdminRoute>
+              <ModelDeploymentPage />
+            </AdminRoute>
+          }
+        />
+        <Route
+          path='/console/subscription'
+          element={
+            <AdminRoute>
+              <Subscription />
+            </AdminRoute>
           }
         />
         <Route
@@ -214,6 +237,14 @@ function App() {
           element={
             <Suspense fallback={<Loading></Loading>} key={location.pathname}>
               <OAuth2Callback type='linuxdo'></OAuth2Callback>
+            </Suspense>
+          }
+        />
+        <Route
+          path='/oauth/:provider'
+          element={
+            <Suspense fallback={<Loading></Loading>} key={location.pathname}>
+              <DynamicOAuth2Callback />
             </Suspense>
           }
         />

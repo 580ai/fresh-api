@@ -7,25 +7,12 @@ import (
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 
 	"github.com/gin-gonic/gin"
 )
-
-// sanitizeTokenForLog 用于清理令牌数据，移除敏感信息后用于操作日志记录
-func sanitizeTokenForLog(token *model.Token) map[string]interface{} {
-	return map[string]interface{}{
-		"id":                   token.Id,
-		"name":                 token.Name,
-		"user_id":              token.UserId,
-		"status":               token.Status,
-		"expired_time":         token.ExpiredTime,
-		"remain_quota":         token.RemainQuota,
-		"unlimited_quota":      token.UnlimitedQuota,
-		"model_limits_enabled": token.ModelLimitsEnabled,
-		"group":                token.Group,
-	}
-}
 
 func GetAllTokens(c *gin.Context) {
 	userId := c.GetInt("id")
@@ -46,16 +33,17 @@ func SearchTokens(c *gin.Context) {
 	userId := c.GetInt("id")
 	keyword := c.Query("keyword")
 	token := c.Query("token")
-	tokens, err := model.SearchUserTokens(userId, keyword, token)
+
+	pageInfo := common.GetPageQuery(c)
+
+	tokens, total, err := model.SearchUserTokens(userId, keyword, token, pageInfo.GetStartIdx(), pageInfo.GetPageSize())
 	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "",
-		"data":    tokens,
-	})
+	pageInfo.SetTotal(int(total))
+	pageInfo.SetItems(tokens)
+	common.ApiSuccess(c, pageInfo)
 	return
 }
 
@@ -122,10 +110,8 @@ func GetTokenUsage(c *gin.Context) {
 
 	token, err := model.GetTokenByKey(strings.TrimPrefix(tokenKey, "sk-"), false)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		common.SysError("failed to get token by key: " + err.Error())
+		common.ApiErrorI18n(c, i18n.MsgTokenGetInfoFailed)
 		return
 	}
 
@@ -159,36 +145,38 @@ func AddToken(c *gin.Context) {
 		return
 	}
 	if len(token.Name) > 50 {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "令牌名称过长",
-		})
+		common.ApiErrorI18n(c, i18n.MsgTokenNameTooLong)
 		return
 	}
 	// 非无限额度时，检查额度值是否超出有效范围
 	if !token.UnlimitedQuota {
 		if token.RemainQuota < 0 {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "额度值不能为负数",
-			})
+			common.ApiErrorI18n(c, i18n.MsgTokenQuotaNegative)
 			return
 		}
 		maxQuotaValue := int((1000000000 * common.QuotaPerUnit))
 		if token.RemainQuota > maxQuotaValue {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": fmt.Sprintf("额度值超出有效范围，最大值为 %d", maxQuotaValue),
-			})
+			common.ApiErrorI18n(c, i18n.MsgTokenQuotaExceedMax, map[string]any{"Max": maxQuotaValue})
 			return
 		}
 	}
-	key, err := common.GenerateKey()
+	// 检查用户令牌数量是否已达上限
+	maxTokens := operation_setting.GetMaxUserTokens()
+	count, err := model.CountUserTokens(c.GetInt("id"))
 	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if int(count) >= maxTokens {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
-			"message": "生成令牌失败",
+			"message": fmt.Sprintf("已达到最大令牌数量限制 (%d)", maxTokens),
 		})
+		return
+	}
+	key, err := common.GenerateKey()
+	if err != nil {
+		common.ApiErrorI18n(c, i18n.MsgTokenGenerateFailed)
 		common.SysLog("failed to generate token key: " + err.Error())
 		return
 	}
@@ -212,12 +200,6 @@ func AddToken(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-
-	// 记录操作日志
-	model.RecordOperationLog(c, c.GetInt("id"), model.ModuleToken, model.ActionCreate,
-		strconv.Itoa(cleanToken.Id), cleanToken.Name, nil, sanitizeTokenForLog(&cleanToken),
-		fmt.Sprintf("创建令牌: %s", cleanToken.Name))
-
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
@@ -228,25 +210,11 @@ func AddToken(c *gin.Context) {
 func DeleteToken(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
 	userId := c.GetInt("id")
-	// 获取令牌信息用于日志记录
-	token, _ := model.GetTokenByIds(id, userId)
-	var tokenInfo map[string]interface{}
-	var tokenName string
-	if token != nil {
-		tokenInfo = sanitizeTokenForLog(token)
-		tokenName = token.Name
-	}
 	err := model.DeleteTokenById(id, userId)
 	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
-
-	// 记录操作日志
-	model.RecordOperationLog(c, c.GetInt("id"), model.ModuleToken, model.ActionDelete,
-		strconv.Itoa(id), tokenName, tokenInfo, nil,
-		fmt.Sprintf("删除令牌: %s", tokenName))
-
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
@@ -264,26 +232,17 @@ func UpdateToken(c *gin.Context) {
 		return
 	}
 	if len(token.Name) > 50 {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "令牌名称过长",
-		})
+		common.ApiErrorI18n(c, i18n.MsgTokenNameTooLong)
 		return
 	}
 	if !token.UnlimitedQuota {
 		if token.RemainQuota < 0 {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "额度值不能为负数",
-			})
+			common.ApiErrorI18n(c, i18n.MsgTokenQuotaNegative)
 			return
 		}
 		maxQuotaValue := int((1000000000 * common.QuotaPerUnit))
 		if token.RemainQuota > maxQuotaValue {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": fmt.Sprintf("额度值超出有效范围，最大值为 %d", maxQuotaValue),
-			})
+			common.ApiErrorI18n(c, i18n.MsgTokenQuotaExceedMax, map[string]any{"Max": maxQuotaValue})
 			return
 		}
 	}
@@ -292,21 +251,13 @@ func UpdateToken(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	// 保存旧值用于日志记录
-	oldTokenInfo := sanitizeTokenForLog(cleanToken)
 	if token.Status == common.TokenStatusEnabled {
 		if cleanToken.Status == common.TokenStatusExpired && cleanToken.ExpiredTime <= common.GetTimestamp() && cleanToken.ExpiredTime != -1 {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "令牌已过期，无法启用，请先修改令牌过期时间，或者设置为永不过期",
-			})
+			common.ApiErrorI18n(c, i18n.MsgTokenExpiredCannotEnable)
 			return
 		}
 		if cleanToken.Status == common.TokenStatusExhausted && cleanToken.RemainQuota <= 0 && !cleanToken.UnlimitedQuota {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "令牌可用额度已用尽，无法启用，请先修改令牌剩余额度，或者设置为无限额度",
-			})
+			common.ApiErrorI18n(c, i18n.MsgTokenExhaustedCannotEable)
 			return
 		}
 	}
@@ -329,12 +280,6 @@ func UpdateToken(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-
-	// 记录操作日志
-	model.RecordOperationLog(c, c.GetInt("id"), model.ModuleToken, model.ActionUpdate,
-		strconv.Itoa(cleanToken.Id), cleanToken.Name, oldTokenInfo, sanitizeTokenForLog(cleanToken),
-		fmt.Sprintf("更新令牌: %s", cleanToken.Name))
-
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
@@ -349,10 +294,7 @@ type TokenBatch struct {
 func DeleteTokenBatch(c *gin.Context) {
 	tokenBatch := TokenBatch{}
 	if err := c.ShouldBindJSON(&tokenBatch); err != nil || len(tokenBatch.Ids) == 0 {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "参数错误",
-		})
+		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
 		return
 	}
 	userId := c.GetInt("id")
@@ -361,12 +303,6 @@ func DeleteTokenBatch(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-
-	// 记录操作日志
-	model.RecordOperationLog(c, c.GetInt("id"), model.ModuleToken, model.ActionDelete,
-		fmt.Sprintf("%v", tokenBatch.Ids), fmt.Sprintf("批量删除%d个令牌", count), nil, nil,
-		fmt.Sprintf("批量删除令牌: %d个", count))
-
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
