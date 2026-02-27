@@ -34,6 +34,7 @@
 | `e69850c4` | 修正：一个模型只有一个渠道则直接跳过；优先级按分层进行调节 |
 | `待提交` | 新增渠道自动启用功能 |
 | `待提交` | 新增渠道 RPM 限流功能 |
+| `待提交` | 修复令牌多分组重试后计费分组不正确的问题 |
 
 ---
 
@@ -90,6 +91,37 @@
 1. `controller/relay.go:getChannel()` - 限流检查，调用 `info.InitChannelMeta(c)` 使重试走动态选择
 2. `controller/relay.go:shouldRetry()` - 限流错误需遵循 retryTimes 限制，不像其他渠道错误无条件重试
 3. `controller/relay.go:Relay()` - 主循环处理限流错误，通过 processChannelError 记录日志
+
+### 令牌多分组计费修复 (待提交)
+
+**问题描述**:
+1. 当令牌配置了多个分组（如 "A,B"）时，重试切换到 B 分组后，计费和日志仍然使用 A 分组的倍率
+2. 当第一个分组没有该模型的渠道时，不会尝试后续分组
+3. 当 B 分组渠道返回错误后重试无更多渠道时，返回"无可用渠道"而不是 B 分组的实际错误
+
+**根本原因**:
+1. `service/channel_select.go` 中多分组模式选中分组后没有设置 context key
+2. `relay/helper/price.go` 的 `HandleGroupRatio` 只检查 `auto_group` context key
+3. 多分组模式错误地检查了 `crossGroupRetry` 设置（该设置仅对 "auto" 分组有效）
+4. `middleware/distributor.go` 使用 `ContextKeyUsingGroup`（只包含第一个分组）而不是 `ContextKeyTokenGroup`（完整分组字符串）
+5. `controller/relay.go` 重试时获取渠道失败会覆盖之前渠道的实际错误
+
+**修改文件** (合并时可能冲突):
+| 文件路径 | 修改内容 | 冲突风险 |
+|----------|----------|----------|
+| `constant/context_key.go` | 添加 `ContextKeyMultiGroup` 常量 | 低 |
+| `service/channel_select.go` | 多分组模式不检查 crossGroupRetry，默认遍历所有分组；设置 `ContextKeyMultiGroup` | 中 |
+| `relay/helper/price.go` | `HandleGroupRatio` 增加对 `multi_group` key 的检查 | 中 |
+| `middleware/distributor.go` | 使用 `ContextKeyTokenGroup` 获取完整分组字符串；更新错误消息显示完整分组 | 高 |
+| `controller/relay.go` | 重试时保留之前渠道的实际错误，不被"无可用渠道"覆盖 | 高 |
+
+**关键代码修改点** (带 `// [CUSTOM]` 注释标记):
+1. `constant/context_key.go` - 添加 `ContextKeyMultiGroup` 常量
+2. `service/channel_select.go:118-119` - 多分组模式默认跨分组重试，不检查 crossGroupRetry
+3. `service/channel_select.go:145-147` - 设置选中的分组到 context
+4. `relay/helper/price.go:HandleGroupRatio()` - 检查 `multi_group` context key
+5. `middleware/distributor.go:125-137` - 使用 `ContextKeyTokenGroup` 调用 `CacheGetRandomSatisfiedChannel`
+6. `controller/relay.go:200-204` - 保留之前渠道的实际错误
 
 ### 操作日志功能 (d9710692)
 

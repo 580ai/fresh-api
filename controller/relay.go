@@ -197,7 +197,11 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 				continue
 			}
 			logger.LogError(c, channelErr.Error())
-			newAPIError = channelErr
+			// [CUSTOM] 如果之前已有渠道返回的实际错误，保留那个错误而不是"无可用渠道"
+			// 这样用户能看到实际的上游错误而不是误导性的"无可用渠道"信息
+			if newAPIError == nil {
+				newAPIError = channelErr
+			}
 			break
 		}
 

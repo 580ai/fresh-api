@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/logger"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
@@ -16,11 +17,20 @@ import (
 // https://docs.claude.com/en/docs/build-with-claude/prompt-caching#1-hour-cache-duration
 const claudeCacheCreation1hMultiplier = 6 / 3.75
 
-// HandleGroupRatio checks for "auto_group" in the context and updates the group ratio and relayInfo.UsingGroup if present
+// HandleGroupRatio checks for "auto_group" or "multi_group" in the context and updates the group ratio and relayInfo.UsingGroup if present
 func HandleGroupRatio(ctx *gin.Context, relayInfo *relaycommon.RelayInfo) types.GroupRatioInfo {
 	groupRatioInfo := types.GroupRatioInfo{
 		GroupRatio:        1.0, // default ratio
 		GroupSpecialRatio: -1,
+	}
+
+	// [CUSTOM] check multi group (comma-separated groups like "A,B")
+	multiGroup, exists := common.GetContextKey(ctx, constant.ContextKeyMultiGroup)
+	if exists {
+		if groupStr, ok := multiGroup.(string); ok && groupStr != "" {
+			logger.LogDebug(ctx, fmt.Sprintf("final group (multi): %s", groupStr))
+			relayInfo.UsingGroup = groupStr
+		}
 	}
 
 	// check auto group

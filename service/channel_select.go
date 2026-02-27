@@ -115,18 +115,8 @@ func CacheGetRandomSatisfiedChannel(param *RetryParam) (*model.Channel, string, 
 			return nil, selectGroup, errors.New("no valid groups found")
 		}
 
-		crossGroupRetry := common.GetContextKeyBool(param.Ctx, constant.ContextKeyTokenCrossGroupRetry)
-
-		// If cross-group retry is not enabled, only use the first group
-		// 如果未启用跨分组重试，只使用第一个分组
-		if !crossGroupRetry {
-			selectGroup = validGroups[0]
-			channel, err = model.GetRandomSatisfiedChannel(selectGroup, param.ModelName, param.GetRetry())
-			if err != nil {
-				return nil, selectGroup, err
-			}
-			return channel, selectGroup, nil
-		}
+		// [CUSTOM] 多分组模式默认跨分组重试，不检查 crossGroupRetry 设置
+		// crossGroupRetry 仅对 "auto" 分组有效
 
 		// Cross-group retry enabled, try each group in order
 		// 启用跨分组重试，按顺序尝试每个分组
@@ -153,6 +143,8 @@ func CacheGetRandomSatisfiedChannel(param *RetryParam) (*model.Channel, string, 
 				continue
 			}
 			selectGroup = currentGroup
+			// [CUSTOM] 设置选中的分组到 context，让后续的 HandleGroupRatio 能获取到正确的分组
+			common.SetContextKey(param.Ctx, constant.ContextKeyMultiGroup, currentGroup)
 			logger.LogDebug(param.Ctx, "Multi-group selected group: %s", currentGroup)
 
 			// Use MaxRetryPerGroup config to limit retries per group

@@ -123,15 +123,21 @@ func Distribute() func(c *gin.Context) {
 				}
 
 				if channel == nil {
+					// [CUSTOM] 使用 ContextKeyTokenGroup 获取完整的分组字符串，支持多分组（如 "A,B"）
+					// ContextKeyUsingGroup 只包含第一个分组，会导致多分组不生效
+					tokenGroup := common.GetContextKeyString(c, constant.ContextKeyTokenGroup)
+					if tokenGroup == "" {
+						tokenGroup = usingGroup
+					}
 					channel, selectGroup, err = service.CacheGetRandomSatisfiedChannel(&service.RetryParam{
 						Ctx:        c,
 						ModelName:  modelRequest.Model,
-						TokenGroup: usingGroup,
+						TokenGroup: tokenGroup,
 						Retry:      common.GetPointer(0),
 					})
 					if err != nil {
-						showGroup := usingGroup
-						if usingGroup == "auto" {
+						showGroup := tokenGroup
+						if tokenGroup == "auto" {
 							showGroup = fmt.Sprintf("auto(%s)", selectGroup)
 						}
 						message := i18n.T(c, i18n.MsgDistributorGetChannelFailed, map[string]any{"Group": showGroup, "Model": modelRequest.Model, "Error": err.Error()})
@@ -144,7 +150,7 @@ func Distribute() func(c *gin.Context) {
 						return
 					}
 					if channel == nil {
-						abortWithOpenAiMessage(c, http.StatusServiceUnavailable, i18n.T(c, i18n.MsgDistributorNoAvailableChannel, map[string]any{"Group": usingGroup, "Model": modelRequest.Model}), types.ErrorCodeModelNotFound)
+						abortWithOpenAiMessage(c, http.StatusServiceUnavailable, i18n.T(c, i18n.MsgDistributorNoAvailableChannel, map[string]any{"Group": tokenGroup, "Model": modelRequest.Model}), types.ErrorCodeModelNotFound)
 						return
 					}
 				}
