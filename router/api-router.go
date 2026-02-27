@@ -240,6 +240,12 @@ func SetApiRouter(router *gin.Engine) {
 			channelRoute.GET("/tag/models", controller.GetTagModels)
 			channelRoute.POST("/copy/:id", controller.CopyChannel)
 			channelRoute.POST("/multi_key/manage", controller.ManageMultiKeys)
+			// 渠道自动启用配置
+			channelRoute.GET("/auto_enable/:id", controller.GetChannelAutoEnableStatus)
+			channelRoute.POST("/auto_enable/:id", controller.SetChannelAutoEnableStatus)
+			channelRoute.POST("/auto_enable/batch/get", controller.BatchGetChannelAutoEnableStatus)
+			channelRoute.POST("/auto_enable/batch/set", controller.BatchSetChannelAutoEnableStatus)
+			channelRoute.GET("/auto_enable", controller.GetAllAutoEnableChannels)
 		}
 		tokenRoute := apiRouter.Group("/token")
 		tokenRoute.Use(middleware.UserAuth())

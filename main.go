@@ -115,6 +115,10 @@ func main() {
 	// 渠道统计定时任务
 	service.StartChannelStatsTask()
 
+	// 渠道自动启用定时任务
+	controller.InitChannelAutoEnableTestFunc()
+	service.StartChannelAutoEnableTask()
+
 	// Subscription quota reset task (daily/weekly/monthly/custom)
 	service.StartSubscriptionQuotaResetTask()
 

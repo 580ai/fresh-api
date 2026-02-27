@@ -183,6 +183,7 @@ const EditChannelModal = (props) => {
   const [multiToSingle, setMultiToSingle] = useState(false);
   const [multiKeyMode, setMultiKeyMode] = useState('random');
   const [autoBan, setAutoBan] = useState(true);
+  const [autoEnable, setAutoEnable] = useState(false);
   const [inputs, setInputs] = useState(originInputs);
   const [originModelOptions, setOriginModelOptions] = useState([]);
   const [modelOptions, setModelOptions] = useState([]);
@@ -583,6 +584,28 @@ const EditChannelModal = (props) => {
     }
   };
 
+  // 加载渠道自动启用状态
+  const loadAutoEnableStatus = async (channelId) => {
+    try {
+      const res = await API.get(`/api/channel/auto_enable/${channelId}`);
+      if (res?.data?.success) {
+        setAutoEnable(res.data.data?.enabled || false);
+      }
+    } catch (error) {
+      // 忽略错误，默认为关闭
+      setAutoEnable(false);
+    }
+  };
+
+  // 保存渠道自动启用状态
+  const saveAutoEnableStatus = async (channelId, enabled) => {
+    try {
+      await API.post(`/api/channel/auto_enable/${channelId}`, { enabled });
+    } catch (error) {
+      console.error('Failed to save auto enable status:', error);
+    }
+  };
+
   const loadChannel = async () => {
     setLoading(true);
     let res = await API.get(`/api/channel/${channelId}`);
@@ -718,6 +741,8 @@ const EditChannelModal = (props) => {
       } else {
         setAutoBan(true);
       }
+      // 加载自动启用状态
+      loadAutoEnableStatus(channelId);
       // 同步企业账户状态
       setIsEnterpriseAccount(data.is_enterprise_account || false);
       setBasicModels(getChannelModels(data.type));
@@ -1739,13 +1764,19 @@ const EditChannelModal = (props) => {
         channel: localInputs,
       });
     }
-    const { success, message } = res.data;
+    const { success, message, data } = res.data;
     if (success) {
+      // 保存自动启用状态
+      const savedChannelId = isEdit ? channelId : data?.id;
+      if (savedChannelId) {
+        await saveAutoEnableStatus(savedChannelId, autoEnable);
+      }
       if (isEdit) {
         showSuccess(t('渠道更新成功！'));
       } else {
         showSuccess(t('渠道创建成功！'));
         setInputs(originInputs);
+        setAutoEnable(false);
       }
       props.refresh();
       props.handleClose();
@@ -3356,6 +3387,18 @@ const EditChannelModal = (props) => {
                         '仅当自动禁用开启时有效，关闭后不会自动禁用该渠道',
                       )}
                       initValue={autoBan}
+                    />
+
+                    <Form.Switch
+                      field='auto_enable'
+                      label={t('是否自动启用')}
+                      checkedText={t('开')}
+                      uncheckedText={t('关')}
+                      onChange={(value) => setAutoEnable(value)}
+                      extraText={t(
+                        '开启后，当渠道被禁用时，系统会定期测试该渠道，成功率达标后自动启用',
+                      )}
+                      initValue={autoEnable}
                     />
 
                     <Form.TextArea

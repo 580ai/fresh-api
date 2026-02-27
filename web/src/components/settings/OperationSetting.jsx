@@ -38,6 +38,13 @@ const OperationSetting = () => {
     QuotaForInvitee: 0,
     'quota_setting.enable_free_model_pre_consume': true,
 
+    /* 渠道自动启用设置 */
+    'channel_auto_enable_setting.enabled': false,
+    'channel_auto_enable_setting.interval_minutes': 30,
+    'channel_auto_enable_setting.timeout_seconds': 30,
+    'channel_auto_enable_setting.success_rate_threshold': 50,
+    'channel_auto_enable_setting.test_count': 2,
+
     /* 通用设置 */
     TopUpLink: '',
     'general_setting.docs_link': '',
@@ -96,6 +103,8 @@ const OperationSetting = () => {
       data.forEach((item) => {
         if (typeof inputs[item.key] === 'boolean') {
           newInputs[item.key] = toBoolean(item.value);
+        } else if (typeof inputs[item.key] === 'number') {
+          newInputs[item.key] = Number(item.value) || 0;
         } else {
           newInputs[item.key] = item.value;
         }

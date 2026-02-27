@@ -72,7 +72,12 @@ type OperationLogQueryParams struct {
 
 // RecordOperationLog 记录操作日志
 func RecordOperationLog(c *gin.Context, userId int, module string, action string, targetId string, targetName string, oldValue any, newValue any, description string) {
-	username, _ := GetUsernameById(userId, false)
+	var username string
+	if userId == 0 {
+		username = "系统"
+	} else {
+		username, _ = GetUsernameById(userId, false)
+	}
 
 	var oldValueStr, newValueStr string
 	if oldValue != nil {

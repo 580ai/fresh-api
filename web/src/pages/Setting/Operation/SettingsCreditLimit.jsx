@@ -37,6 +37,11 @@ export default function SettingsCreditLimit(props) {
     QuotaForInviter: '',
     QuotaForInvitee: '',
     'quota_setting.enable_free_model_pre_consume': true,
+    'channel_auto_enable_setting.enabled': false,
+    'channel_auto_enable_setting.interval_minutes': 30,
+    'channel_auto_enable_setting.timeout_seconds': 30,
+    'channel_auto_enable_setting.success_rate_threshold': 50,
+    'channel_auto_enable_setting.test_count': 2,
   });
   const refForm = useRef();
   const [inputsRow, setInputsRow] = useState(inputs);
@@ -47,6 +52,8 @@ export default function SettingsCreditLimit(props) {
     const requestQueue = updateArray.map((item) => {
       let value = '';
       if (typeof inputs[item.key] === 'boolean') {
+        value = String(inputs[item.key]);
+      } else if (typeof inputs[item.key] === 'number') {
         value = String(inputs[item.key]);
       } else {
         value = inputs[item.key];
@@ -188,6 +195,101 @@ export default function SettingsCreditLimit(props) {
             <Row>
               <Button size='default' onClick={onSubmit}>
                 {t('保存额度设置')}
+              </Button>
+            </Row>
+          </Form.Section>
+
+          <Form.Section text={t('渠道自动启用设置')}>
+            <Row>
+              <Col>
+                <Form.Switch
+                  label={t('启用渠道自动启用功能')}
+                  field={'channel_auto_enable_setting.enabled'}
+                  extraText={t(
+                    '开启后，系统会定期扫描开启了自动启用的渠道，测试成功率达标后自动启用',
+                  )}
+                  onChange={(value) =>
+                    setInputs({
+                      ...inputs,
+                      'channel_auto_enable_setting.enabled': value,
+                    })
+                  }
+                />
+              </Col>
+            </Row>
+            <Row gutter={16}>
+              <Col xs={24} sm={12} md={8} lg={6} xl={6}>
+                <Form.InputNumber
+                  label={t('测试间隔时长')}
+                  field={'channel_auto_enable_setting.interval_minutes'}
+                  step={1}
+                  min={1}
+                  max={1440}
+                  suffix={t('分钟')}
+                  extraText={t('每隔多少分钟扫描一次')}
+                  onChange={(value) =>
+                    setInputs({
+                      ...inputs,
+                      'channel_auto_enable_setting.interval_minutes': value,
+                    })
+                  }
+                />
+              </Col>
+              <Col xs={24} sm={12} md={8} lg={6} xl={6}>
+                <Form.InputNumber
+                  label={t('测试超时时长')}
+                  field={'channel_auto_enable_setting.timeout_seconds'}
+                  step={1}
+                  min={5}
+                  max={300}
+                  suffix={t('秒')}
+                  extraText={t('超过此时长视为测试失败')}
+                  onChange={(value) =>
+                    setInputs({
+                      ...inputs,
+                      'channel_auto_enable_setting.timeout_seconds': value,
+                    })
+                  }
+                />
+              </Col>
+              <Col xs={24} sm={12} md={8} lg={6} xl={6}>
+                <Form.InputNumber
+                  label={t('成功率阈值')}
+                  field={'channel_auto_enable_setting.success_rate_threshold'}
+                  step={1}
+                  min={1}
+                  max={100}
+                  suffix={'%'}
+                  extraText={t('成功率达到此阈值才启用渠道')}
+                  onChange={(value) =>
+                    setInputs({
+                      ...inputs,
+                      'channel_auto_enable_setting.success_rate_threshold': value,
+                    })
+                  }
+                />
+              </Col>
+              <Col xs={24} sm={12} md={8} lg={6} xl={6}>
+                <Form.InputNumber
+                  label={t('测试次数')}
+                  field={'channel_auto_enable_setting.test_count'}
+                  step={1}
+                  min={1}
+                  max={10}
+                  suffix={t('次')}
+                  extraText={t('每次扫描时对每个渠道测试的次数')}
+                  onChange={(value) =>
+                    setInputs({
+                      ...inputs,
+                      'channel_auto_enable_setting.test_count': value,
+                    })
+                  }
+                />
+              </Col>
+            </Row>
+            <Row>
+              <Button size='default' onClick={onSubmit}>
+                {t('保存渠道自动启用设置')}
               </Button>
             </Row>
           </Form.Section>
