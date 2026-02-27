@@ -246,6 +246,12 @@ func SetApiRouter(router *gin.Engine) {
 			channelRoute.POST("/auto_enable/batch/get", controller.BatchGetChannelAutoEnableStatus)
 			channelRoute.POST("/auto_enable/batch/set", controller.BatchSetChannelAutoEnableStatus)
 			channelRoute.GET("/auto_enable", controller.GetAllAutoEnableChannels)
+			// [CUSTOM] 渠道扩展设置（自动启用+RPM限流）
+			channelRoute.GET("/settings/:id", controller.GetChannelSettings)
+			channelRoute.POST("/settings/:id", controller.SetChannelSettings)
+			channelRoute.POST("/settings/batch/get", controller.BatchGetChannelSettings)
+			channelRoute.GET("/rpm/:id", controller.GetChannelMaxRPM)
+			channelRoute.POST("/rpm/:id", controller.SetChannelMaxRPM)
 		}
 		tokenRoute := apiRouter.Group("/token")
 		tokenRoute.Use(middleware.UserAuth())

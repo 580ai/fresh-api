@@ -4,11 +4,12 @@ import (
 	"github.com/QuantumNous/new-api/common"
 )
 
-// ChannelAutoEnable 渠道自动启用配置表
+// ChannelAutoEnable 渠道扩展配置表（自动启用、限流等）
 type ChannelAutoEnable struct {
 	Id          int   `json:"id" gorm:"primaryKey;autoIncrement"`
 	ChannelId   int   `json:"channel_id" gorm:"uniqueIndex;not null"` // 渠道ID，唯一索引
 	Enabled     bool  `json:"enabled" gorm:"default:true"`            // 是否启用自动启用功能
+	MaxRPM      int   `json:"max_rpm" gorm:"default:0"`               // 每分钟最大请求数，0表示不限制
 	CreatedTime int64 `json:"created_time" gorm:"bigint"`
 	UpdatedTime int64 `json:"updated_time" gorm:"bigint"`
 }
@@ -110,4 +111,78 @@ func BatchGetChannelAutoEnableStatus(channelIds []int) (map[int]bool, error) {
 		result[config.ChannelId] = config.Enabled
 	}
 	return result, nil
+}
+
+// GetChannelMaxRPM 获取渠道的最大RPM限制，返回0表示不限制
+func GetChannelMaxRPM(channelId int) int {
+	config, err := GetChannelAutoEnable(channelId)
+	if err != nil {
+		return 0
+	}
+	return config.MaxRPM
+}
+
+// SetChannelMaxRPM 设置渠道的最大RPM限制
+func SetChannelMaxRPM(channelId int, maxRPM int) error {
+	var config ChannelAutoEnable
+	err := DB.Where("channel_id = ?", channelId).First(&config).Error
+	if err != nil {
+		// 不存在则创建
+		config = ChannelAutoEnable{
+			ChannelId:   channelId,
+			Enabled:     false, // 默认不启用自动启用
+			MaxRPM:      maxRPM,
+			CreatedTime: common.GetTimestamp(),
+			UpdatedTime: common.GetTimestamp(),
+		}
+		return DB.Create(&config).Error
+	}
+	// 存在则更新
+	config.MaxRPM = maxRPM
+	config.UpdatedTime = common.GetTimestamp()
+	return DB.Save(&config).Error
+}
+
+// BatchGetChannelMaxRPM 批量获取渠道的RPM限制
+func BatchGetChannelMaxRPM(channelIds []int) (map[int]int, error) {
+	if len(channelIds) == 0 {
+		return make(map[int]int), nil
+	}
+	var configs []ChannelAutoEnable
+	err := DB.Where("channel_id IN ?", channelIds).Find(&configs).Error
+	if err != nil {
+		return nil, err
+	}
+	result := make(map[int]int)
+	for _, config := range configs {
+		result[config.ChannelId] = config.MaxRPM
+	}
+	return result, nil
+}
+
+// GetChannelSettings 获取渠道的完整设置
+func GetChannelSettings(channelId int) (*ChannelAutoEnable, error) {
+	return GetChannelAutoEnable(channelId)
+}
+
+// SetChannelSettings 设置渠道的完整设置
+func SetChannelSettings(channelId int, autoEnable bool, maxRPM int) error {
+	var config ChannelAutoEnable
+	err := DB.Where("channel_id = ?", channelId).First(&config).Error
+	if err != nil {
+		// 不存在则创建
+		config = ChannelAutoEnable{
+			ChannelId:   channelId,
+			Enabled:     autoEnable,
+			MaxRPM:      maxRPM,
+			CreatedTime: common.GetTimestamp(),
+			UpdatedTime: common.GetTimestamp(),
+		}
+		return DB.Create(&config).Error
+	}
+	// 存在则更新
+	config.Enabled = autoEnable
+	config.MaxRPM = maxRPM
+	config.UpdatedTime = common.GetTimestamp()
+	return DB.Save(&config).Error
 }

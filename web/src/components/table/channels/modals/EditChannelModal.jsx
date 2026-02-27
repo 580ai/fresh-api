@@ -184,6 +184,7 @@ const EditChannelModal = (props) => {
   const [multiKeyMode, setMultiKeyMode] = useState('random');
   const [autoBan, setAutoBan] = useState(true);
   const [autoEnable, setAutoEnable] = useState(false);
+  const [maxRPM, setMaxRPM] = useState(0); // [CUSTOM] 渠道RPM限制
   const [inputs, setInputs] = useState(originInputs);
   const [originModelOptions, setOriginModelOptions] = useState([]);
   const [modelOptions, setModelOptions] = useState([]);
@@ -587,22 +588,36 @@ const EditChannelModal = (props) => {
   // 加载渠道自动启用状态
   const loadAutoEnableStatus = async (channelId) => {
     try {
-      const res = await API.get(`/api/channel/auto_enable/${channelId}`);
+      // [CUSTOM] 使用新的 settings API 同时获取自动启用和 RPM 限制
+      const res = await API.get(`/api/channel/settings/${channelId}`);
       if (res?.data?.success) {
-        setAutoEnable(res.data.data?.enabled || false);
+        const autoEnableValue = res.data.data?.auto_enable || false;
+        const maxRPMValue = res.data.data?.max_rpm || 0;
+        setAutoEnable(autoEnableValue);
+        setMaxRPM(maxRPMValue);
+        // [CUSTOM] 同步更新表单字段以实现回显
+        if (formApiRef.current) {
+          formApiRef.current.setValue('auto_enable', autoEnableValue);
+          formApiRef.current.setValue('max_rpm', maxRPMValue);
+        }
       }
     } catch (error) {
       // 忽略错误，默认为关闭
       setAutoEnable(false);
+      setMaxRPM(0);
     }
   };
 
   // 保存渠道自动启用状态
   const saveAutoEnableStatus = async (channelId, enabled) => {
     try {
-      await API.post(`/api/channel/auto_enable/${channelId}`, { enabled });
+      // [CUSTOM] 使用新的 settings API 同时保存自动启用和 RPM 限制
+      await API.post(`/api/channel/settings/${channelId}`, {
+        auto_enable: enabled,
+        max_rpm: maxRPM,
+      });
     } catch (error) {
-      console.error('Failed to save auto enable status:', error);
+      console.error('Failed to save channel settings:', error);
     }
   };
 
@@ -3399,6 +3414,19 @@ const EditChannelModal = (props) => {
                         '开启后，当渠道被禁用时，系统会定期测试该渠道，成功率达标后自动启用',
                       )}
                       initValue={autoEnable}
+                    />
+
+                    {/* [CUSTOM] 渠道 RPM 限流设置 */}
+                    <Form.InputNumber
+                      field='max_rpm'
+                      label={t('RPM 限制')}
+                      placeholder={t('0 表示不限制')}
+                      min={0}
+                      onChange={(value) => setMaxRPM(value || 0)}
+                      extraText={t(
+                        '每分钟最大请求数，0 表示不限制。超过限制时请求将自动切换到其他渠道',
+                      )}
+                      initValue={maxRPM}
                     />
 
                     <Form.TextArea

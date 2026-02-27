@@ -186,6 +186,16 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 	for ; retryParam.GetRetry() <= common.RetryTimes; retryParam.IncreaseRetry() {
 		channel, channelErr := getChannel(c, relayInfo, retryParam)
 		if channelErr != nil {
+			// [CUSTOM] 渠道RPM限流 - 限流错误返回 channel 不为 nil，走正常重试流程
+			if channel != nil && types.IsChannelRateLimitedError(channelErr) {
+				addUsedChannel(c, channel.Id)
+				processChannelError(c, *types.NewChannelError(channel.Id, channel.Type, channel.Name, false, "", channel.GetAutoBan()), channelErr)
+				newAPIError = channelErr
+				if !shouldRetry(c, channelErr, common.RetryTimes-retryParam.GetRetry()) {
+					break
+				}
+				continue
+			}
 			logger.LogError(c, channelErr.Error())
 			newAPIError = channelErr
 			break
@@ -216,6 +226,11 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		}
 
 		if newAPIError == nil {
+			// [CUSTOM] 渠道RPM限流 - 记录成功的请求
+			channelId := c.GetInt("channel_id")
+			if channelId > 0 {
+				service.RecordChannelRequest(channelId)
+			}
 			return
 		}
 
@@ -277,20 +292,45 @@ func fastTokenCountMetaForPricing(request dto.Request) *types.TokenCountMeta {
 
 func getChannel(c *gin.Context, info *relaycommon.RelayInfo, retryParam *service.RetryParam) (*model.Channel, *types.NewAPIError) {
 	if info.ChannelMeta == nil {
+		// 渠道已被中间件预先选定
+		channelId := c.GetInt("channel_id")
+
 		autoBan := c.GetBool("auto_ban")
 		autoBanInt := 1
 		if !autoBan {
 			autoBanInt = 0
 		}
+
+		// [CUSTOM] 渠道RPM限流检查
+		if channelId > 0 && !service.CheckChannelRateLimit(channelId) {
+			// 渠道被限流，返回限流错误，让外层重试机制处理（和其他错误一样的处理方式）
+			channel := &model.Channel{
+				Id:      channelId,
+				Type:    c.GetInt("channel_type"),
+				Name:    c.GetString("channel_name"),
+				AutoBan: &autoBanInt,
+			}
+			// 设置 ChannelMeta，使重试时走动态选择逻辑（和正常错误处理后的行为一致）
+			info.InitChannelMeta(c)
+			rateLimitErr := types.NewErrorWithStatusCode(
+				fmt.Errorf("The current model is already loaded. Please try again later"),
+				types.ErrorCodeChannelRateLimited,
+				http.StatusTooManyRequests,
+			)
+			return channel, rateLimitErr
+		}
+
+		// 未超限，使用预选渠道
 		return &model.Channel{
-			Id:      c.GetInt("channel_id"),
+			Id:      channelId,
 			Type:    c.GetInt("channel_type"),
 			Name:    c.GetString("channel_name"),
 			AutoBan: &autoBanInt,
 		}, nil
 	}
-	channel, selectGroup, err := service.CacheGetRandomSatisfiedChannel(retryParam)
 
+	// 动态选择渠道
+	channel, selectGroup, err := service.CacheGetRandomSatisfiedChannel(retryParam)
 	info.PriceData.GroupRatioInfo = helper.HandleGroupRatio(c, info)
 
 	if err != nil {
@@ -298,6 +338,17 @@ func getChannel(c *gin.Context, info *relaycommon.RelayInfo, retryParam *service
 	}
 	if channel == nil {
 		return nil, types.NewError(fmt.Errorf("分组 %s 下模型 %s 的可用渠道不存在（retry）", selectGroup, info.OriginModelName), types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
+	}
+
+	// [CUSTOM] 渠道RPM限流检查
+	if !service.CheckChannelRateLimit(channel.Id) {
+		// 渠道被限流，返回限流错误，让外层重试机制处理
+		rateLimitErr := types.NewErrorWithStatusCode(
+			fmt.Errorf("The current model is already loaded. Please try again later"),
+			types.ErrorCodeChannelRateLimited,
+			http.StatusTooManyRequests,
+		)
+		return channel, rateLimitErr
 	}
 
 	newAPIError := middleware.SetupContextForSelectedChannel(c, channel, info.OriginModelName)
@@ -315,6 +366,10 @@ func shouldRetry(c *gin.Context, openaiErr *types.NewAPIError, retryTimes int) b
 		return false
 	}
 	if types.IsChannelError(openaiErr) {
+		// [CUSTOM] 渠道RPM限流 - 限流错误仍需遵循重试次数限制
+		if types.IsChannelRateLimitedError(openaiErr) {
+			return retryTimes > 0
+		}
 		return true
 	}
 	if types.IsSkipRetryError(openaiErr) {
@@ -511,6 +566,16 @@ func RelayTask(c *gin.Context) {
 			var channelErr *types.NewAPIError
 			channel, channelErr = getChannel(c, relayInfo, retryParam)
 			if channelErr != nil {
+				// [CUSTOM] 渠道RPM限流 - 限流错误返回 channel 不为 nil，走正常重试流程
+				if channel != nil && types.IsChannelRateLimitedError(channelErr) {
+					addUsedChannel(c, channel.Id)
+					processChannelError(c, *types.NewChannelError(channel.Id, channel.Type, channel.Name, false, "", channel.GetAutoBan()), channelErr)
+					if shouldRetryTaskRelay(c, channel.Id, &dto.TaskError{StatusCode: http.StatusTooManyRequests, LocalError: true}, common.RetryTimes-retryParam.GetRetry()) {
+						continue
+					}
+					taskErr = service.TaskErrorWrapperLocal(channelErr.Err, "channel_rate_limited", http.StatusTooManyRequests)
+					break
+				}
 				logger.LogError(c, channelErr.Error())
 				taskErr = service.TaskErrorWrapperLocal(channelErr.Err, "get_channel_failed", http.StatusInternalServerError)
 				break

@@ -33,6 +33,7 @@
 | `4c1e3b2f` | 定时任务检测处理 |
 | `e69850c4` | 修正：一个模型只有一个渠道则直接跳过；优先级按分层进行调节 |
 | `待提交` | 新增渠道自动启用功能 |
+| `待提交` | 新增渠道 RPM 限流功能 |
 
 ---
 
@@ -61,6 +62,34 @@
 | `web/src/components/table/channels/modals/EditChannelModal.jsx` | 添加自动启用开关 | 高 |
 | `web/src/pages/Setting/Operation/SettingsCreditLimit.jsx` | 添加自动启用设置卡片 | 高 |
 | `web/src/components/settings/OperationSetting.jsx` | 添加 channel_auto_enable_setting 配置项 | 中 |
+
+### 渠道 RPM 限流功能 (待提交)
+
+**功能说明**:
+- 支持为每个渠道设置 RPM (每分钟请求数) 限制
+- 使用 Redis 滑动窗口实现，内存降级方案保证高可用
+- 限流时自动切换到其他渠道，遵循系统重试次数设置
+- 返回 429 状态码，错误信息: "The current model is already loaded. Please try again later"
+
+**新增文件** (合并时无冲突):
+| 文件路径 | 说明 |
+|----------|------|
+| `service/channel_rate_limit.go` | 渠道 RPM 限流服务（Redis 滑动窗口 + 内存降级，原子检查+记录） |
+
+**修改文件** (合并时可能冲突):
+| 文件路径 | 修改内容 | 冲突风险 |
+|----------|----------|----------|
+| `model/channel_auto_enable.go` | 添加 MaxRPM 字段和 GetChannelMaxRPM/SetChannelMaxRPM 函数 | 低 |
+| `controller/channel-auto-enable.go` | 添加 GET/POST /channel/settings/:id API | 低 |
+| `router/api-router.go` | 添加 /channel/settings/:id 路由 | 中 |
+| `controller/relay.go` | getChannel() 限流检查 + InitChannelMeta + shouldRetry 限流特殊处理 | 高 |
+| `types/error.go` | 添加 ErrorCodeChannelRateLimited 和 IsChannelRateLimitedError | 低 |
+| `web/src/components/table/channels/modals/EditChannelModal.jsx` | 添加 RPM 限制输入框，loadAutoEnableStatus/saveAutoEnableStatus 同步获取保存 | 高 |
+
+**关键代码修改点** (带 `// [CUSTOM]` 注释标记):
+1. `controller/relay.go:getChannel()` - 限流检查，调用 `info.InitChannelMeta(c)` 使重试走动态选择
+2. `controller/relay.go:shouldRetry()` - 限流错误需遵循 retryTimes 限制，不像其他渠道错误无条件重试
+3. `controller/relay.go:Relay()` - 主循环处理限流错误，通过 processChannelError 记录日志
 
 ### 操作日志功能 (d9710692)
 
@@ -101,6 +130,7 @@
 | `router/api-router.go` | 多功能都需要添加路由 | 在文件末尾添加自定义路由，便于识别 |
 | `model/main.go` | 多功能需要 AutoMigrate | 在 AutoMigrate 末尾添加自定义模型 |
 | `main.go` | 启动任务注册 | 在文件末尾集中添加自定义任务启动 |
+| `controller/relay.go` | 请求处理核心逻辑 | 修改处添加 `// [CUSTOM]` 注释标记 |
 | `web/src/components/settings/OperationSetting.jsx` | 设置页配置项 | 自定义配置项加注释标记 |
 
 ---
@@ -154,4 +184,4 @@ git diff origin/main --name-only | grep -E "(router|main.go|model/main)"
 
 ---
 
-*最后更新: 2025-02-27*
+*最后更新: 2026-02-27*
