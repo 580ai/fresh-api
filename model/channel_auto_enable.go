@@ -8,7 +8,7 @@ import (
 type ChannelAutoEnable struct {
 	Id          int   `json:"id" gorm:"primaryKey;autoIncrement"`
 	ChannelId   int   `json:"channel_id" gorm:"uniqueIndex;not null"` // 渠道ID，唯一索引
-	Enabled     bool  `json:"enabled" gorm:"default:true"`            // 是否启用自动启用功能
+	Enabled     bool  `json:"enabled" gorm:"default:false"`           // 是否启用自动启用功能
 	MaxRPM      int   `json:"max_rpm" gorm:"default:0"`               // 每分钟最大请求数，0表示不限制
 	CreatedTime int64 `json:"created_time" gorm:"bigint"`
 	UpdatedTime int64 `json:"updated_time" gorm:"bigint"`

@@ -1087,6 +1087,13 @@ const EditChannelModal = (props) => {
         loadChannel();
       } else {
         formApiRef.current?.setValues(getInitValues());
+        // 新建渠道时重置自动启用和RPM限制状态
+        setAutoEnable(false);
+        setMaxRPM(0);
+        if (formApiRef.current) {
+          formApiRef.current.setValue('auto_enable', false);
+          formApiRef.current.setValue('max_rpm', 0);
+        }
       }
       fetchModelGroups();
       // 重置手动输入模式状态
@@ -1137,9 +1144,14 @@ const EditChannelModal = (props) => {
     setDoubaoApiEditUnlocked(false);
     doubaoApiClickCountRef.current = 0;
     setModelSearchValue('');
+    // 重置自动启用和RPM限制状态
+    setAutoEnable(false);
+    setMaxRPM(0);
     // 清空表单中的key_mode字段
     if (formApiRef.current) {
       formApiRef.current.setValue('key_mode', undefined);
+      formApiRef.current.setValue('auto_enable', false);
+      formApiRef.current.setValue('max_rpm', 0);
     }
     // 重置本地输入，避免下次打开残留上一次的 JSON 字段值
     setInputs(getInitValues());
