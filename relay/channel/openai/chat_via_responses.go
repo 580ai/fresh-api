@@ -13,6 +13,7 @@ import (
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/QuantumNous/new-api/types"
 
 	"github.com/gin-gonic/gin"
@@ -84,6 +85,11 @@ func OaiResponsesToChatHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 	}
 	if err != nil {
 		return nil, types.NewOpenAIError(err, types.ErrorCodeJsonMarshalFailed, http.StatusInternalServerError)
+	}
+
+	// 收集响应内容用于日志记录
+	if operation_setting.IsLogContentEnabled() {
+		c.Set("log_response_body", string(responseBody))
 	}
 
 	service.IOCopyBytesGracefully(c, resp, responseBody)
@@ -535,5 +541,11 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 	if info.RelayFormat == types.RelayFormatOpenAI {
 		helper.Done(c)
 	}
+
+	// 收集响应内容用于日志记录
+	if operation_setting.IsLogContentEnabled() {
+		c.Set("log_response_body", usageText.String())
+	}
+
 	return usage, nil
 }

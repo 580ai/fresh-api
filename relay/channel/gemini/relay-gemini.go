@@ -21,6 +21,7 @@ import (
 	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/model_setting"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/QuantumNous/new-api/setting/reasoning"
 	"github.com/QuantumNous/new-api/types"
 	"github.com/gin-gonic/gin"
@@ -1281,7 +1282,7 @@ func handleFinalStream(c *gin.Context, info *relaycommon.RelayInfo, resp *dto.Ch
 	return nil
 }
 
-func geminiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Response, callback func(data string, geminiResponse *dto.GeminiChatResponse) bool) (*dto.Usage, *types.NewAPIError) {
+func geminiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Response, callback func(data string, geminiResponse *dto.GeminiChatResponse) bool) (*dto.Usage, string, *types.NewAPIError) {
 	var usage = &dto.Usage{}
 	var imageCount int
 	responseText := strings.Builder{}
@@ -1333,7 +1334,7 @@ func geminiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http
 		}
 	}
 
-	return usage, nil
+	return usage, responseText.String(), nil
 }
 
 func GeminiChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Response) (*dto.Usage, *types.NewAPIError) {
@@ -1343,7 +1344,7 @@ func GeminiChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *
 	toolCallIndexByChoice := make(map[int]map[string]int)
 	nextToolCallIndexByChoice := make(map[int]int)
 
-	usage, err := geminiStreamHandler(c, info, resp, func(data string, geminiResponse *dto.GeminiChatResponse) bool {
+	usage, responseText, err := geminiStreamHandler(c, info, resp, func(data string, geminiResponse *dto.GeminiChatResponse) bool {
 		response, isStop := streamResponseGeminiChat2OpenAI(geminiResponse)
 
 		response.Id = id
@@ -1416,6 +1417,11 @@ func GeminiChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *
 
 	if err != nil {
 		return usage, err
+	}
+
+	// 收集响应内容用于日志记录
+	if operation_setting.IsLogContentEnabled() {
+		c.Set("log_response_body", responseText)
 	}
 
 	response := helper.GenerateFinalUsageResponse(id, createAt, info.UpstreamModelName, *usage)
@@ -1496,6 +1502,11 @@ func GeminiChatHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.R
 		responseBody = claudeRespStr
 	case types.RelayFormatGemini:
 		break
+	}
+
+	// 收集响应内容用于日志记录
+	if operation_setting.IsLogContentEnabled() {
+		c.Set("log_response_body", string(responseBody))
 	}
 
 	service.IOCopyBytesGracefully(c, resp, responseBody)
