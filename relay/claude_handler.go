@@ -15,6 +15,7 @@ import (
 	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/model_setting"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/QuantumNous/new-api/setting/reasoning"
 	"github.com/QuantumNous/new-api/types"
 
@@ -24,6 +25,15 @@ import (
 func ClaudeHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types.NewAPIError) {
 
 	info.InitChannelMeta(c)
+
+	// 收集请求体内容用于日志记录
+	if operation_setting.IsLogContentEnabled() {
+		if storage, err := common.GetBodyStorage(c); err == nil {
+			if bodyBytes, bErr := storage.Bytes(); bErr == nil {
+				c.Set("log_request_body", string(bodyBytes))
+			}
+		}
+	}
 
 	claudeReq, ok := info.Request.(*dto.ClaudeRequest)
 

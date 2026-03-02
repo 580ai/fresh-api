@@ -30,6 +30,15 @@ import (
 func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types.NewAPIError) {
 	info.InitChannelMeta(c)
 
+	// 收集请求体内容用于日志记录
+	if operation_setting.IsLogContentEnabled() {
+		if storage, err := common.GetBodyStorage(c); err == nil {
+			if bodyBytes, bErr := storage.Bytes(); bErr == nil {
+				c.Set("log_request_body", string(bodyBytes))
+			}
+		}
+	}
+
 	textReq, ok := info.Request.(*dto.GeneralOpenAIRequest)
 	if !ok {
 		return types.NewErrorWithStatusCode(fmt.Errorf("invalid request type, expected dto.GeneralOpenAIRequest, got %T", info.Request), types.ErrorCodeInvalidRequest, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
@@ -490,6 +499,9 @@ func postConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usage 
 		other["image_generation_call"] = true
 		other["image_generation_call_price"] = imageGenerationCallPrice
 	}
+	// 获取请求体和响应内容用于日志记录
+	requestBody := ctx.GetString("log_request_body")
+	responseBody := ctx.GetString("log_response_body")
 	model.RecordConsumeLog(ctx, relayInfo.UserId, model.RecordConsumeLogParams{
 		ChannelId:        relayInfo.ChannelId,
 		PromptTokens:     promptTokens,
@@ -503,5 +515,7 @@ func postConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usage 
 		IsStream:         relayInfo.IsStream,
 		Group:            relayInfo.UsingGroup,
 		Other:            other,
+		RequestBody:      requestBody,
+		ResponseBody:     responseBody,
 	})
 }
