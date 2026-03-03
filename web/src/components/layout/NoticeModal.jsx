@@ -34,7 +34,7 @@ import {
   IllustrationNoContentDark,
 } from '@douyinfe/semi-illustrations';
 import { StatusContext } from '../../context/Status';
-import { Bell, Megaphone, BookOpen } from 'lucide-react';
+import { Bell, Megaphone, BookOpen, MousePointerClick } from 'lucide-react';
 
 const NoticeModal = ({
   visible,
@@ -260,39 +260,71 @@ const NoticeModal = ({
             </Button>
           </div>
           {showTutorialLink && (
-            <a
-              href={tutorialLink}
-              target='_blank'
-              rel='noopener noreferrer'
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '8px',
-                padding: '10px 16px',
-                background: 'linear-gradient(135deg, #3b82f6 0%, #6366f1 100%)',
-                color: '#ffffff',
-                borderRadius: '8px',
-                fontSize: '14px',
-                fontWeight: '500',
-                textDecoration: 'none',
-                boxShadow: '0 4px 12px rgba(99, 102, 241, 0.3)',
-                transition: 'all 0.2s ease',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = 'linear-gradient(135deg, #2563eb 0%, #4f46e5 100%)';
-                e.currentTarget.style.boxShadow = '0 6px 16px rgba(99, 102, 241, 0.4)';
-                e.currentTarget.style.transform = 'translateY(-1px)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'linear-gradient(135deg, #3b82f6 0%, #6366f1 100%)';
-                e.currentTarget.style.boxShadow = '0 4px 12px rgba(99, 102, 241, 0.3)';
-                e.currentTarget.style.transform = 'translateY(0)';
-              }}
-            >
-              <BookOpen size={18} />
-              <span>{t('新手必看教程')}：{t('注册-创建令牌-调用-充值-对公')}</span>
-            </a>
+            <>
+              <style>
+                {`
+                  @keyframes tutorialPulse {
+                    0%, 100% { transform: scale(1); }
+                    50% { transform: scale(1.02); }
+                  }
+                  @keyframes clickHand {
+                    0%, 100% { transform: translateY(0) rotate(-10deg); }
+                    50% { transform: translateY(3px) rotate(-10deg) scale(0.95); }
+                  }
+                  @keyframes shimmer {
+                    0% { background-position: -200% center; }
+                    100% { background-position: 200% center; }
+                  }
+                  .tutorial-link-btn {
+                    animation: tutorialPulse 2s ease-in-out infinite;
+                  }
+                  .tutorial-link-btn:hover {
+                    animation: none;
+                  }
+                  .click-hand {
+                    animation: clickHand 1s ease-in-out infinite;
+                  }
+                `}
+              </style>
+              <a
+                href={tutorialLink}
+                target='_blank'
+                rel='noopener noreferrer'
+                className='tutorial-link-btn'
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '10px',
+                  padding: '12px 20px',
+                  background: 'linear-gradient(135deg, #3b82f6 0%, #8b5cf6 50%, #6366f1 100%)',
+                  backgroundSize: '200% auto',
+                  color: '#ffffff',
+                  borderRadius: '10px',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  textDecoration: 'none',
+                  boxShadow: '0 4px 15px rgba(99, 102, 241, 0.4)',
+                  transition: 'all 0.3s ease',
+                  position: 'relative',
+                  overflow: 'hidden',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'linear-gradient(135deg, #2563eb 0%, #7c3aed 50%, #4f46e5 100%)';
+                  e.currentTarget.style.boxShadow = '0 6px 20px rgba(99, 102, 241, 0.5)';
+                  e.currentTarget.style.transform = 'translateY(-2px) scale(1.02)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'linear-gradient(135deg, #3b82f6 0%, #8b5cf6 50%, #6366f1 100%)';
+                  e.currentTarget.style.boxShadow = '0 4px 15px rgba(99, 102, 241, 0.4)';
+                  e.currentTarget.style.transform = 'translateY(0) scale(1)';
+                }}
+              >
+                <BookOpen size={18} />
+                <span>{t('新手必看教程')}：{t('注册-创建令牌-调用-充值-对公')}</span>
+                <MousePointerClick size={18} className='click-hand' style={{ marginLeft: '4px' }} />
+              </a>
+            </>
           )}
         </div>
       }
