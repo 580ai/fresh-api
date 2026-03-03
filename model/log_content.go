@@ -1,8 +1,6 @@
 package model
 
 import (
-	"fmt"
-
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/bytedance/gopkg/util/gopool"
@@ -22,18 +20,13 @@ type LogContent struct {
 func RecordLogContent(logId int, requestId string, requestBody string, responseBody string) {
 	// 检查是否启用日志内容记录
 	if !operation_setting.IsLogContentEnabled() {
-		common.SysLog("log content recording is disabled, skipping...")
 		return
 	}
 
 	// 如果请求和响应都为空，则不记录
 	if requestBody == "" && responseBody == "" {
-		common.SysLog("log content: both request and response body are empty, skipping...")
 		return
 	}
-
-	//common.SysLog(fmt.Sprintf("recording log content: logId=%d, requestId=%s, reqLen=%d, respLen=%d",
-	//	logId, requestId, len(requestBody), len(responseBody)))
 
 	gopool.Go(func() {
 		logContent := &LogContent{
@@ -46,8 +39,6 @@ func RecordLogContent(logId int, requestId string, requestBody string, responseB
 		err := LOG_DB.Create(logContent).Error
 		if err != nil {
 			common.SysLog("failed to record log content: " + err.Error())
-		} else {
-			common.SysLog(fmt.Sprintf("log content recorded successfully: id=%d", logContent.Id))
 		}
 	})
 }
