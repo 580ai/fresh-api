@@ -46,7 +46,7 @@ func getLogContentFile() (*os.File, error) {
 
 	// 检查日期是否变化
 	dateStr := time.Now().Format("2006-01-02")
-	basePath := filepath.Join("log", "content_"+dateStr)
+	basePath := filepath.Join(*common.LogDir, "content_"+dateStr)
 
 	// 如果文件未初始化或日期变化
 	if logContentFile == nil || !isCurrentDateFile(logContentFilePath, dateStr) {
@@ -69,8 +69,8 @@ func isCurrentDateFile(path, dateStr string) bool {
 
 // initLogContentFile 初始化日志文件
 func initLogContentFile(basePath string) error {
-	logDir := "log"
-	if err := os.MkdirAll(logDir, 0755); err != nil {
+	// 目录已在 common.InitEnv 中创建，这里确保存在
+	if err := os.MkdirAll(*common.LogDir, 0755); err != nil {
 		return err
 	}
 
