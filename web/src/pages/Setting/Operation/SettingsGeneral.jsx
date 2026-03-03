@@ -46,6 +46,7 @@ export default function GeneralSettings(props) {
   const [inputs, setInputs] = useState({
     TopUpLink: '',
     'general_setting.docs_link': '',
+    'general_setting.tutorial_link': '',
     'general_setting.quota_display_type': 'USD',
     'general_setting.custom_currency_symbol': '¤',
     'general_setting.custom_currency_exchange_rate': '',
@@ -133,7 +134,12 @@ export default function GeneralSettings(props) {
   };
 
   useEffect(() => {
+    // 先用初始 inputs 的 key 初始化，确保所有字段都存在
     const currentInputs = {};
+    for (let key in inputs) {
+      currentInputs[key] = inputs[key];
+    }
+    // 然后从 props.options 中更新值
     for (let key in props.options) {
       if (Object.keys(inputs).includes(key)) {
         currentInputs[key] = props.options[key];
@@ -198,6 +204,16 @@ export default function GeneralSettings(props) {
                   initValue={''}
                   placeholder={t('例如 https://docs.newapi.pro')}
                   onChange={handleFieldChange('general_setting.docs_link')}
+                  showClear
+                />
+              </Col>
+              <Col xs={24} sm={12} md={8} lg={8} xl={8}>
+                <Form.Input
+                  field={'general_setting.tutorial_link'}
+                  label={t('接入教程地址')}
+                  initValue={''}
+                  placeholder={t('例如 https://docs.newapi.pro/tutorial')}
+                  onChange={handleFieldChange('general_setting.tutorial_link')}
                   showClear
                 />
               </Col>

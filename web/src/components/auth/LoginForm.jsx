@@ -221,7 +221,7 @@ const LoginForm = () => {
         }}
       >
         <div className="absolute inset-0 bg-black/5 flex flex-col justify-start p-16 pt-24">
-            <h1 className="text-4xl font-extrabold text-[#2F65FF] mb-2 drop-shadow-sm">PoloAPI</h1>
+            <h1 className="text-4xl font-extrabold text-[#2F65FF] mb-2 drop-shadow-sm">{systemName}</h1>
             <h2 className="text-2xl font-bold text-gray-800 mb-1 drop-shadow-sm">全球领先的AI大模型API供应商</h2>
             <div className="text-xl font-bold text-gray-700 mb-6 drop-shadow-sm flex items-center">
                 专业稳定高并发 <span className="mx-2 text-gray-300">|</span> 直连官转中转API

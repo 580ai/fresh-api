@@ -34,7 +34,7 @@ import {
   IllustrationNoContentDark,
 } from '@douyinfe/semi-illustrations';
 import { StatusContext } from '../../context/Status';
-import { Bell, Megaphone } from 'lucide-react';
+import { Bell, Megaphone, BookOpen } from 'lucide-react';
 
 const NoticeModal = ({
   visible,
@@ -51,6 +51,20 @@ const NoticeModal = ({
   const [statusState] = useContext(StatusContext);
 
   const announcements = statusState?.status?.announcements || [];
+  const tutorialLink = statusState?.status?.tutorial_link || '';
+  
+  // 解析顶栏模块配置，检查接入教程是否启用
+  const headerNavModules = useMemo(() => {
+    try {
+      const config = statusState?.status?.HeaderNavModules;
+      if (config) {
+        return JSON.parse(config);
+      }
+    } catch (e) {}
+    return { tutorial: true };
+  }, [statusState?.status?.HeaderNavModules]);
+  
+  const showTutorialLink = tutorialLink && headerNavModules?.tutorial !== false;
 
   const unreadSet = useMemo(() => new Set(unreadKeys), [unreadKeys]);
 
@@ -236,13 +250,50 @@ const NoticeModal = ({
       visible={visible}
       onCancel={onClose}
       footer={
-        <div className='flex justify-end'>
-          <Button type='secondary' onClick={handleCloseTodayNotice}>
-            {t('今日关闭')}
-          </Button>
-          <Button type='primary' onClick={onClose}>
-            {t('关闭公告')}
-          </Button>
+        <div className='flex flex-col gap-3'>
+          <div className='flex justify-end gap-2'>
+            <Button type='secondary' onClick={handleCloseTodayNotice}>
+              {t('今日关闭')}
+            </Button>
+            <Button type='primary' onClick={onClose}>
+              {t('关闭公告')}
+            </Button>
+          </div>
+          {showTutorialLink && (
+            <a
+              href={tutorialLink}
+              target='_blank'
+              rel='noopener noreferrer'
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                padding: '10px 16px',
+                background: 'linear-gradient(135deg, #3b82f6 0%, #6366f1 100%)',
+                color: '#ffffff',
+                borderRadius: '8px',
+                fontSize: '14px',
+                fontWeight: '500',
+                textDecoration: 'none',
+                boxShadow: '0 4px 12px rgba(99, 102, 241, 0.3)',
+                transition: 'all 0.2s ease',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'linear-gradient(135deg, #2563eb 0%, #4f46e5 100%)';
+                e.currentTarget.style.boxShadow = '0 6px 16px rgba(99, 102, 241, 0.4)';
+                e.currentTarget.style.transform = 'translateY(-1px)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'linear-gradient(135deg, #3b82f6 0%, #6366f1 100%)';
+                e.currentTarget.style.boxShadow = '0 4px 12px rgba(99, 102, 241, 0.3)';
+                e.currentTarget.style.transform = 'translateY(0)';
+              }}
+            >
+              <BookOpen size={18} />
+              <span>{t('新手必看教程')}：{t('注册-创建令牌-调用-充值-对公')}</span>
+            </a>
+          )}
         </div>
       }
       size={isMobile ? 'full-width' : 'large'}

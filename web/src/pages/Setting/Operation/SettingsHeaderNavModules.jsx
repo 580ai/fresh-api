@@ -47,6 +47,7 @@ export default function SettingsHeaderNavModules(props) {
       requireAuth: false, // 默认不需要登录鉴权
     },
     docs: true,
+    tutorial: true,
     about: true,
   });
 
@@ -87,6 +88,7 @@ export default function SettingsHeaderNavModules(props) {
         requireAuth: false,
       },
       docs: true,
+      tutorial: true,
       about: true,
     };
     setHeaderNavModules(defaultModules);
@@ -153,6 +155,7 @@ export default function SettingsHeaderNavModules(props) {
             requireAuth: false,
           },
           docs: true,
+          tutorial: true,
           about: true,
         };
         setHeaderNavModules(defaultModules);
@@ -184,6 +187,11 @@ export default function SettingsHeaderNavModules(props) {
       description: t('系统文档和帮助信息'),
     },
     {
+      key: 'tutorial',
+      title: t('接入教程'),
+      description: t('API接入教程和使用指南'),
+    },
+    {
       key: 'about',
       title: t('关于'),
       description: t('关于系统的详细信息'),
@@ -198,7 +206,7 @@ export default function SettingsHeaderNavModules(props) {
       >
         <Row gutter={[16, 16]} style={{ marginBottom: '24px' }}>
           {moduleConfigs.map((module) => (
-            <Col key={module.key} xs={24} sm={12} md={6} lg={6} xl={6}>
+            <Col key={module.key} xs={24} sm={12} md={8} lg={8} xl={8}>
               <Card
                 style={{
                   borderRadius: '8px',
