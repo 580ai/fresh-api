@@ -193,9 +193,9 @@ func RecordConsumeLog(c *gin.Context, userId int, params RecordConsumeLogParams)
 	if err != nil {
 		logger.LogError(c, "failed to record log: "+err.Error())
 	}
-	// 记录请求和响应内容到 log_contents 表
+	// 记录请求和响应内容到文件（按令牌分文件）
 	if err == nil {
-		RecordLogContent(log.Id, requestId, params.RequestBody, params.ResponseBody)
+		RecordLogContent(userId, params.TokenName, requestId, params.RequestBody, params.ResponseBody)
 	}
 	if common.DataExportEnabled {
 		gopool.Go(func() {

@@ -2,11 +2,11 @@ package model
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strings"
 	"sync"
-	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
@@ -15,105 +15,98 @@ import (
 
 // LogContent 日志内容结构
 type LogContent struct {
-	LogId        int    `json:"log_id"`
+	UserId       int    `json:"user_id"`
 	RequestId    string `json:"request_id"`
 	RequestBody  string `json:"request_body"`
 	ResponseBody string `json:"response_body"`
 	CreatedAt    int64  `json:"created_at"`
 }
 
-const (
-	maxLogFileSize = 1024 * 1024 * 1024 // 1GB 单个文件最大大小
-)
+// tokenFileManager 管理每个令牌的文件句柄
+type tokenFileManager struct {
+	files map[string]*os.File
+	mu    sync.Mutex
+}
 
 var (
-	logContentFile     *os.File
-	logContentFileMu   sync.Mutex
-	logContentFilePath string
-	logContentFileSize int64
+	tokenFileMgr = &tokenFileManager{
+		files: make(map[string]*os.File),
+	}
+	// 用于清理文件名中的非法字符
+	invalidCharsRegex = regexp.MustCompile(`[<>:"/\|?*\x00-\x1f]`)
 )
 
-// getLogContentFile 获取日志文件句柄，按日期和大小轮转
-func getLogContentFile() (*os.File, error) {
-	logContentFileMu.Lock()
-	defer logContentFileMu.Unlock()
-
-	// 检查是否需要轮转（文件过大）
-	if logContentFile != nil && logContentFileSize >= maxLogFileSize {
-		logContentFile.Close()
-		logContentFile = nil
-	}
-
-	// 检查日期是否变化
-	dateStr := time.Now().Format("2006-01-02")
-	basePath := filepath.Join(*common.LogDir, "content_"+dateStr)
-
-	// 如果文件未初始化或日期变化
-	if logContentFile == nil || !isCurrentDateFile(logContentFilePath, dateStr) {
-		if logContentFile != nil {
-			logContentFile.Close()
-		}
-		if err := initLogContentFile(basePath); err != nil {
-			return nil, err
-		}
-	}
-
-	return logContentFile, nil
+// getContentDir 获取 content 目录路径
+func getContentDir() string {
+	return filepath.Join(*common.LogDir, "content")
 }
 
-// isCurrentDateFile 检查文件路径是否属于当前日期
-func isCurrentDateFile(path, dateStr string) bool {
-	expected := "content_" + dateStr
-	return len(path) > 0 && filepath.Base(path)[:len(expected)] == expected
+// sanitizeTokenName 清理令牌名称，使其可以作为文件名
+func sanitizeTokenName(tokenName string) string {
+	if tokenName == "" {
+		return "unknown"
+	}
+	// 替换非法字符为下划线
+	safe := invalidCharsRegex.ReplaceAllString(tokenName, "_")
+	// 去除首尾空格
+	safe = strings.TrimSpace(safe)
+	// 如果为空，返回默认值
+	if safe == "" {
+		return "unknown"
+	}
+	// 限制长度（防止文件名过长）
+	if len(safe) > 200 {
+		safe = safe[:200]
+	}
+	return safe
 }
 
-// initLogContentFile 初始化日志文件
-func initLogContentFile(basePath string) error {
-	// 目录已在 common.InitEnv 中创建，这里确保存在
-	if err := os.MkdirAll(*common.LogDir, 0755); err != nil {
-		return err
+// getTokenFile 获取指定令牌的文件句柄
+func (m *tokenFileManager) getTokenFile(tokenName string) (*os.File, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	safeName := sanitizeTokenName(tokenName)
+
+	// 检查是否已有打开的文件
+	if file, exists := m.files[safeName]; exists {
+		return file, nil
 	}
 
-	// 查找可用的文件名（支持同一天多个文件）
-	logContentFilePath = findAvailableLogFile(basePath)
+	// 确保 content 目录存在
+	contentDir := getContentDir()
+	if err := os.MkdirAll(contentDir, 0755); err != nil {
+		return nil, err
+	}
 
-	file, err := os.OpenFile(logContentFilePath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+	// 创建/打开文件
+	filePath := filepath.Join(contentDir, safeName+".json")
+	file, err := os.OpenFile(filePath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	// 获取当前文件大小
-	info, err := file.Stat()
-	if err != nil {
-		file.Close()
-		return err
-	}
-	logContentFileSize = info.Size()
-	logContentFile = file
-	return nil
+	m.files[safeName] = file
+	return file, nil
 }
 
-// findAvailableLogFile 查找可用的日志文件名
-func findAvailableLogFile(basePath string) string {
-	// 先尝试基础文件名
-	path := basePath + ".log"
-	info, err := os.Stat(path)
-	if err != nil || info.Size() < maxLogFileSize {
-		return path
+// writeToFile 写入数据到指定令牌的文件
+func (m *tokenFileManager) writeToFile(tokenName string, data []byte) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	safeName := sanitizeTokenName(tokenName)
+	file, exists := m.files[safeName]
+	if !exists {
+		return nil // 文件不存在，跳过
 	}
 
-	// 如果基础文件已满，查找带序号的文件
-	for i := 1; ; i++ {
-		path = fmt.Sprintf("%s_%d.log", basePath, i)
-		info, err := os.Stat(path)
-		if err != nil || info.Size() < maxLogFileSize {
-			return path
-		}
-	}
+	_, err := file.Write(data)
+	return err
 }
 
-// RecordLogContent 异步记录日志内容到文件
-func RecordLogContent(logId int, requestId string, requestBody string, responseBody string) {
+// RecordLogContent 异步记录日志内容到文件（按令牌分文件）
+func RecordLogContent(userId int, tokenName string, requestId string, requestBody string, responseBody string) {
 	if !operation_setting.IsLogContentEnabled() {
 		return
 	}
@@ -124,7 +117,7 @@ func RecordLogContent(logId int, requestId string, requestBody string, responseB
 
 	gopool.Go(func() {
 		logContent := &LogContent{
-			LogId:        logId,
+			UserId:       userId,
 			RequestId:    requestId,
 			RequestBody:  requestBody,
 			ResponseBody: responseBody,
@@ -137,30 +130,29 @@ func RecordLogContent(logId int, requestId string, requestBody string, responseB
 			return
 		}
 
-		file, err := getLogContentFile()
+		// 获取文件句柄
+		_, err = tokenFileMgr.getTokenFile(tokenName)
 		if err != nil {
-			common.SysLog("failed to get log content file: " + err.Error())
+			common.SysLog("failed to get token log file: " + err.Error())
 			return
 		}
 
-		logContentFileMu.Lock()
-		defer logContentFileMu.Unlock()
-
+		// 写入数据（每行一个JSON）
 		data := append(jsonData, '\n')
-		if _, err := file.Write(data); err != nil {
+		if err := tokenFileMgr.writeToFile(tokenName, data); err != nil {
 			common.SysLog("failed to write log content: " + err.Error())
-		} else {
-			logContentFileSize += int64(len(data))
 		}
 	})
 }
 
-// CloseLogContentFile 关闭日志文件
+// CloseLogContentFile 关闭所有日志文件
 func CloseLogContentFile() {
-	logContentFileMu.Lock()
-	defer logContentFileMu.Unlock()
-	if logContentFile != nil {
-		logContentFile.Close()
-		logContentFile = nil
+	tokenFileMgr.mu.Lock()
+	defer tokenFileMgr.mu.Unlock()
+	for name, file := range tokenFileMgr.files {
+		if file != nil {
+			file.Close()
+		}
+		delete(tokenFileMgr.files, name)
 	}
 }
