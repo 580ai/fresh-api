@@ -249,6 +249,7 @@ const NoticeModal = ({
       }
       visible={visible}
       onCancel={onClose}
+      centered
       footer={
         <div className='flex flex-col gap-3'>
           <div className='flex justify-end gap-2'>
