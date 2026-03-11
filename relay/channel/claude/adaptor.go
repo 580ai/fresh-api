@@ -1,8 +1,6 @@
 package claude
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,32 +10,14 @@ import (
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/relay/channel"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/setting/model_setting"
 	"github.com/QuantumNous/new-api/types"
 
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 )
 
 type Adaptor struct {
-}
-
-// claudeUserIdNamespace 用于 UUID v5 生成的固定命名空间
-var claudeUserIdNamespace = uuid.MustParse("6ba7b810-9dad-11d1-80b4-00c04fd430c8")
-
-// generateStableUserId 基于用户ID生成稳定的 user_id
-// 格式: user_{64位Hex}_account__session_{UUID}
-func generateStableUserId(userId int) string {
-	identifier := fmt.Sprintf("user_%d", userId)
-
-	// 生成稳定的 64 位 Hex（SHA256）
-	hash := sha256.Sum256([]byte(identifier))
-	hexPart := hex.EncodeToString(hash[:]) // 64 位 hex
-
-	// 生成稳定的 UUID（UUID v5）
-	uuidPart := uuid.NewSHA1(claudeUserIdNamespace, []byte(identifier))
-
-	return fmt.Sprintf("user_%s_account__session_%s", hexPart, uuidPart.String())
 }
 
 func (a *Adaptor) ConvertGeminiRequest(*gin.Context, *relaycommon.RelayInfo, *dto.GeminiChatRequest) (any, error) {
@@ -60,7 +40,7 @@ func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, info *relaycommon.RelayIn
 		}
 
 		// 生成并设置稳定的 user_id
-		stableUserId := generateStableUserId(info.UserId)
+		stableUserId := helper.GenerateStableUserId(info.UserId)
 		existingMetadata["user_id"] = stableUserId
 
 		metadataJSON, err := json.Marshal(existingMetadata)

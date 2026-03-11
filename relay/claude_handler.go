@@ -133,7 +133,41 @@ func ClaudeHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 		if err != nil {
 			return types.NewErrorWithStatusCode(err, types.ErrorCodeReadRequestBodyFailed, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
 		}
-		requestBody = common.ReaderOnly(storage)
+
+		// 透传模式下仍然支持模拟用户ID注入
+		if info.ChannelSetting.SimulateUserId && info.UserId > 0 {
+			bodyBytes, readErr := io.ReadAll(storage)
+			if readErr != nil {
+				return types.NewErrorWithStatusCode(readErr, types.ErrorCodeReadRequestBodyFailed, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
+			}
+
+			var bodyMap map[string]interface{}
+			if unmarshalErr := json.Unmarshal(bodyBytes, &bodyMap); unmarshalErr == nil {
+				// 获取或创建 metadata
+				var metadata map[string]interface{}
+				if existingMeta, ok := bodyMap["metadata"].(map[string]interface{}); ok {
+					metadata = existingMeta
+				} else {
+					metadata = make(map[string]interface{})
+				}
+
+				// 注入稳定的 user_id
+				metadata["user_id"] = helper.GenerateStableUserId(info.UserId)
+				bodyMap["metadata"] = metadata
+
+				// 重新序列化
+				modifiedBody, marshalErr := json.Marshal(bodyMap)
+				if marshalErr == nil {
+					requestBody = bytes.NewBuffer(modifiedBody)
+				} else {
+					requestBody = bytes.NewBuffer(bodyBytes)
+				}
+			} else {
+				requestBody = bytes.NewBuffer(bodyBytes)
+			}
+		} else {
+			requestBody = common.ReaderOnly(storage)
+		}
 	} else {
 		convertedRequest, err := adaptor.ConvertClaudeRequest(c, info, request)
 		if err != nil {

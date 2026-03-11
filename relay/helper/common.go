@@ -1,6 +1,8 @@
 package helper
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"net/http"
@@ -11,6 +13,7 @@ import (
 	"github.com/QuantumNous/new-api/types"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 )
 
@@ -208,4 +211,22 @@ func GenerateFinalUsageResponse(id string, createAt int64, model string, usage d
 		Choices:           make([]dto.ChatCompletionsStreamResponseChoice, 0),
 		Usage:             &usage,
 	}
+}
+
+// claudeUserIdNamespace 用于 UUID v5 生成的固定命名空间
+var claudeUserIdNamespace = uuid.MustParse("6ba7b810-9dad-11d1-80b4-00c04fd430c8")
+
+// GenerateStableUserId 基于用户ID生成稳定的 user_id
+// 格式: user_{64位Hex}_account__session_{UUID}
+func GenerateStableUserId(userId int) string {
+	identifier := fmt.Sprintf("user_%d", userId)
+
+	// 生成稳定的 64 位 Hex（SHA256）
+	hash := sha256.Sum256([]byte(identifier))
+	hexPart := hex.EncodeToString(hash[:]) // 64 位 hex
+
+	// 生成稳定的 UUID（UUID v5）
+	uuidPart := uuid.NewSHA1(claudeUserIdNamespace, []byte(identifier))
+
+	return fmt.Sprintf("user_%s_account__session_%s", hexPart, uuidPart.String())
 }
