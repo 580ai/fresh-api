@@ -259,55 +259,50 @@ const renderAllowIps = (text, t) => {
   return <Space wrap>{ipTags}</Space>;
 };
 
-// Render separate quota usage column
+// Render separate quota usage column (remain/total)
 const renderQuotaUsage = (text, record, t) => {
-  const { Paragraph } = Typography;
   const used = parseInt(record.used_quota) || 0;
   const remain = parseInt(record.remain_quota) || 0;
   const total = used + remain;
   if (record.unlimited_quota) {
-    const popoverContent = (
-      <div className='text-xs p-2'>
-        <Paragraph copyable={{ content: renderQuota(used) }}>
-          {t('已用额度')}: {renderQuota(used)}
-        </Paragraph>
-      </div>
-    );
     return (
-      <Popover content={popoverContent} position='top'>
-        <Tag color='white' shape='circle'>
-          {t('无限额度')}
-        </Tag>
-      </Popover>
+      <Tag color='white' shape='circle'>
+        {t('无限额度')}
+      </Tag>
     );
   }
   const percent = total > 0 ? (remain / total) * 100 : 0;
+  return (
+    <Tag color='white' shape='circle'>
+      <div className='flex flex-col items-end'>
+        <span className='text-xs leading-none'>{`${renderQuota(remain)} / ${renderQuota(total)}`}</span>
+        <Progress
+          percent={percent}
+          stroke={getProgressColor(percent)}
+          aria-label='quota usage'
+          format={() => `${percent.toFixed(0)}%`}
+          style={{ width: '100%', marginTop: '1px', marginBottom: 0 }}
+        />
+      </div>
+    </Tag>
+  );
+};
+
+// Render used quota column
+const renderUsedQuota = (text, record, t) => {
+  const { Paragraph } = Typography;
+  const used = parseInt(record.used_quota) || 0;
   const popoverContent = (
     <div className='text-xs p-2'>
       <Paragraph copyable={{ content: renderQuota(used) }}>
         {t('已用额度')}: {renderQuota(used)}
-      </Paragraph>
-      <Paragraph copyable={{ content: renderQuota(remain) }}>
-        {t('剩余额度')}: {renderQuota(remain)} ({percent.toFixed(0)}%)
-      </Paragraph>
-      <Paragraph copyable={{ content: renderQuota(total) }}>
-        {t('总额度')}: {renderQuota(total)}
       </Paragraph>
     </div>
   );
   return (
     <Popover content={popoverContent} position='top'>
       <Tag color='white' shape='circle'>
-        <div className='flex flex-col items-end'>
-          <span className='text-xs leading-none'>{`${renderQuota(remain)} / ${renderQuota(total)}`}</span>
-          <Progress
-            percent={percent}
-            stroke={getProgressColor(percent)}
-            aria-label='quota usage'
-            format={() => `${percent.toFixed(0)}%`}
-            style={{ width: '100%', marginTop: '1px', marginBottom: 0 }}
-          />
-        </div>
+        {renderQuota(used)}
       </Tag>
     </Popover>
   );
@@ -457,6 +452,11 @@ export const getTokensColumns = ({
       title: t('剩余额度/总额度'),
       key: 'quota_usage',
       render: (text, record) => renderQuotaUsage(text, record, t),
+    },
+    {
+      title: t('已使用额度'),
+      key: 'used_quota',
+      render: (text, record) => renderUsedQuota(text, record, t),
     },
     {
       title: t('分组'),

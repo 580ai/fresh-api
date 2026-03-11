@@ -133,6 +133,7 @@ export const useChannelsData = () => {
   // Column keys
   const COLUMN_KEYS = {
     ID: 'id',
+    CREATED_TIME: 'created_time',
     NAME: 'name',
     GROUP: 'group',
     TYPE: 'type',
@@ -174,6 +175,7 @@ export const useChannelsData = () => {
   const getDefaultColumnVisibility = () => {
     return {
       [COLUMN_KEYS.ID]: true,
+      [COLUMN_KEYS.CREATED_TIME]: true,
       [COLUMN_KEYS.NAME]: true,
       [COLUMN_KEYS.GROUP]: true,
       [COLUMN_KEYS.TYPE]: true,

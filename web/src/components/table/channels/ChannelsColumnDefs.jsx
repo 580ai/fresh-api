@@ -283,6 +283,12 @@ export const getChannelsColumns = ({
       render: (text, record, index) => <div>{renderSuccessRate(record.stats, t)}</div>,
     },
     {
+      key: COLUMN_KEYS.CREATED_TIME,
+      title: t('上架时间'),
+      dataIndex: 'created_time',
+      render: (text) => <div>{timestamp2string(text)}</div>,
+    },
+    {
       key: COLUMN_KEYS.NAME,
       title: t('名称'),
       dataIndex: 'name',

@@ -295,6 +295,11 @@ func SetApiRouter(router *gin.Engine) {
 		logRoute.GET("/search", middleware.AdminAuth(), controller.SearchAllLogs)
 		logRoute.GET("/self", middleware.UserAuth(), controller.GetUserLogs)
 		logRoute.GET("/self/search", middleware.UserAuth(), middleware.SearchRateLimit(), controller.SearchUserLogs)
+		logRoute.GET("/self/token_daily", middleware.UserAuth(), controller.GetTokenDailyConsumption)
+		logRoute.GET("/self/token_daily/export", middleware.UserAuth(), controller.ExportTokenDailyConsumption)
+		logRoute.GET("/self/token_model_daily", middleware.UserAuth(), controller.GetTokenModelDailyConsumption)
+		logRoute.GET("/self/token_model_full", middleware.UserAuth(), controller.GetTokenModelFullConsumption)
+		logRoute.POST("/backfill_token_daily_stat", middleware.AdminAuth(), controller.BackfillTokenDailyStat)
 
 		// 操作日志路由
 		operationLogRoute := apiRouter.Group("/operation_log")

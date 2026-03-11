@@ -96,6 +96,9 @@ func main() {
 	// 数据看板
 	go model.UpdateQuotaData()
 
+	// 令牌每日消耗统计聚合任务
+	go model.RunDailyStatAggregation()
+
 	if os.Getenv("CHANNEL_UPDATE_FREQUENCY") != "" {
 		frequency, err := strconv.Atoi(os.Getenv("CHANNEL_UPDATE_FREQUENCY"))
 		if err != nil {

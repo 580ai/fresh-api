@@ -152,8 +152,12 @@ func ClaudeHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 				}
 
 				// 注入稳定的 user_id
-				metadata["user_id"] = helper.GenerateStableUserId(info.UserId)
+				stableUserId := helper.GenerateStableUserId(info.UserId)
+				metadata["user_id"] = stableUserId
 				bodyMap["metadata"] = metadata
+
+				// 调试日志
+				common.SysLog(fmt.Sprintf("[SimulateUserId] Injected user_id=%s for UserId=%d, stream=%v", stableUserId, info.UserId, info.IsStream))
 
 				// 重新序列化
 				modifiedBody, marshalErr := json.Marshal(bodyMap)
