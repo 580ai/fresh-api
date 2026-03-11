@@ -1,6 +1,9 @@
 package claude
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -13,9 +16,28 @@ import (
 	"github.com/QuantumNous/new-api/types"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 )
 
 type Adaptor struct {
+}
+
+// claudeUserIdNamespace 用于 UUID v5 生成的固定命名空间
+var claudeUserIdNamespace = uuid.MustParse("6ba7b810-9dad-11d1-80b4-00c04fd430c8")
+
+// generateStableUserId 基于用户ID生成稳定的 user_id
+// 格式: user_{64位Hex}_account__session_{UUID}
+func generateStableUserId(userId int) string {
+	identifier := fmt.Sprintf("user_%d", userId)
+
+	// 生成稳定的 64 位 Hex（SHA256）
+	hash := sha256.Sum256([]byte(identifier))
+	hexPart := hex.EncodeToString(hash[:]) // 64 位 hex
+
+	// 生成稳定的 UUID（UUID v5）
+	uuidPart := uuid.NewSHA1(claudeUserIdNamespace, []byte(identifier))
+
+	return fmt.Sprintf("user_%s_account__session_%s", hexPart, uuidPart.String())
 }
 
 func (a *Adaptor) ConvertGeminiRequest(*gin.Context, *relaycommon.RelayInfo, *dto.GeminiChatRequest) (any, error) {
@@ -24,6 +46,29 @@ func (a *Adaptor) ConvertGeminiRequest(*gin.Context, *relaycommon.RelayInfo, *dt
 }
 
 func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, info *relaycommon.RelayInfo, request *dto.ClaudeRequest) (any, error) {
+	// 模拟用户ID：基于用户身份生成稳定的 metadata.user_id
+	if info.ChannelSetting.SimulateUserId && info.UserId > 0 {
+		var existingMetadata map[string]interface{}
+
+		if len(request.Metadata) > 0 {
+			// 尝试解析现有的 metadata，保留其他字段
+			if err := json.Unmarshal(request.Metadata, &existingMetadata); err != nil {
+				existingMetadata = make(map[string]interface{})
+			}
+		} else {
+			existingMetadata = make(map[string]interface{})
+		}
+
+		// 生成并设置稳定的 user_id
+		stableUserId := generateStableUserId(info.UserId)
+		existingMetadata["user_id"] = stableUserId
+
+		metadataJSON, err := json.Marshal(existingMetadata)
+		if err == nil {
+			request.Metadata = metadataJSON
+		}
+	}
+
 	return request, nil
 }
 

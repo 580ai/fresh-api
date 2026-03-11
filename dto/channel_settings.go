@@ -7,6 +7,7 @@ type ChannelSettings struct {
 	PassThroughBodyEnabled bool   `json:"pass_through_body_enabled,omitempty"`
 	SystemPrompt           string `json:"system_prompt,omitempty"`
 	SystemPromptOverride   bool   `json:"system_prompt_override,omitempty"`
+	SimulateUserId         bool   `json:"simulate_user_id,omitempty"` // Claude 渠道：基于用户ID生成稳定的 metadata.user_id
 }
 
 type VertexKeyType string
