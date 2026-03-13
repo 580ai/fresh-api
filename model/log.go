@@ -603,7 +603,7 @@ func GetTokenDailyQuotaPaged(userId int, startTimestamp int64, endTimestamp int6
 		raw := "SELECT " + selectExpr +
 			" FROM tokens t LEFT JOIN logs l ON t.id = l.token_id AND l.user_id = ? AND l.type = ? AND l.created_at >= ? AND l.created_at <= ?" +
 			" WHERE t.user_id = ? AND t.deleted_at IS NULL" + keywordClause +
-			" GROUP BY t.id ORDER BY sort_val " + sortOrder + ", t.id ASC LIMIT ? OFFSET ?"
+			" GROUP BY t.id ORDER BY sort_val " + sortOrder + ", t.id DESC LIMIT ? OFFSET ?"
 
 		type sortRow struct {
 			TokenId int `gorm:"column:token_id"`
@@ -617,12 +617,12 @@ func GetTokenDailyQuotaPaged(userId int, startTimestamp int64, endTimestamp int6
 			tokenIds = append(tokenIds, r.TokenId)
 		}
 	} else {
-		// 无排序：直接从 tokens 表按 id 分页
+		// 无排序：直接从 tokens 表按 id 分页（与令牌列表保持一致，按 id desc 排序）
 		tq := DB.Table("tokens").Where("user_id = ? AND deleted_at IS NULL", userId)
 		if keyword != "" {
 			tq = tq.Where("name LIKE ?", "%"+keyword+"%")
 		}
-		err = tq.Order("id ASC").Offset(startIdx).Limit(pageSize).Pluck("id", &tokenIds).Error
+		err = tq.Order("id DESC").Offset(startIdx).Limit(pageSize).Pluck("id", &tokenIds).Error
 		if err != nil || len(tokenIds) == 0 {
 			return
 		}
