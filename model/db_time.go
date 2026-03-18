@@ -2,6 +2,16 @@ package model
 
 import "github.com/QuantumNous/new-api/common"
 
+// DayTimestampExpr returns a SQL expression that truncates created_at to day boundary,
+// compatible with MySQL (SIGNED), PostgreSQL and SQLite (BIGINT).
+func DayTimestampExpr(column string) string {
+	castType := "BIGINT"
+	if common.UsingMySQL {
+		castType = "SIGNED"
+	}
+	return "CAST(FLOOR(" + column + " / 86400) * 86400 AS " + castType + ")"
+}
+
 // GetDBTimestamp returns a UNIX timestamp from database time.
 // Falls back to application time on error.
 func GetDBTimestamp() int64 {

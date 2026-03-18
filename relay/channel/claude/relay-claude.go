@@ -50,6 +50,7 @@ func RequestOpenAI2ClaudeMessage(c *gin.Context, textRequest dto.GeneralOpenAIRe
 	for _, tool := range textRequest.Tools {
 		if params, ok := tool.Function.Parameters.(map[string]any); ok {
 			claudeTool := dto.Tool{
+				Type:        "custom",
 				Name:        tool.Function.Name,
 				Description: tool.Function.Description,
 			}
@@ -338,6 +339,9 @@ func RequestOpenAI2ClaudeMessage(c *gin.Context, textRequest dto.GeneralOpenAIRe
 						Type: mediaMessage.Type,
 					}
 					if mediaMessage.Type == "text" {
+						if mediaMessage.Text == "" {
+							continue // skip empty text blocks, Claude API rejects them
+						}
 						claudeMediaMessage.Text = common.GetPointer[string](mediaMessage.Text)
 					} else {
 						imageUrl := mediaMessage.GetImageMedia()
