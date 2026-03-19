@@ -23,26 +23,6 @@ import { API, showError, showSuccess } from '../../helpers';
 import { ITEMS_PER_PAGE } from '../../constants';
 import { useTableCompactMode } from '../common/useTableCompactMode';
 
-// Helper function to get cookie value by name
-const getCookie = (name) => {
-  const value = `; ${document.cookie}`;
-  const parts = value.split(`; ${name}=`);
-  if (parts.length === 2) return parts.pop().split(';').shift();
-  return '';
-};
-
-// Helper function to get marketing API headers
-const getMarketingHeaders = () => {
-  const raw = localStorage.getItem('user');
-  const user = JSON.parse(raw);
-  const session = getCookie('session');
-
-  return {
-    'New-API-Session': session,
-    'New-API-User': user?.id || '',
-  };
-};
-
 export const useUsersData = () => {
   const { t } = useTranslation();
   const [compactMode, setCompactMode] = useTableCompactMode('users');
@@ -107,18 +87,7 @@ export const useUsersData = () => {
   // Load users data
   const loadUsers = async (startIdx, pageSize) => {
     setLoading(true);
-    const raw = localStorage.getItem('user');
-    const user = JSON.parse(raw);
-    let res;
-    if (user.role && user.role == 10) { // 普通管理员走营销系统查询逻辑
-      const currentDomain = window.location.origin; // 获取当前来源地址，例如: https://example.com
-      res = await API.get(
-        `/out/newapi/user/?p=${startIdx}&page_size=${pageSize}&source=${encodeURIComponent(currentDomain)}`,
-        { headers: getMarketingHeaders() }
-      );
-    } else {
-      res = await API.get(`/api/user/?p=${startIdx}&page_size=${pageSize}`);
-    }
+    const res = await API.get(`/api/user/?p=${startIdx}&page_size=${pageSize}`);
     const { success, message, data } = res.data;
     if (success) {
       const newPageData = data.items;
@@ -151,20 +120,9 @@ export const useUsersData = () => {
       return;
     }
     setSearching(true);
-    const raw = localStorage.getItem('user');
-    const user = JSON.parse(raw);
-    let res;
-    res = void 0;
-    if (user.role && user.role == 10) { // 普通管理员走营销系统查询逻辑
-      const currentDomain = window.location.origin; // 获取当前来源地址，例如: https://example.com
-      res = await API.get(
-        `/out/newapi/user/search?keyword=${searchKeyword}&group=${searchGroup}&p=${startIdx}&page_size=${pageSize}&source=${encodeURIComponent(currentDomain)}`,
-      );
-    } else {
-      res = await API.get(
-        `/api/user/search?keyword=${searchKeyword}&group=${searchGroup}&p=${startIdx}&page_size=${pageSize}`,
-      );
-    }
+    const res = await API.get(
+      `/api/user/search?keyword=${searchKeyword}&group=${searchGroup}&p=${startIdx}&page_size=${pageSize}`,
+    );
     const { success, message, data } = res.data;
     if (success) {
       const newPageData = data.items;

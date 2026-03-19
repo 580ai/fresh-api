@@ -264,16 +264,18 @@ const renderOperations = (
           {t('启用')}
         </Button>
       )}
-      <Button
-        type='tertiary'
-        size='small'
-        onClick={() => {
-          setEditingUser(record);
-          setShowEditUser(true);
-        }}
-      >
-        {t('编辑')}
-      </Button>
+      {setEditingUser && (
+        <Button
+          type='tertiary'
+          size='small'
+          onClick={() => {
+            setEditingUser(record);
+            setShowEditUser(true);
+          }}
+        >
+          {t('编辑')}
+        </Button>
+      )}
       <Button
         type='warning'
         size='small'
@@ -309,8 +311,9 @@ export const getUsersColumns = ({
   showResetPasskeyModal,
   showResetTwoFAModal,
   showUserSubscriptionsModal,
+  currentUserRole,
 }) => {
-  return [
+  const columns = [
     {
       title: 'ID',
       dataIndex: 'id',
@@ -370,4 +373,29 @@ export const getUsersColumns = ({
         }),
     },
   ];
+
+  // Admin (role 10) can view but not edit
+  if (currentUserRole === 10) {
+    return columns.map((col) => {
+      if (col.dataIndex !== 'operate') return col;
+      return {
+        ...col,
+        render: (text, record, index) =>
+          renderOperations(text, record, {
+            setEditingUser: null,
+            setShowEditUser: null,
+            showPromoteModal,
+            showDemoteModal,
+            showEnableDisableModal,
+            showDeleteModal,
+            showResetPasskeyModal,
+            showResetTwoFAModal,
+            showUserSubscriptionsModal,
+            t,
+          }),
+      };
+    });
+  }
+
+  return columns;
 };
