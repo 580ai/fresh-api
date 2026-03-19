@@ -48,6 +48,7 @@ export default function SettingsHeaderNavModules(props) {
     },
     docs: true,
     tutorial: true,
+    groupStatus: true,
     about: true,
   });
 
@@ -89,6 +90,7 @@ export default function SettingsHeaderNavModules(props) {
       },
       docs: true,
       tutorial: true,
+      groupStatus: true,
       about: true,
     };
     setHeaderNavModules(defaultModules);
@@ -156,6 +158,7 @@ export default function SettingsHeaderNavModules(props) {
           },
           docs: true,
           tutorial: true,
+          groupStatus: true,
           about: true,
         };
         setHeaderNavModules(defaultModules);
@@ -190,6 +193,11 @@ export default function SettingsHeaderNavModules(props) {
       key: 'tutorial',
       title: t('接入教程'),
       description: t('API接入教程和使用指南'),
+    },
+    {
+      key: 'groupStatus',
+      title: t('分组状态'),
+      description: t('查看分组状态信息'),
     },
     {
       key: 'about',

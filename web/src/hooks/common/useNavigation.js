@@ -19,7 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 
 import { useMemo } from 'react';
 
-export const useNavigation = (t, docsLink, tutorialLink, headerNavModules) => {
+export const useNavigation = (t, docsLink, tutorialLink, groupStatusLink, headerNavModules) => {
   const mainNavLinks = useMemo(() => {
     // 默认配置，如果没有传入配置则显示所有模块
     const defaultModules = {
@@ -28,6 +28,7 @@ export const useNavigation = (t, docsLink, tutorialLink, headerNavModules) => {
       pricing: true,
       docs: true,
       tutorial: true,
+      groupStatus: true,
       about: true,
     };
 
@@ -70,6 +71,16 @@ export const useNavigation = (t, docsLink, tutorialLink, headerNavModules) => {
             },
           ]
         : []),
+      ...(groupStatusLink
+        ? [
+            {
+              text: t('分组状态'),
+              itemKey: 'groupStatus',
+              isExternal: true,
+              externalLink: groupStatusLink,
+            },
+          ]
+        : []),
       {
         text: t('关于'),
         itemKey: 'about',
@@ -85,6 +96,9 @@ export const useNavigation = (t, docsLink, tutorialLink, headerNavModules) => {
       if (link.itemKey === 'tutorial') {
         return tutorialLink && modules.tutorial;
       }
+      if (link.itemKey === 'groupStatus') {
+        return groupStatusLink && modules.groupStatus;
+      }
       if (link.itemKey === 'pricing') {
         // 支持新的pricing配置格式
         return typeof modules.pricing === 'object'
@@ -93,7 +107,7 @@ export const useNavigation = (t, docsLink, tutorialLink, headerNavModules) => {
       }
       return modules[link.itemKey] === true;
     });
-  }, [t, docsLink, tutorialLink, headerNavModules]);
+  }, [t, docsLink, tutorialLink, groupStatusLink, headerNavModules]);
 
   return {
     mainNavLinks,

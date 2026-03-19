@@ -12,7 +12,8 @@ const (
 
 type GeneralSetting struct {
 	DocsLink            string `json:"docs_link"`
-	TutorialLink        string `json:"tutorial_link"` // 接入教程地址
+	TutorialLink        string `json:"tutorial_link"`        // 接入教程地址
+	GroupStatusLink     string `json:"group_status_link"`    // 分组状态地址
 	PingIntervalEnabled bool   `json:"ping_interval_enabled"`
 	PingIntervalSeconds int    `json:"ping_interval_seconds"`
 	// 当前站点额度展示类型：USD / CNY / TOKENS
@@ -29,6 +30,7 @@ type GeneralSetting struct {
 var generalSetting = GeneralSetting{
 	DocsLink:                   "https://docs.newapi.pro",
 	TutorialLink:               "",
+	GroupStatusLink:            "",
 	PingIntervalEnabled:        false,
 	PingIntervalSeconds:        60,
 	QuotaDisplayType:           QuotaDisplayTypeUSD,

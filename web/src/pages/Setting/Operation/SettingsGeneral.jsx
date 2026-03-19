@@ -47,6 +47,7 @@ export default function GeneralSettings(props) {
     TopUpLink: '',
     'general_setting.docs_link': '',
     'general_setting.tutorial_link': '',
+    'general_setting.group_status_link': '',
     'general_setting.quota_display_type': 'USD',
     'general_setting.custom_currency_symbol': '¤',
     'general_setting.custom_currency_exchange_rate': '',
@@ -214,6 +215,16 @@ export default function GeneralSettings(props) {
                   initValue={''}
                   placeholder={t('例如 https://docs.newapi.pro/tutorial')}
                   onChange={handleFieldChange('general_setting.tutorial_link')}
+                  showClear
+                />
+              </Col>
+              <Col xs={24} sm={12} md={8} lg={8} xl={8}>
+                <Form.Input
+                  field={'general_setting.group_status_link'}
+                  label={t('分组状态地址')}
+                  initValue={''}
+                  placeholder={t('例如 https://status.newapi.pro')}
+                  onChange={handleFieldChange('general_setting.group_status_link')}
                   showClear
                 />
               </Col>

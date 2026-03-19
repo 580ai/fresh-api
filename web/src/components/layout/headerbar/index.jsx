@@ -42,6 +42,7 @@ const HeaderBar = ({ onMobileMenuToggle, drawerOpen }) => {
     isSelfUseMode,
     docsLink,
     tutorialLink,
+    groupStatusLink,
     isDemoSiteMode,
     isConsoleRoute,
     theme,
@@ -63,7 +64,7 @@ const HeaderBar = ({ onMobileMenuToggle, drawerOpen }) => {
     getUnreadKeys,
   } = useNotifications(statusState);
 
-  const { mainNavLinks } = useNavigation(t, docsLink, tutorialLink, headerNavModules);
+  const { mainNavLinks } = useNavigation(t, docsLink, tutorialLink, groupStatusLink, headerNavModules);
 
   return (
     <header className='text-semi-color-text-0 sticky top-0 z-50 transition-colors duration-300 bg-white/75 dark:bg-zinc-900/75 backdrop-blur-lg'>
