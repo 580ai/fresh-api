@@ -146,13 +146,14 @@ type RecordConsumeLogParams struct {
 	IsStream         bool                   `json:"is_stream"`
 	Group            string                 `json:"group"`
 	Other            map[string]interface{} `json:"other"`
+	RequestBody      string                 `json:"request_body,omitempty"`  // 请求内容
+	ResponseBody     string                 `json:"response_body,omitempty"` // 响应内容
 }
 
 func RecordConsumeLog(c *gin.Context, userId int, params RecordConsumeLogParams) {
 	if !common.LogConsumeEnabled {
 		return
 	}
-	logger.LogInfo(c, fmt.Sprintf("record consume log: userId=%d, params=%s", userId, common.GetJsonString(params)))
 	username := c.GetString("username")
 	requestId := c.GetString(common.RequestIdKey)
 	otherStr := common.MapToJsonStr(params.Other)
@@ -191,6 +192,10 @@ func RecordConsumeLog(c *gin.Context, userId int, params RecordConsumeLogParams)
 	err := LOG_DB.Create(log).Error
 	if err != nil {
 		logger.LogError(c, "failed to record log: "+err.Error())
+	}
+	// 记录请求和响应内容到文件（按令牌分文件）
+	if err == nil {
+		RecordLogContent(userId, params.TokenName, requestId, params.RequestBody, params.ResponseBody)
 	}
 	if common.DataExportEnabled {
 		gopool.Go(func() {

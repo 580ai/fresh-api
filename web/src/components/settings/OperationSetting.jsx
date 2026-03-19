@@ -73,6 +73,8 @@ const OperationSetting = () => {
 
     /* 日志设置 */
     LogConsumeEnabled: false,
+    'log_content_setting.enabled': false,
+    'log_content_setting.filter_user_ids': '',
 
     /* 监控设置 */
     ChannelDisableThreshold: 0,

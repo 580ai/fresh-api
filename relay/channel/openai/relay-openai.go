@@ -190,6 +190,9 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 
 	HandleFinalResponse(c, info, lastStreamData, responseId, createAt, model, systemFingerprint, usage, containStreamUsage)
 
+	// 存储响应内容用于日志记录（流式响应拼接后的完整文本）
+	c.Set("log_response_body", responseTextBuilder.String())
+
 	return usage, nil
 }
 
@@ -296,6 +299,9 @@ func OpenaiHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Respo
 	}
 
 	service.IOCopyBytesGracefully(c, resp, responseBody)
+
+	// 存储响应内容用于日志记录
+	c.Set("log_response_body", string(responseBody))
 
 	return &simpleResponse.Usage, nil
 }

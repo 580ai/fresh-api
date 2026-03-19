@@ -47,6 +47,8 @@ export default function SettingsLog(props) {
   const [loadingCleanOperationLog, setLoadingCleanOperationLog] = useState(false);
   const [inputs, setInputs] = useState({
     LogConsumeEnabled: false,
+    'log_content_setting.enabled': false,
+    'log_content_setting.filter_user_ids': '',
     historyTimestamp: dayjs().subtract(1, 'month').toDate(),
     operationLogTimestamp: dayjs().subtract(1, 'month').toDate(),
   });
@@ -294,6 +296,7 @@ export default function SettingsLog(props) {
           style={{ marginBottom: 15 }}
         >
           <Form.Section text={t('日志设置')}>
+            {/* 开关设置 */}
             <Row gutter={16}>
               <Col xs={24} sm={12} md={8} lg={8} xl={8}>
                 <Form.Switch
@@ -311,6 +314,48 @@ export default function SettingsLog(props) {
                 />
               </Col>
               <Col xs={24} sm={12} md={8} lg={8} xl={8}>
+                <Form.Switch
+                  field={'log_content_setting.enabled'}
+                  label={t('启用记录请求内容')}
+                  size='default'
+                  checkedText='｜'
+                  uncheckedText='〇'
+                  onChange={(value) => {
+                    setInputs({
+                      ...inputs,
+                      'log_content_setting.enabled': value,
+                    });
+                  }}
+                  extraText={t('开启后将请求和响应内容存储到日志文件中')}
+                />
+              </Col>
+              <Col xs={24} sm={12} md={8} lg={8} xl={8}>
+                <Form.Input
+                  field={'log_content_setting.filter_user_ids'}
+                  label={t('记录请求内容的用户ID')}
+                  placeholder={t('输入用户ID，多个用逗号分隔，为空则不记录')}
+                  onChange={(value) => {
+                    setInputs({
+                      ...inputs,
+                      'log_content_setting.filter_user_ids': value,
+                    });
+                  }}
+                  extraText={t('只记录指定用户ID的请求和响应内容，为空则不记录')}
+                />
+              </Col>
+            </Row>
+
+            <Row style={{ marginTop: 16 }}>
+              <Col>
+                <Button size='default' onClick={onSubmit}>
+                  {t('保存日志设置')}
+                </Button>
+              </Col>
+            </Row>
+
+            {/* 日志清理操作 */}
+            <Row gutter={16} style={{ marginTop: 24 }}>
+              <Col xs={24} sm={12} md={12} lg={12} xl={12}>
                 <Spin spinning={loadingCleanHistoryLog}>
                   <Form.DatePicker
                     label={t('清除历史日志')}
@@ -340,7 +385,7 @@ export default function SettingsLog(props) {
                   </Button>
                 </Spin>
               </Col>
-              <Col xs={24} sm={12} md={8} lg={8} xl={8}>
+              <Col xs={24} sm={12} md={12} lg={12} xl={12}>
                 <Spin spinning={loadingCleanOperationLog}>
                   <Form.DatePicker
                     label={t('清除历史操作日志')}
@@ -370,12 +415,6 @@ export default function SettingsLog(props) {
                   </Button>
                 </Spin>
               </Col>
-            </Row>
-
-            <Row>
-              <Button size='default' onClick={onSubmit}>
-                {t('保存日志设置')}
-              </Button>
             </Row>
           </Form.Section>
         </Form>
