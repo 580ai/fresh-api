@@ -330,6 +330,7 @@ function TokensPage() {
     editingToken,
     closeEdit,
     refresh,
+    activePage,
 
     // Actions state
     selectedKeys,
@@ -353,6 +354,10 @@ function TokensPage() {
     // Translation
     t,
   } = tokensData;
+
+  const refreshKeepSelection = async () => {
+    await refresh(activePage, true);
+  };
 
   return (
     <>
@@ -381,6 +386,7 @@ function TokensPage() {
               batchCopyTokens={batchCopyTokens}
               batchDeleteTokens={batchDeleteTokens}
               copyText={copyText}
+              refresh={refreshKeepSelection}
               t={t}
             />
 

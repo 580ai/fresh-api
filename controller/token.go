@@ -291,6 +291,12 @@ type TokenBatch struct {
 	Ids []int `json:"ids"`
 }
 
+type TokenBatchUpdateGroup struct {
+	Ids             []int  `json:"ids"`
+	Group           string `json:"group"`
+	CrossGroupRetry bool   `json:"cross_group_retry"`
+}
+
 func DeleteTokenBatch(c *gin.Context) {
 	tokenBatch := TokenBatch{}
 	if err := c.ShouldBindJSON(&tokenBatch); err != nil || len(tokenBatch.Ids) == 0 {
@@ -299,6 +305,25 @@ func DeleteTokenBatch(c *gin.Context) {
 	}
 	userId := c.GetInt("id")
 	count, err := model.BatchDeleteTokens(tokenBatch.Ids, userId)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "",
+		"data":    count,
+	})
+}
+
+func UpdateTokenGroupBatch(c *gin.Context) {
+	req := TokenBatchUpdateGroup{}
+	if err := c.ShouldBindJSON(&req); err != nil || len(req.Ids) == 0 {
+		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
+		return
+	}
+	userId := c.GetInt("id")
+	count, err := model.BatchUpdateTokenGroup(req.Ids, userId, req.Group, req.CrossGroupRetry)
 	if err != nil {
 		common.ApiError(c, err)
 		return

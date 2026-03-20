@@ -104,9 +104,11 @@ export const useTokensData = (openFluentNotification) => {
   };
 
   // Refresh function
-  const refresh = async (page = activePage) => {
+  const refresh = async (page = activePage, keepSelection = false) => {
     await loadTokens(page);
-    setSelectedKeys([]);
+    if (!keepSelection) {
+      setSelectedKeys([]);
+    }
   };
 
   // Copy text function
