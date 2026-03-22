@@ -293,6 +293,12 @@ const RechargeCard = ({
                       {payMethods && payMethods.length > 0 ? (
                         <Space wrap>
                           {payMethods.map((payMethod) => {
+
+                            // 隐藏微信付款
+                            if (payMethod.type === 'wxpay') {
+                              return;
+                            }
+
                             const minTopupVal = Number(payMethod.min_topup) || 0;
                             const isStripe = payMethod.type === 'stripe';
                             const disabled =
@@ -452,7 +458,9 @@ const RechargeCard = ({
                               style={{ margin: '0 0 8px 0' }}
                             >
                               <Coins size={18} />
-                              {formatLargeNumber(displayValue)} {symbol}
+                              {/*符号写死为rmb*/}
+                              {/*{formatLargeNumber(displayValue)} {symbol}*/}
+                              {formatLargeNumber(displayValue)} 元
                               {hasDiscount && (
                                 <Tag style={{ marginLeft: 4 }} color='green'>
                                   {t('折').includes('off')
@@ -462,19 +470,19 @@ const RechargeCard = ({
                                 </Tag>
                               )}
                             </Typography.Title>
-                            <div
-                              style={{
-                                color: 'var(--semi-color-text-2)',
-                                fontSize: '12px',
-                                margin: '4px 0',
-                              }}
-                            >
-                              {t('实付')} {symbol}
-                              {displayActualPay.toFixed(2)}，
-                              {hasDiscount
-                                ? `${t('节省')} ${symbol}${displaySave.toFixed(2)}`
-                                : `${t('节省')} ${symbol}0.00`}
-                            </div>
+                            {/*<div*/}
+                            {/*  style={{*/}
+                            {/*    color: 'var(--semi-color-text-2)',*/}
+                            {/*    fontSize: '12px',*/}
+                            {/*    margin: '4px 0',*/}
+                            {/*  }}*/}
+                            {/*>*/}
+                            {/*  {t('实付')} {symbol}*/}
+                            {/*  {displayActualPay.toFixed(2)}，*/}
+                            {/*  {hasDiscount*/}
+                            {/*    ? `${t('节省')} ${symbol}${displaySave.toFixed(2)}`*/}
+                            {/*    : `${t('节省')} ${symbol}0.00`}*/}
+                            {/*</div>*/}
                           </div>
                         </Card>
                       );

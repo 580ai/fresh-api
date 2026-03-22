@@ -34,7 +34,7 @@ import { UserContext } from '../../context/User';
 import { StatusContext } from '../../context/Status';
 
 import RechargeCard from './RechargeCard';
-import InvitationCard from './InvitationCard';
+import TopupNoticeCard from './TopupNoticeCard';
 import TransferModal from './modals/TransferModal';
 import PaymentConfirmModal from './modals/PaymentConfirmModal';
 import TopupHistoryModal from './modals/TopupHistoryModal';
@@ -104,6 +104,7 @@ const TopUp = () => {
     amount_options: [],
     discount: {},
   });
+  const [topupNotice, setTopupNotice] = useState('');
 
   const topUp = async () => {
     if (redemptionCode === '') {
@@ -390,6 +391,7 @@ const TopUp = () => {
           amount_options: data.amount_options || [],
           discount: data.discount || {},
         });
+        setTopupNotice(data.topup_notice || '');
 
         // 处理支付方式
         let payMethods = data.pay_methods || [];
@@ -776,14 +778,7 @@ const TopUp = () => {
           allSubscriptions={allSubscriptions}
           reloadSubscriptionSelf={getSubscriptionSelf}
         />
-        <InvitationCard
-          t={t}
-          userState={userState}
-          renderQuota={renderQuota}
-          setOpenTransfer={setOpenTransfer}
-          affLink={affLink}
-          handleAffLinkClick={handleAffLinkClick}
-        />
+        <TopupNoticeCard t={t} notice={topupNotice} />
       </div>
     </div>
   );

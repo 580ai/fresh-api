@@ -48,6 +48,9 @@ func GetTopUpInfo(c *gin.Context) {
 		}
 	}
 
+	// 获取充值页公告
+	topupNotice := model.GetOption("TopupNotice")
+
 	data := gin.H{
 		"enable_online_topup": operation_setting.PayAddress != "" && operation_setting.EpayId != "" && operation_setting.EpayKey != "",
 		"enable_stripe_topup": setting.StripeApiSecret != "" && setting.StripeWebhookSecret != "" && setting.StripePriceId != "",
@@ -58,6 +61,7 @@ func GetTopUpInfo(c *gin.Context) {
 		"stripe_min_topup":    setting.StripeMinTopUp,
 		"amount_options":      operation_setting.GetPaymentSetting().AmountOptions,
 		"discount":            operation_setting.GetPaymentSetting().AmountDiscount,
+		"topup_notice":        topupNotice,
 	}
 	common.ApiSuccess(c, data)
 }

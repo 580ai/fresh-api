@@ -45,6 +45,7 @@ export default function GeneralSettings(props) {
   const [showQuotaWarning, setShowQuotaWarning] = useState(false);
   const [inputs, setInputs] = useState({
     TopUpLink: '',
+    TopupNotice: '',
     'general_setting.docs_link': '',
     'general_setting.tutorial_link': '',
     'general_setting.group_status_link': '',
@@ -348,6 +349,19 @@ export default function GeneralSettings(props) {
                   extraText={t('每个用户最多可创建的令牌数量，默认 1000，设置过大可能会影响性能')}
                   placeholder={'1000'}
                   onChange={handleFieldChange('token_setting.max_user_tokens')}
+                />
+              </Col>
+            </Row>
+            <Row gutter={16}>
+              <Col xs={24} sm={24} md={24} lg={24} xl={24}>
+                <Form.TextArea
+                  field={'TopupNotice'}
+                  label={t('充值页公告（支持 HTML）')}
+                  placeholder={t('留空则显示默认公告内容，支持 HTML 格式')}
+                  extraText={t('该内容将显示在充值页右侧卡片中')}
+                  autosize={{ minRows: 5, maxRows: 20 }}
+                  onChange={handleFieldChange('TopupNotice')}
+                  showClear
                 />
               </Col>
             </Row>
