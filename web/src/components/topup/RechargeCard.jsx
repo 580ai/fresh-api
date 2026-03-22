@@ -293,12 +293,6 @@ const RechargeCard = ({
                       {payMethods && payMethods.length > 0 ? (
                         <Space wrap>
                           {payMethods.map((payMethod) => {
-
-                            // 隐藏微信付款
-                            if (payMethod.type === 'wxpay') {
-                              return;
-                            }
-
                             const minTopupVal = Number(payMethod.min_topup) || 0;
                             const isStripe = payMethod.type === 'stripe';
                             const disabled =
