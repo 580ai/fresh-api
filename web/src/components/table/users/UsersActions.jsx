@@ -20,11 +20,15 @@ For commercial licensing, please contact support@quantumnous.com
 import React from 'react';
 import { Button } from '@douyinfe/semi-ui';
 
-const UsersActions = ({ setShowAddUser, t }) => {
+const UsersActions = ({ setShowAddUser, currentUserRole, t }) => {
   // Add new user
   const handleAddUser = () => {
     setShowAddUser(true);
   };
+
+  if (currentUserRole === 10) {
+    return null;
+  }
 
   return (
     <div className='flex gap-2 w-full md:w-auto order-2 md:order-1'>

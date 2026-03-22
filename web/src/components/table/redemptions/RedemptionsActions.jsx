@@ -26,6 +26,7 @@ const RedemptionsActions = ({
   setShowEdit,
   batchCopyRedemptions,
   batchDeleteRedemptions,
+  currentUserRole,
   t,
 }) => {
   // Add new redemption code
@@ -36,16 +37,20 @@ const RedemptionsActions = ({
     setShowEdit(true);
   };
 
+  const isAdmin = currentUserRole === 10;
+
   return (
     <div className='flex flex-wrap gap-2 w-full md:w-auto order-2 md:order-1'>
-      <Button
-        type='primary'
-        className='flex-1 md:flex-initial'
-        onClick={handleAddRedemption}
-        size='small'
-      >
-        {t('添加兑换码')}
-      </Button>
+      {!isAdmin && (
+        <Button
+          type='primary'
+          className='flex-1 md:flex-initial'
+          onClick={handleAddRedemption}
+          size='small'
+        >
+          {t('添加兑换码')}
+        </Button>
+      )}
 
       <Button
         type='tertiary'
@@ -56,14 +61,16 @@ const RedemptionsActions = ({
         {t('复制所选兑换码到剪贴板')}
       </Button>
 
-      <Button
-        type='danger'
-        className='w-full md:w-auto'
-        onClick={batchDeleteRedemptions}
-        size='small'
-      >
-        {t('清除失效兑换码')}
-      </Button>
+      {!isAdmin && (
+        <Button
+          type='danger'
+          className='w-full md:w-auto'
+          onClick={batchDeleteRedemptions}
+          size='small'
+        >
+          {t('清除失效兑换码')}
+        </Button>
+      )}
     </div>
   );
 };

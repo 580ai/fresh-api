@@ -31,6 +31,21 @@ import { useTableCompactMode } from '../common/useTableCompactMode';
 export const useRedemptionsData = () => {
   const { t } = useTranslation();
 
+  // 获取当前登录用户角色
+  const getCurrentUserRole = () => {
+    const raw = localStorage.getItem('user');
+    if (raw) {
+      try {
+        const user = JSON.parse(raw);
+        return user.role || 1;
+      } catch {
+        return 1;
+      }
+    }
+    return 1;
+  };
+  const currentUserRole = getCurrentUserRole();
+
   // Basic state
   const [redemptions, setRedemptions] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -74,19 +89,9 @@ export const useRedemptionsData = () => {
   const loadRedemptions = async (page = 1, pageSize) => {
     setLoading(true);
     try {
-      const raw = localStorage.getItem('user');
-      const user = JSON.parse(raw);
-      let res;
-      if (user.role && user.role == 10) { // 普通管理员走营销系统查询逻辑
-        const currentDomain = window.location.origin; // 获取当前来源地址，例如: https://example.com
-        res = await API.get(
-            `/out/newapi/redemption/?p=${page}&page_size=${pageSize}&source=${encodeURIComponent(currentDomain)}`,
-        );
-      } else {
-        res = await API.get(
-            `/api/redemption/?p=${page}&page_size=${pageSize}`,
-        );
-      }
+      const res = await API.get(
+        `/api/redemption/?p=${page}&page_size=${pageSize}`,
+      );
       const { success, message, data } = res.data;
       if (success) {
         const newPageData = data.items;
@@ -112,19 +117,9 @@ export const useRedemptionsData = () => {
 
     setSearching(true);
     try {
-      const raw = localStorage.getItem('user');
-      const user = JSON.parse(raw);
-      let res;
-      if (user.role && user.role == 10) { // 普通管理员走营销系统查询逻辑
-        const currentDomain = window.location.origin; // 获取当前来源地址，例如: https://example.com
-        res = await API.get(
-            `/out/newapi/redemption/search?keyword=${searchKeyword}&p=1&page_size=${pageSize}&source=${encodeURIComponent(currentDomain)}`,
-        );
-      } else {
-        res = await API.get(
-            `/api/redemption/search?keyword=${searchKeyword}&p=1&page_size=${pageSize}`,
-        );
-      }
+      const res = await API.get(
+        `/api/redemption/search?keyword=${searchKeyword}&p=1&page_size=${pageSize}`,
+      );
       const { success, message, data } = res.data;
       if (success) {
         const newPageData = data.items;
@@ -332,6 +327,7 @@ export const useRedemptionsData = () => {
     pageSize,
     tokenCount,
     selectedKeys,
+    currentUserRole,
 
     // Edit state
     editingRedemption,

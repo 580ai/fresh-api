@@ -86,7 +86,10 @@ export const getRedemptionsColumns = ({
   redemptions,
   activePage,
   showDeleteRedemptionModal,
+  currentUserRole,
 }) => {
+  const isAdmin = currentUserRole === 10;
+
   return [
     {
       title: t('ID'),
@@ -144,6 +147,31 @@ export const getRedemptionsColumns = ({
       fixed: 'right',
       width: 205,
       render: (text, record) => {
+        // Admin (role 10) can only view and copy
+        if (isAdmin) {
+          return (
+            <Space>
+              <Popover
+                content={record.key}
+                style={{ padding: 20 }}
+                position='top'
+              >
+                <Button type='tertiary' size='small'>
+                  {t('查看')}
+                </Button>
+              </Popover>
+              <Button
+                size='small'
+                onClick={async () => {
+                  await copyText(record.key);
+                }}
+              >
+                {t('复制')}
+              </Button>
+            </Space>
+          );
+        }
+
         // Create dropdown menu items for more operations
         const moreMenuItems = [
           {

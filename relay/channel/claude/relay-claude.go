@@ -50,6 +50,7 @@ func RequestOpenAI2ClaudeMessage(c *gin.Context, textRequest dto.GeneralOpenAIRe
 	for _, tool := range textRequest.Tools {
 		if params, ok := tool.Function.Parameters.(map[string]any); ok {
 			claudeTool := dto.Tool{
+				Type:        "custom",
 				Name:        tool.Function.Name,
 				Description: tool.Function.Description,
 			}
@@ -338,6 +339,9 @@ func RequestOpenAI2ClaudeMessage(c *gin.Context, textRequest dto.GeneralOpenAIRe
 						Type: mediaMessage.Type,
 					}
 					if mediaMessage.Type == "text" {
+						if mediaMessage.Text == "" {
+							continue // skip empty text blocks, Claude API rejects them
+						}
 						claudeMediaMessage.Text = common.GetPointer[string](mediaMessage.Text)
 					} else {
 						imageUrl := mediaMessage.GetImageMedia()
@@ -781,6 +785,10 @@ func ClaudeStreamHandler(c *gin.Context, resp *http.Response, info *relaycommon.
 	}
 
 	HandleStreamFinalResponse(c, info, claudeInfo)
+
+	// 存储响应内容用于日志记录（流式响应拼接后的完整文本）
+	c.Set("log_response_body", claudeInfo.ResponseText.String())
+
 	return claudeInfo.Usage, nil
 }
 
@@ -848,6 +856,10 @@ func ClaudeHandler(c *gin.Context, resp *http.Response, info *relaycommon.RelayI
 	if handleErr != nil {
 		return nil, handleErr
 	}
+
+	// 存储响应内容用于日志记录
+	c.Set("log_response_body", string(responseBody))
+
 	return claudeInfo.Usage, nil
 }
 

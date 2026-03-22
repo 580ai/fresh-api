@@ -58,6 +58,7 @@ func main() {
 	}
 
 	defer func() {
+		model.CloseLogContentFile()
 		err := model.CloseDB()
 		if err != nil {
 			common.FatalLog("failed to close database: " + err.Error())

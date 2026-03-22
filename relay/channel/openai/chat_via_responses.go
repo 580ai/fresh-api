@@ -87,6 +87,10 @@ func OaiResponsesToChatHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 	}
 
 	service.IOCopyBytesGracefully(c, resp, responseBody)
+
+	// 收集响应内容用于日志记录
+	c.Set("log_response_body", string(responseBody))
+
 	return usage, nil
 }
 
@@ -535,5 +539,9 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 	if info.RelayFormat == types.RelayFormatOpenAI {
 		helper.Done(c)
 	}
+
+	// 收集响应内容用于日志记录
+	c.Set("log_response_body", usageText.String())
+
 	return usage, nil
 }

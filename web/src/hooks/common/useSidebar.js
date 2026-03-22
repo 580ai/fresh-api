@@ -289,8 +289,8 @@ export const useSidebar = () => {
           const sectionEnabled = userSection ? userSection.enabled !== false : true;
           result[sectionKey] = { enabled: sectionEnabled };
 
-          // 只允许兑换码管理、用户管理和操作日志
-          const allowedModules = ['redemption', 'user', 'operation_log'];
+          // 只允许兑换码管理和用户管理
+          const allowedModules = ['redemption', 'user'];
           Object.keys(adminSection).forEach((moduleKey) => {
             if (moduleKey === 'enabled') return;
 

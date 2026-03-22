@@ -22,6 +22,7 @@ import { Button, Space } from '@douyinfe/semi-ui';
 import { showError } from '../../../helpers';
 import CopyTokensModal from './modals/CopyTokensModal';
 import DeleteTokensModal from './modals/DeleteTokensModal';
+import UpdateGroupModal from './modals/UpdateGroupModal';
 
 const TokensActions = ({
   selectedKeys,
@@ -30,11 +31,13 @@ const TokensActions = ({
   batchCopyTokens,
   batchDeleteTokens,
   copyText,
+  refresh,
   t,
 }) => {
   // Modal states
   const [showCopyModal, setShowCopyModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showUpdateGroupModal, setShowUpdateGroupModal] = useState(false);
 
   // Handle copy selected tokens with options
   const handleCopySelectedTokens = () => {
@@ -52,6 +55,15 @@ const TokensActions = ({
       return;
     }
     setShowDeleteModal(true);
+  };
+
+  // Handle update group for selected tokens
+  const handleUpdateGroup = () => {
+    if (selectedKeys.length === 0) {
+      showError(t('请至少选择一个令牌！'));
+      return;
+    }
+    setShowUpdateGroupModal(true);
   };
 
   // Handle delete confirmation
@@ -87,6 +99,15 @@ const TokensActions = ({
         </Button>
 
         <Button
+          type='secondary'
+          className='flex-1 md:flex-initial'
+          onClick={handleUpdateGroup}
+          size='small'
+        >
+          {t('修改分组')}
+        </Button>
+
+        <Button
           type='danger'
           className='w-full md:w-auto'
           onClick={handleDeleteSelectedTokens}
@@ -109,6 +130,14 @@ const TokensActions = ({
         onCancel={() => setShowDeleteModal(false)}
         onConfirm={handleConfirmDelete}
         selectedKeys={selectedKeys}
+        t={t}
+      />
+
+      <UpdateGroupModal
+        visible={showUpdateGroupModal}
+        onCancel={() => setShowUpdateGroupModal(false)}
+        selectedKeys={selectedKeys}
+        onSuccess={refresh}
         t={t}
       />
     </>
