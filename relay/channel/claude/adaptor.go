@@ -26,7 +26,7 @@ func (a *Adaptor) ConvertGeminiRequest(*gin.Context, *relaycommon.RelayInfo, *dt
 }
 
 func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, info *relaycommon.RelayInfo, request *dto.ClaudeRequest) (any, error) {
-	// 模拟用户ID：基于用户身份生成稳定的 metadata.user_id
+	// 模拟用户ID：基于请求内容生成稳定的 metadata.user_id，提高缓存命中率
 	if info.ChannelSetting.SimulateUserId && info.UserId > 0 {
 		var existingMetadata map[string]interface{}
 
@@ -39,8 +39,8 @@ func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, info *relaycommon.RelayIn
 			existingMetadata = make(map[string]interface{})
 		}
 
-		// 生成并设置稳定的 user_id
-		stableUserId := helper.GenerateStableUserId(info.UserId)
+		// 基于 system prompt + 第一条 user message 生成稳定的 user_id
+		stableUserId := helper.GenerateStableUserId(request.System, request.Messages)
 		existingMetadata["user_id"] = stableUserId
 
 		metadataJSON, err := json.Marshal(existingMetadata)

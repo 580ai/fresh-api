@@ -161,8 +161,8 @@ func ClaudeHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 					metadata = make(map[string]interface{})
 				}
 
-				// 注入稳定的 user_id
-				stableUserId := helper.GenerateStableUserId(info.UserId)
+				// 基于请求内容生成稳定的 user_id，提高缓存命中率
+				stableUserId := helper.GenerateStableUserIdFromRaw(bodyMap)
 				metadata["user_id"] = stableUserId
 				bodyMap["metadata"] = metadata
 

@@ -3,6 +3,7 @@ package helper
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -216,10 +217,20 @@ func GenerateFinalUsageResponse(id string, createAt int64, model string, usage d
 // claudeUserIdNamespace 用于 UUID v5 生成的固定命名空间
 var claudeUserIdNamespace = uuid.MustParse("6ba7b810-9dad-11d1-80b4-00c04fd430c8")
 
-// GenerateStableUserId 基于用户ID生成稳定的 user_id
+// GenerateStableUserId 基于请求内容生成稳定的 user_id，提高前缀缓存命中率。
+// 同一个 system prompt 的请求会分配到同一个缓存池。
 // 格式: user_{64位Hex}_account__session_{UUID}
-func GenerateStableUserId(userId int) string {
-	identifier := fmt.Sprintf("user_%d", userId)
+func GenerateStableUserId(system any, messages []dto.ClaudeMessage) string {
+	// 提取 system prompt 文本作为缓存指纹的主要依据
+	// 同一个 system prompt 的所有请求共享缓存池，前缀匹配由 API 自动完成
+	systemText := extractSystemText(system)
+
+	// 提取第一条 user message 进一步区分不同会话
+	firstUserMsg := extractFirstUserMessage(messages)
+
+	// 纯靠内容指纹：同一个 Claude Code 会话的 system prompt 包含
+	// 项目路径、CLAUDE.md 等，天然唯一；首条消息进一步区分
+	identifier := fmt.Sprintf("%s|%s", systemText, firstUserMsg)
 
 	// 生成稳定的 64 位 Hex（SHA256）
 	hash := sha256.Sum256([]byte(identifier))
@@ -229,4 +240,93 @@ func GenerateStableUserId(userId int) string {
 	uuidPart := uuid.NewSHA1(claudeUserIdNamespace, []byte(identifier))
 
 	return fmt.Sprintf("user_%s_account__session_%s", hexPart, uuidPart.String())
+}
+
+// GenerateStableUserIdFromRaw 从原始 JSON body 中提取内容生成稳定的 user_id（透传模式用）
+func GenerateStableUserIdFromRaw(bodyMap map[string]interface{}) string {
+	systemText := ""
+	if sys, ok := bodyMap["system"]; ok && sys != nil {
+		switch v := sys.(type) {
+		case string:
+			systemText = v
+		default:
+			// system 是数组格式，序列化后取哈希
+			if b, err := json.Marshal(v); err == nil {
+				systemText = string(b)
+			}
+		}
+	}
+
+	firstUserMsg := ""
+	if msgs, ok := bodyMap["messages"].([]interface{}); ok && len(msgs) > 0 {
+		for _, msg := range msgs {
+			msgMap, ok := msg.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			if msgMap["role"] == "user" {
+				switch v := msgMap["content"].(type) {
+				case string:
+					firstUserMsg = v
+				default:
+					if b, err := json.Marshal(v); err == nil {
+						firstUserMsg = string(b)
+					}
+				}
+				break
+			}
+		}
+	}
+
+	identifier := fmt.Sprintf("%s|%s", systemText, firstUserMsg)
+
+	hash := sha256.Sum256([]byte(identifier))
+	hexPart := hex.EncodeToString(hash[:])
+
+	uuidPart := uuid.NewSHA1(claudeUserIdNamespace, []byte(identifier))
+
+	return fmt.Sprintf("user_%s_account__session_%s", hexPart, uuidPart.String())
+}
+
+// extractSystemText 从 ClaudeRequest.System 提取文本内容
+func extractSystemText(system any) string {
+	if system == nil {
+		return ""
+	}
+	switch v := system.(type) {
+	case string:
+		return v
+	case []dto.ClaudeMediaMessage:
+		var texts []string
+		for _, msg := range v {
+			if msg.Type == "text" {
+				texts = append(texts, msg.GetText())
+			}
+		}
+		return fmt.Sprintf("%v", texts)
+	default:
+		if b, err := json.Marshal(v); err == nil {
+			return string(b)
+		}
+		return fmt.Sprintf("%v", v)
+	}
+}
+
+// extractFirstUserMessage 从消息列表中提取第一条 user 消息的文本
+func extractFirstUserMessage(messages []dto.ClaudeMessage) string {
+	for _, msg := range messages {
+		if msg.Role != "user" {
+			continue
+		}
+		switch v := msg.Content.(type) {
+		case string:
+			return v
+		default:
+			if b, err := json.Marshal(v); err == nil {
+				return string(b)
+			}
+			return fmt.Sprintf("%v", v)
+		}
+	}
+	return ""
 }
