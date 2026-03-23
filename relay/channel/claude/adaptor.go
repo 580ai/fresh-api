@@ -39,9 +39,11 @@ func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, info *relaycommon.RelayIn
 			existingMetadata = make(map[string]interface{})
 		}
 
-		// 基于 system prompt + 第一条 user message 生成稳定的 user_id
-		stableUserId := helper.GenerateStableUserId(request.System, request.Messages)
-		existingMetadata["user_id"] = stableUserId
+		// 用户已经传了 user_id 就用用户的，没传才生成
+		if _, hasUserId := existingMetadata["user_id"]; !hasUserId {
+			stableUserId := helper.GenerateStableUserId(request.System, request.Messages)
+			existingMetadata["user_id"] = stableUserId
+		}
 
 		metadataJSON, err := json.Marshal(existingMetadata)
 		if err == nil {

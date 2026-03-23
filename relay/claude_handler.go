@@ -161,13 +161,15 @@ func ClaudeHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 					metadata = make(map[string]interface{})
 				}
 
-				// 基于请求内容生成稳定的 user_id，提高缓存命中率
-				stableUserId := helper.GenerateStableUserIdFromRaw(bodyMap)
-				metadata["user_id"] = stableUserId
-				bodyMap["metadata"] = metadata
+				// 用户已经传了 user_id 就用用户的，没传才生成
+				if _, hasUserId := metadata["user_id"]; !hasUserId {
+					stableUserId := helper.GenerateStableUserIdFromRaw(bodyMap)
+					metadata["user_id"] = stableUserId
+					bodyMap["metadata"] = metadata
 
-				// 调试日志
-				common.SysLog(fmt.Sprintf("[SimulateUserId] Injected user_id=%s for UserId=%d, stream=%v", stableUserId, info.UserId, info.IsStream))
+					// 调试日志
+					common.SysLog(fmt.Sprintf("[SimulateUserId] Injected user_id=%s for UserId=%d, stream=%v", stableUserId, info.UserId, info.IsStream))
+				}
 
 				// 重新序列化
 				modifiedBody, marshalErr := json.Marshal(bodyMap)
