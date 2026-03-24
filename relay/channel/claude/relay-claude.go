@@ -193,6 +193,8 @@ func RequestOpenAI2ClaudeMessage(c *gin.Context, textRequest dto.GeneralOpenAIRe
 				BudgetTokens: common.GetPointer[int](4096),
 			}
 		}
+		claudeRequest.TopP = 0
+		claudeRequest.Temperature = common.GetPointer[float64](1.0)
 	}
 
 	// 指定了 reasoning 参数,覆盖 budgetTokens
@@ -208,6 +210,18 @@ func RequestOpenAI2ClaudeMessage(c *gin.Context, textRequest dto.GeneralOpenAIRe
 				Type:         "enabled",
 				BudgetTokens: &budgetTokens,
 			}
+			claudeRequest.TopP = 0
+			claudeRequest.Temperature = common.GetPointer[float64](1.0)
+		}
+	}
+
+	// 直接传了 thinking 参数（如 {"type":"enabled","budget_tokens":4096} 或 {"type":"adaptive"}），最高优先级
+	if len(textRequest.THINKING) > 0 {
+		var thinking dto.Thinking
+		if err := common.Unmarshal(textRequest.THINKING, &thinking); err == nil && thinking.Type != "" {
+			claudeRequest.Thinking = &thinking
+			claudeRequest.TopP = 0
+			claudeRequest.Temperature = common.GetPointer[float64](1.0)
 		}
 	}
 
@@ -338,6 +352,9 @@ func RequestOpenAI2ClaudeMessage(c *gin.Context, textRequest dto.GeneralOpenAIRe
 						Type: mediaMessage.Type,
 					}
 					if mediaMessage.Type == "text" {
+						if mediaMessage.Text == "" {
+							continue // skip empty text blocks, Claude API rejects them
+						}
 						claudeMediaMessage.Text = common.GetPointer[string](mediaMessage.Text)
 					} else {
 						imageUrl := mediaMessage.GetImageMedia()
