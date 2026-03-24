@@ -169,6 +169,11 @@ func ClaudeHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 
 					// 调试日志
 					common.SysLog(fmt.Sprintf("[SimulateUserId] Injected user_id=%s for UserId=%d, stream=%v", stableUserId, info.UserId, info.IsStream))
+
+					// 记录注入日志 + 传递给响应处理
+					systemPrefix, firstMsgPrefix, msgCount := helper.ExtractLogFieldsFromRaw(bodyMap)
+					helper.LogUserIdInject(stableUserId, systemPrefix, firstMsgPrefix, msgCount)
+					c.Set("simulate_user_id", stableUserId)
 				}
 
 				// 重新序列化
