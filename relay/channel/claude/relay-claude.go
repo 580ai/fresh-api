@@ -789,16 +789,6 @@ func ClaudeStreamHandler(c *gin.Context, resp *http.Response, info *relaycommon.
 	// 存储响应内容用于日志记录（流式响应拼接后的完整文本）
 	c.Set("log_response_body", claudeInfo.ResponseText.String())
 
-	// 记录 simulate_user_id 缓存命中统计
-	if simUserId, exists := c.Get("simulate_user_id"); exists {
-		if uid, ok := simUserId.(string); ok {
-			helper.LogUserIdCacheUsage(uid,
-				claudeInfo.Usage.PromptTokensDetails.CachedCreationTokens,
-				claudeInfo.Usage.PromptTokensDetails.CachedTokens,
-				claudeInfo.Usage.PromptTokens)
-		}
-	}
-
 	return claudeInfo.Usage, nil
 }
 
@@ -869,16 +859,6 @@ func ClaudeHandler(c *gin.Context, resp *http.Response, info *relaycommon.RelayI
 
 	// 存储响应内容用于日志记录
 	c.Set("log_response_body", string(responseBody))
-
-	// 记录 simulate_user_id 缓存命中统计
-	if simUserId, exists := c.Get("simulate_user_id"); exists {
-		if uid, ok := simUserId.(string); ok {
-			helper.LogUserIdCacheUsage(uid,
-				claudeInfo.Usage.PromptTokensDetails.CachedCreationTokens,
-				claudeInfo.Usage.PromptTokensDetails.CachedTokens,
-				claudeInfo.Usage.PromptTokens)
-		}
-	}
 
 	return claudeInfo.Usage, nil
 }

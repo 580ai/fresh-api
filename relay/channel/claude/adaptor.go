@@ -43,11 +43,6 @@ func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, info *relaycommon.RelayIn
 		if _, hasUserId := existingMetadata["user_id"]; !hasUserId {
 			stableUserId := helper.GenerateStableUserId(request.System, request.Messages)
 			existingMetadata["user_id"] = stableUserId
-
-			// 记录注入日志 + 传递给响应处理
-			systemPrefix, firstMsgPrefix, msgCount := helper.ExtractLogFieldsFromRequest(request.System, request.Messages)
-			helper.LogUserIdInject(stableUserId, systemPrefix, firstMsgPrefix, msgCount)
-			c.Set("simulate_user_id", stableUserId)
 		}
 
 		metadataJSON, err := json.Marshal(existingMetadata)

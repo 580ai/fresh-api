@@ -250,8 +250,8 @@ func GenerateStableUserIdFromRaw(bodyMap map[string]interface{}) string {
 		case string:
 			systemText = v
 		default:
-			// system 是数组格式，序列化后取哈希
-			if b, err := json.Marshal(v); err == nil {
+			stripped := stripCacheControl(v)
+			if b, err := json.Marshal(stripped); err == nil {
 				systemText = string(b)
 			}
 		}
@@ -269,7 +269,8 @@ func GenerateStableUserIdFromRaw(bodyMap map[string]interface{}) string {
 				case string:
 					firstUserMsg = v
 				default:
-					if b, err := json.Marshal(v); err == nil {
+					stripped := stripCacheControl(v)
+					if b, err := json.Marshal(stripped); err == nil {
 						firstUserMsg = string(b)
 					}
 				}
@@ -288,6 +289,30 @@ func GenerateStableUserIdFromRaw(bodyMap map[string]interface{}) string {
 	return fmt.Sprintf("user_%s_account__session_%s", hexPart, uuidPart.String())
 }
 
+// stripCacheControl 递归移除 JSON 对象中的 cache_control 字段，
+// 避免缓存指令干扰 user_id 生成的稳定性。
+func stripCacheControl(v interface{}) interface{} {
+	switch val := v.(type) {
+	case map[string]interface{}:
+		result := make(map[string]interface{})
+		for k, item := range val {
+			if k == "cache_control" {
+				continue
+			}
+			result[k] = stripCacheControl(item)
+		}
+		return result
+	case []interface{}:
+		result := make([]interface{}, len(val))
+		for i, item := range val {
+			result[i] = stripCacheControl(item)
+		}
+		return result
+	default:
+		return v
+	}
+}
+
 // extractSystemText 从 ClaudeRequest.System 提取文本内容
 func extractSystemText(system any) string {
 	if system == nil {
@@ -297,15 +322,31 @@ func extractSystemText(system any) string {
 	case string:
 		return v
 	case []dto.ClaudeMediaMessage:
-		var texts []string
+		// 转成 interface{} 后去掉 cache_control 再序列化
+		var items []interface{}
 		for _, msg := range v {
-			if msg.Type == "text" {
-				texts = append(texts, msg.GetText())
+			b, err := json.Marshal(msg)
+			if err != nil {
+				continue
 			}
+			var m interface{}
+			_ = json.Unmarshal(b, &m)
+			items = append(items, stripCacheControl(m))
 		}
-		return fmt.Sprintf("%v", texts)
+		if b, err := json.Marshal(items); err == nil {
+			return string(b)
+		}
+		return fmt.Sprintf("%v", v)
 	default:
+		// 先转 interface{} 再 strip cache_control
 		if b, err := json.Marshal(v); err == nil {
+			var raw interface{}
+			if err2 := json.Unmarshal(b, &raw); err2 == nil {
+				stripped := stripCacheControl(raw)
+				if b2, err3 := json.Marshal(stripped); err3 == nil {
+					return string(b2)
+				}
+			}
 			return string(b)
 		}
 		return fmt.Sprintf("%v", v)
@@ -323,6 +364,13 @@ func extractFirstUserMessage(messages []dto.ClaudeMessage) string {
 			return v
 		default:
 			if b, err := json.Marshal(v); err == nil {
+				var raw interface{}
+				if err2 := json.Unmarshal(b, &raw); err2 == nil {
+					stripped := stripCacheControl(raw)
+					if b2, err3 := json.Marshal(stripped); err3 == nil {
+						return string(b2)
+					}
+				}
 				return string(b)
 			}
 			return fmt.Sprintf("%v", v)
