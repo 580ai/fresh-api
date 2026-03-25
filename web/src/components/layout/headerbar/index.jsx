@@ -21,6 +21,7 @@ import React from 'react';
 import { useHeaderBar } from '../../../hooks/common/useHeaderBar';
 import { useNotifications } from '../../../hooks/common/useNotifications';
 import { useNavigation } from '../../../hooks/common/useNavigation';
+import { useActualTheme } from '../../../context/Theme';
 import NoticeModal from '../NoticeModal';
 import MobileMenuButton from './MobileMenuButton';
 import HeaderLogo from './HeaderLogo';
@@ -28,6 +29,7 @@ import Navigation from './Navigation';
 import ActionButtons from './ActionButtons';
 
 const HeaderBar = ({ onMobileMenuToggle, drawerOpen }) => {
+  const actualTheme = useActualTheme();
   const {
     userState,
     statusState,
@@ -35,6 +37,7 @@ const HeaderBar = ({ onMobileMenuToggle, drawerOpen }) => {
     collapsed,
     logoLoaded,
     currentLang,
+    location,
     isLoading,
     systemName,
     logo,
@@ -66,8 +69,23 @@ const HeaderBar = ({ onMobileMenuToggle, drawerOpen }) => {
 
   const { mainNavLinks } = useNavigation(t, docsLink, tutorialLink, groupStatusLink, headerNavModules);
 
+  // 首页使用更深的背景色，确保深色模式下文字清晰可见
+  const isHomePage = location.pathname === '/';
+  const isDarkMode = actualTheme === 'dark';
+
+  // 根据页面和主题动态设置背景色
+  const headerStyle = {};
+  if (isHomePage && isDarkMode) {
+    headerStyle.backgroundColor = 'rgba(17, 24, 39, 0.7)'; // gray-900 with 70% opacity for glassmorphism effect
+    headerStyle.backdropFilter = 'blur(12px) saturate(180%)';
+    headerStyle.WebkitBackdropFilter = 'blur(12px) saturate(180%)'; // Safari support
+  }
+
   return (
-    <header className='text-semi-color-text-0 sticky top-0 z-50 transition-colors duration-300 bg-white/75 dark:bg-zinc-900/75 backdrop-blur-lg'>
+    <header
+      className='text-semi-color-text-0 sticky top-0 z-50 transition-colors duration-300 bg-white/75 dark:bg-zinc-900/75 backdrop-blur-lg'
+      style={headerStyle}
+    >
       <NoticeModal
         visible={noticeVisible}
         onClose={handleNoticeClose}

@@ -39,6 +39,7 @@ import LinuxDoIcon from '../common/logo/LinuxDoIcon';
 import DocumentRenderer from '../../components/common/DocumentRenderer';
 import { UserContext } from '../../context/User';
 import { useTranslation } from 'react-i18next';
+import { useActualTheme } from '../../context/Theme';
 
 const { Title, Text } = Typography;
 
@@ -47,6 +48,8 @@ const isPhoneMode = import.meta.env.VITE_PHONE_REGISTER === 'true';
 const RegisterForm = () => {
   let navigate = useNavigate();
   const { t } = useTranslation();
+  const actualTheme = useActualTheme();
+  const isDarkMode = actualTheme === 'dark';
   const [inputs, setInputs] = useState({
     username: '',
     password: '',
@@ -238,6 +241,14 @@ const RegisterForm = () => {
     }
   };
 
+  const inputStyle = {
+    backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : '#F0F4FF',
+    border: 'none',
+    height: '45px',
+    borderRadius: '12px',
+    color: isDarkMode ? '#fff' : undefined,
+  };
+
   const renderRegisterForm = () => (
     <div className="w-full">
       <Form className="space-y-3">
@@ -250,7 +261,7 @@ const RegisterForm = () => {
                 field="username"
                 placeholder={t('请输入手机号')}
                 onChange={(v) => handleChange('username', v)}
-                style={{ backgroundColor: '#F0F4FF', border: 'none', height: '45px', borderRadius: '12px' }}
+                style={inputStyle}
                 suffix={
                   <Button
                     onClick={sendVerificationCode}
@@ -271,7 +282,7 @@ const RegisterForm = () => {
                 field="code"
                 placeholder={t('请输入验证码')}
                 onChange={(v) => handleChange('code', v)}
-                style={{ backgroundColor: '#F0F4FF', border: 'none', height: '45px', borderRadius: '12px' }}
+                style={inputStyle}
               />
             </div>
           </>
@@ -283,7 +294,7 @@ const RegisterForm = () => {
               field="username"
               placeholder={t('请输入用户名')}
               onChange={(v) => handleChange('username', v)}
-              style={{ backgroundColor: '#F0F4FF', border: 'none', height: '45px', borderRadius: '12px' }}
+              style={inputStyle}
             />
           </div>
         )}
@@ -295,7 +306,7 @@ const RegisterForm = () => {
             mode="password"
             placeholder={t('最短 8 位')}
             onChange={(v) => handleChange('password', v)}
-            style={{ backgroundColor: '#F0F4FF', border: 'none', height: '45px', borderRadius: '12px' }}
+            style={inputStyle}
           />
         </div>
         <div className="space-y-1">
@@ -306,7 +317,7 @@ const RegisterForm = () => {
             mode="password"
             placeholder={t('请再次输入密码')}
             onChange={(v) => handleChange('password2', v)}
-            style={{ backgroundColor: '#F0F4FF', border: 'none', height: '45px', borderRadius: '12px' }}
+            style={inputStyle}
           />
         </div>
 
@@ -319,7 +330,7 @@ const RegisterForm = () => {
                 field="email"
                 placeholder={t('输入邮箱地址')}
                 onChange={(v) => handleChange('email', v)}
-                style={{ backgroundColor: '#F0F4FF', border: 'none', height: '45px', borderRadius: '12px' }}
+                style={inputStyle}
                 suffix={
                   <Button
                     onClick={sendVerificationCode}
@@ -340,7 +351,7 @@ const RegisterForm = () => {
                 field="verification_code"
                 placeholder={t('邮箱验证码')}
                 onChange={(v) => handleChange('verification_code', v)}
-                style={{ backgroundColor: '#F0F4FF', border: 'none', height: '45px', borderRadius: '12px' }}
+                style={inputStyle}
               />
             </div>
           </>
@@ -392,7 +403,7 @@ const RegisterForm = () => {
   );
 
   return (
-    <div className="h-screen w-full flex bg-white overflow-hidden font-sans">
+    <div className="h-screen w-full flex bg-white dark:bg-gray-900 overflow-hidden font-sans">
       {/* --- 左侧背景区域 (48% 宽度) --- */}
       <div
         className="hidden lg:block lg:w-[48%] h-full relative"
@@ -413,15 +424,15 @@ const RegisterForm = () => {
       </div>
 
       {/* --- 右侧注册区 (52% 宽度) --- */}
-      <div className="w-full lg:w-[52%] flex flex-col items-center justify-center px-8 sm:px-20 bg-white relative">
+      <div className="w-full lg:w-[52%] flex flex-col items-center justify-center px-8 sm:px-20 bg-white dark:bg-gray-900 relative">
         <div className="absolute top-8 right-8 cursor-pointer text-gray-300 hover:text-blue-600 transition-colors">
           <IconLanguage size="large" />
         </div>
 
         <div className="w-full max-w-sm">
           <div className="flex flex-col items-center mb-8 text-center">
-            <Title heading={1} className="!m-0 text-gray-800">{systemName}</Title>
-            <Text type="secondary" className="mt-1">{t('注 册')}</Text>
+            <Title heading={1} className="!m-0 text-gray-800 dark:text-gray-100">{systemName}</Title>
+            <Text type="secondary" className="mt-1 dark:text-gray-300">{t('注 册')}</Text>
           </div>
 
           {renderRegisterForm()}

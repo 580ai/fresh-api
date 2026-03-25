@@ -42,6 +42,7 @@ import LinuxDoIcon from '../common/logo/LinuxDoIcon';
 import TwoFAVerification from './TwoFAVerification';
 import DocumentRenderer from '../../components/common/DocumentRenderer';
 import { useTranslation } from 'react-i18next';
+import { useActualTheme } from '../../context/Theme';
 
 const { Title, Text } = Typography;
 
@@ -50,6 +51,8 @@ const isPhoneMode = import.meta.env.VITE_PHONE_REGISTER === 'true';
 const LoginForm = () => {
   let navigate = useNavigate();
   const { t } = useTranslation();
+  const actualTheme = useActualTheme();
+  const isDarkMode = actualTheme === 'dark';
   const [inputs, setInputs] = useState({ username: '', password: '', wechat_verification_code: '' });
   const { username, password } = inputs;
   const [userState, userDispatch] = useContext(UserContext);
@@ -136,6 +139,14 @@ const LoginForm = () => {
     handleSubmit(true); 
   };
 
+  const inputStyle = {
+    backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : '#F0F4FF',
+    border: 'none',
+    height: '48px',
+    borderRadius: '12px',
+    color: isDarkMode ? '#fff' : undefined,
+  };
+
   const renderEmailForm = () => (
     <div className="w-full">
       <Form className="space-y-4">
@@ -146,7 +157,7 @@ const LoginForm = () => {
             field="username"
             placeholder={isPhoneMode ? '请输入手机号' : '请输入用户名/邮箱'}
             onChange={(v) => handleChange('username', v)}
-            style={{ backgroundColor: '#F0F4FF', border: 'none', height: '48px', borderRadius: '12px' }}
+            style={inputStyle}
           />
         </div>
         <div className="space-y-1">
@@ -157,7 +168,7 @@ const LoginForm = () => {
             mode="password"
             placeholder="请输入密码"
             onChange={(v) => handleChange('password', v)}
-            style={{ backgroundColor: '#F0F4FF', border: 'none', height: '48px', borderRadius: '12px' }}
+            style={inputStyle}
           />
         </div>
 
@@ -208,10 +219,10 @@ const LoginForm = () => {
   );
 
   return (
-    <div className="h-screen w-full flex bg-white overflow-hidden font-sans">
-      
+    <div className="h-screen w-full flex bg-white dark:bg-gray-900 overflow-hidden font-sans">
+
       {/* --- 左侧背景区域 (48% 宽度) --- */}
-      <div 
+      <div
         className="hidden lg:block lg:w-[48%] h-full relative"
         style={{
             backgroundImage: 'url("/login.png")',
@@ -230,15 +241,15 @@ const LoginForm = () => {
       </div>
 
       {/* --- 右侧登录区域 (52% 宽度) --- */}
-      <div className="w-full lg:w-[52%] flex flex-col items-center justify-center px-8 sm:px-20 bg-white relative">
+      <div className="w-full lg:w-[52%] flex flex-col items-center justify-center px-8 sm:px-20 bg-white dark:bg-gray-900 relative">
         <div className="absolute top-8 right-8 cursor-pointer text-gray-300 hover:text-blue-600 transition-colors">
             <IconLanguage size="large" />
         </div>
 
         <div className="w-full max-w-sm">
           <div className="flex flex-col items-center mb-10 text-center">
-            <Title heading={1} className="!m-0 text-gray-800">{systemName}</Title>
-            <Text type="secondary" className="mt-1">用户登录</Text>
+            <Title heading={1} className="!m-0 text-gray-800 dark:text-gray-100">{systemName}</Title>
+            <Text type="secondary" className="mt-1 dark:text-gray-300">用户登录</Text>
           </div>
 
           {renderEmailForm()}
