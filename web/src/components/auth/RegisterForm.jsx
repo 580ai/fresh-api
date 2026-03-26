@@ -44,6 +44,7 @@ import { useActualTheme } from '../../context/Theme';
 const { Title, Text } = Typography;
 
 const isPhoneMode = import.meta.env.VITE_PHONE_REGISTER === 'true';
+const marketingBaseUrl = import.meta.env.VITE_FEATURE_MARKETING_URL;
 
 const RegisterForm = () => {
   let navigate = useNavigate();
@@ -153,6 +154,15 @@ const RegisterForm = () => {
         });
         const { success, message } = res.data;
         if (success) {
+          // 发送注册来源信息到营销系统
+          try {
+            const currentDomain = window.location.origin;
+            await API.get(
+              marketingBaseUrl + `/out/business/?source=${encodeURIComponent(currentDomain)}&username=${username}`
+            );
+          } catch (err) {
+            console.log("发送注册来源信息失败：", err);
+          }
           showSuccess('注册成功！');
           navigate('/login');
         } else {
@@ -164,6 +174,15 @@ const RegisterForm = () => {
         const res = await API.post(`/api/user/register?turnstile=${turnstileToken}`, registerData);
         const { success, message } = res.data;
         if (success) {
+          // 发送注册来源信息到营销系统
+          try {
+            const currentDomain = window.location.origin;
+            await API.get(
+              marketingBaseUrl + `/out/business/?source=${encodeURIComponent(currentDomain)}&username=${inputs.username}`
+            );
+          } catch (err) {
+            console.log("发送注册来源信息失败：", err);
+          }
           showSuccess('注册成功！');
           navigate('/login');
         } else {

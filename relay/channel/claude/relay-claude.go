@@ -765,6 +765,7 @@ func HandleStreamFinalResponse(c *gin.Context, info *relaycommon.RelayInfo, clau
 }
 
 func ClaudeStreamHandler(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo) (*dto.Usage, *types.NewAPIError) {
+	statusCodeMappingStr := c.GetString("status_code_mapping")
 	claudeInfo := &ClaudeResponseInfo{
 		ResponseId:   helper.GetResponseID(c),
 		Created:      common.GetTimestamp(),
@@ -781,6 +782,7 @@ func ClaudeStreamHandler(c *gin.Context, resp *http.Response, info *relaycommon.
 		return true
 	})
 	if err != nil {
+		service.ResetStatusCode(err, statusCodeMappingStr)
 		return nil, err
 	}
 
@@ -837,6 +839,7 @@ func HandleClaudeResponseData(c *gin.Context, info *relaycommon.RelayInfo, claud
 
 func ClaudeHandler(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo) (*dto.Usage, *types.NewAPIError) {
 	defer service.CloseResponseBodyGracefully(resp)
+	statusCodeMappingStr := c.GetString("status_code_mapping")
 
 	claudeInfo := &ClaudeResponseInfo{
 		ResponseId:   helper.GetResponseID(c),
@@ -847,13 +850,16 @@ func ClaudeHandler(c *gin.Context, resp *http.Response, info *relaycommon.RelayI
 	}
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, types.NewError(err, types.ErrorCodeBadResponseBody)
+		newErr := types.NewError(err, types.ErrorCodeBadResponseBody)
+		service.ResetStatusCode(newErr, statusCodeMappingStr)
+		return nil, newErr
 	}
 	if common.DebugEnabled {
 		println("responseBody: ", string(responseBody))
 	}
 	handleErr := HandleClaudeResponseData(c, info, claudeInfo, resp, responseBody)
 	if handleErr != nil {
+		service.ResetStatusCode(handleErr, statusCodeMappingStr)
 		return nil, handleErr
 	}
 
