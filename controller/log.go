@@ -38,6 +38,7 @@ func GetAllLogs(c *gin.Context) {
 func GetUserLogs(c *gin.Context) {
 	pageInfo := common.GetPageQuery(c)
 	userId := c.GetInt("id")
+	userRole := c.GetInt("role")
 	logType, _ := strconv.Atoi(c.Query("type"))
 	startTimestamp, _ := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
 	endTimestamp, _ := strconv.ParseInt(c.Query("end_timestamp"), 10, 64)
@@ -50,6 +51,21 @@ func GetUserLogs(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+
+	// 普通用户脱敏 Other 字段中的渠道信息
+	if userRole < common.RoleAdminUser {
+		for i := range logs {
+			if logs[i].Other != "" {
+				otherMap, _ := common.StrToMap(logs[i].Other)
+				if otherMap != nil {
+					delete(otherMap, "channel_id")
+					delete(otherMap, "channel_name")
+					logs[i].Other = common.MapToJsonStr(otherMap)
+				}
+			}
+		}
+	}
+
 	pageInfo.SetTotal(int(total))
 	pageInfo.SetItems(logs)
 	common.ApiSuccess(c, pageInfo)

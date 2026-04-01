@@ -219,6 +219,27 @@ func GetMidjourney(c *gin.Context) {
 }
 
 func GetHomePageContent(c *gin.Context) {
+	// 优先从查询参数获取域名，如果没有则使用请求头的 Host
+	host := c.Query("domain")
+	if host == "" {
+		host = c.Request.Host
+	}
+	common.SysLog("GetHomePageContent - Request Host: " + host)
+
+	// 尝试从数据库获取该域名的首页内容
+	domainContent, err := model.GetDomainHomeContent(host)
+	if err == nil && domainContent != nil {
+		common.SysLog("GetHomePageContent - Found domain content for: " + host)
+		c.JSON(http.StatusOK, gin.H{
+			"success": true,
+			"message": "",
+			"data":    domainContent.Content,
+		})
+		return
+	}
+	common.SysLog("GetHomePageContent - No domain content found, using default. Error: " + fmt.Sprint(err))
+
+	// 如果没有找到域名对应的内容，返回默认内容
 	common.OptionMapRWMutex.RLock()
 	defer common.OptionMapRWMutex.RUnlock()
 	c.JSON(http.StatusOK, gin.H{

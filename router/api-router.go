@@ -174,6 +174,15 @@ func SetApiRouter(router *gin.Engine) {
 			optionRoute.POST("/migrate_console_setting", controller.MigrateConsoleSetting) // 用于迁移检测的旧键，下个版本会删除
 		}
 
+		domainHomeRoute := apiRouter.Group("/domain_home_content")
+		domainHomeRoute.Use(middleware.RootAuth())
+		{
+			domainHomeRoute.GET("/", controller.GetDomainHomeContents)
+			domainHomeRoute.POST("/", controller.CreateDomainHomeContent)
+			domainHomeRoute.PUT("/", controller.UpdateDomainHomeContent)
+			domainHomeRoute.DELETE("/:id", controller.DeleteDomainHomeContent)
+		}
+
 		// Custom OAuth provider management (root only)
 		customOAuthRoute := apiRouter.Group("/custom-oauth-provider")
 		customOAuthRoute.Use(middleware.RootAuth())
@@ -263,7 +272,7 @@ func SetApiRouter(router *gin.Engine) {
 			tokenRoute.PUT("/", controller.UpdateToken)
 			tokenRoute.DELETE("/:id", controller.DeleteToken)
 			tokenRoute.POST("/batch", controller.DeleteTokenBatch)
-		tokenRoute.PUT("/batch/group", controller.UpdateTokenGroupBatch)
+			tokenRoute.PUT("/batch/group", controller.UpdateTokenGroupBatch)
 		}
 
 		usageRoute := apiRouter.Group("/usage")

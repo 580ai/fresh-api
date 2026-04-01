@@ -33,6 +33,7 @@ import { marked } from 'marked';
 import { useTranslation } from 'react-i18next';
 import { StatusContext } from '../../context/Status';
 import Text from '@douyinfe/semi-ui/lib/es/typography/text';
+import DomainHomeContent from './DomainHomeContent';
 
 const LEGAL_USER_AGREEMENT_KEY = 'legal.user_agreement';
 const LEGAL_PRIVACY_POLICY_KEY = 'legal.privacy_policy';
@@ -460,6 +461,13 @@ const OtherSetting = () => {
               >
                 {t('设置首页内容')}
               </Button>
+              <div style={{ marginTop: 20, marginBottom: 10 }}>
+                <Text strong>域名首页内容管理</Text>
+                <Text type="tertiary" style={{ display: 'block', marginTop: 5, marginBottom: 10 }}>
+                  为不同域名设置不同的首页内容，未匹配的域名将使用上面的默认首页内容
+                </Text>
+                <DomainHomeContent />
+              </div>
               <Form.TextArea
                 label={t('关于')}
                 placeholder={t(

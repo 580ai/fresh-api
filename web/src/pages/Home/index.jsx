@@ -83,7 +83,8 @@ const Home = () => {
 
   const displayHomePageContent = async () => {
     setHomePageContent(localStorage.getItem('home_page_content') || '');
-    const res = await API.get('/api/home_page_content');
+    const currentDomain = window.location.host;
+    const res = await API.get('/api/home_page_content', { params: { domain: currentDomain } });
     const { success, message, data } = res.data;
     if (success) {
       let content = data;
