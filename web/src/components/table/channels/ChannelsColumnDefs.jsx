@@ -113,6 +113,18 @@ const renderStatus = (status, channelInfo = undefined, t) => {
           {t('自动禁用')}
         </Tag>
       );
+    case 4:
+      return (
+        <Tag color='orange' shape='circle'>
+          {t('待审核')}
+        </Tag>
+      );
+    case 5:
+      return (
+        <Tag color='red' shape='circle'>
+          {t('已拒绝')}
+        </Tag>
+      );
     default:
       return (
         <Tag color='grey' shape='circle'>
@@ -547,6 +559,17 @@ export const getChannelsColumns = ({
             />
           );
         }
+      },
+    },
+    {
+      key: COLUMN_KEYS.SOURCE,
+      title: t('来源'),
+      dataIndex: 'source',
+      render: (text) => {
+        if (text === 'vendor') {
+          return <Tag color='blue'>{t('供应商')}</Tag>;
+        }
+        return <Tag color='grey'>{t('管理员')}</Tag>;
       },
     },
     {

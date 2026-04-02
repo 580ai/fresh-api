@@ -143,6 +143,7 @@ export const useChannelsData = () => {
     BALANCE: 'balance',
     PRIORITY: 'priority',
     WEIGHT: 'weight',
+    SOURCE: 'source',
     OPERATE: 'operate',
   };
 

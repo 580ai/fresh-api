@@ -364,6 +364,36 @@ func SetApiRouter(router *gin.Engine) {
 			vendorRoute.DELETE("/:id", controller.DeleteVendorMeta)
 		}
 
+		// 供应商入驻申请
+		vendorAppRoute := apiRouter.Group("/vendor_application")
+		{
+			vendorAppRoute.POST("/submit", middleware.UserAuth(), controller.SubmitVendorApplication)
+			vendorAppRoute.GET("/my", middleware.UserAuth(), controller.GetMyVendorApplication)
+			vendorAppRoute.GET("/", middleware.AdminAuth(), controller.GetAllVendorApplicationsAdmin)
+			vendorAppRoute.POST("/review", middleware.AdminAuth(), controller.ReviewVendorApplication)
+		}
+
+		// 供应商渠道管理
+		vendorChannelRoute := apiRouter.Group("/vendor/channel")
+		vendorChannelRoute.Use(middleware.VendorAuth())
+		{
+			vendorChannelRoute.POST("/", controller.VendorSubmitChannel)
+			vendorChannelRoute.GET("/", controller.VendorGetMyChannels)
+			vendorChannelRoute.GET("/:id", controller.VendorGetChannel)
+			vendorChannelRoute.PUT("/:id", controller.VendorUpdateChannel)
+			vendorChannelRoute.DELETE("/:id", controller.VendorDeleteChannel)
+		}
+
+		// 供应商渠道审核（管理员）
+		vendorReviewRoute := apiRouter.Group("/vendor/review")
+		vendorReviewRoute.Use(middleware.AdminAuth())
+		{
+			vendorReviewRoute.GET("/channels", controller.GetPendingVendorChannels)
+			vendorReviewRoute.POST("/channel", controller.ReviewVendorChannel)
+			vendorReviewRoute.POST("/channel/test/:id", controller.RetestVendorChannel)
+			vendorReviewRoute.GET("/count", controller.GetPendingVendorChannelCount)
+		}
+
 		modelsRoute := apiRouter.Group("/models")
 		modelsRoute.Use(middleware.AdminAuth())
 		{

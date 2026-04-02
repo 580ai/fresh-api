@@ -21,7 +21,7 @@ import React, { lazy, Suspense, useContext, useMemo } from 'react';
 import { Route, Routes, useLocation, useParams } from 'react-router-dom';
 import Loading from './components/common/ui/Loading';
 import User from './pages/User';
-import { AuthRedirect, PrivateRoute, AdminRoute, SuperAdminRoute, AdminOrSuperAdminRoute } from './helpers';
+import { AuthRedirect, PrivateRoute, AdminRoute, SuperAdminRoute, AdminOrSuperAdminRoute, VendorRoute } from './helpers';
 import RegisterForm from './components/auth/RegisterForm';
 import LoginForm from './components/auth/LoginForm';
 import NotFound from './pages/NotFound';
@@ -50,6 +50,9 @@ import OAuth2Callback from './components/auth/OAuth2Callback';
 import PersonalSetting from './components/settings/PersonalSetting';
 import Setup from './pages/Setup';
 import SetupCheck from './components/layout/SetupCheck';
+import VendorApplicationPage from './pages/VendorApplication';
+import VendorChannelPage from './pages/VendorChannel';
+import VendorReviewPage from './pages/VendorReview';
 
 const Home = lazy(() => import('./pages/Home'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
@@ -138,6 +141,30 @@ function App() {
             <SuperAdminRoute>
               <Channel />
             </SuperAdminRoute>
+          }
+        />
+        <Route
+          path='/console/vendor_applications'
+          element={
+            <AdminRoute>
+              <VendorApplicationPage />
+            </AdminRoute>
+          }
+        />
+        <Route
+          path='/console/vendor/channels'
+          element={
+            <VendorRoute>
+              <VendorChannelPage />
+            </VendorRoute>
+          }
+        />
+        <Route
+          path='/console/vendor/review'
+          element={
+            <AdminRoute>
+              <VendorReviewPage />
+            </AdminRoute>
           }
         />
         <Route

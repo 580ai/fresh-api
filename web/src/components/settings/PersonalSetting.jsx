@@ -45,6 +45,7 @@ import EmailBindModal from './personal/modals/EmailBindModal';
 import WeChatBindModal from './personal/modals/WeChatBindModal';
 import AccountDeleteModal from './personal/modals/AccountDeleteModal';
 import ChangePasswordModal from './personal/modals/ChangePasswordModal';
+import VendorApplicationCard from './personal/cards/VendorApplication';
 
 const PersonalSetting = () => {
   const [userState, userDispatch] = useContext(UserContext);
@@ -486,6 +487,9 @@ const PersonalSetting = () => {
 
               {/* 偏好设置（语言等） */}
               <PreferencesSettings t={t} />
+
+              {/* 供应商入驻申请 */}
+              <VendorApplicationCard t={t} userRole={userState?.user?.role} />
             </div>
 
             {/* 右侧：其他设置 */}

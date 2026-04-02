@@ -48,6 +48,8 @@ type Channel struct {
 	ParamOverride     *string `json:"param_override" gorm:"type:text"`
 	HeaderOverride    *string `json:"header_override" gorm:"type:text"`
 	Remark            *string `json:"remark" gorm:"type:varchar(255)" validate:"max=255"`
+	Source            string  `json:"source" gorm:"type:varchar(16);default:'admin'"`
+	SubmittedBy       int     `json:"submitted_by" gorm:"default:0"`
 	// add after v0.8.5
 	ChannelInfo ChannelInfo `json:"channel_info" gorm:"type:json"`
 
@@ -453,6 +455,17 @@ func (channel *Channel) Insert() error {
 	}
 	err = channel.AddAbilities(nil)
 	return err
+}
+
+func GetChannelsBySubmitter(userId int, offset int, limit int) ([]*Channel, int64, error) {
+	var channels []*Channel
+	var total int64
+	query := DB.Model(&Channel{}).Where("submitted_by = ?", userId)
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	err := query.Order("id desc").Offset(offset).Limit(limit).Omit("key").Find(&channels).Error
+	return channels, total, err
 }
 
 func (channel *Channel) Update() error {

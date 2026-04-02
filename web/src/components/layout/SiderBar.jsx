@@ -50,6 +50,9 @@ const routerMap = {
   deployment: '/console/deployment',
   playground: '/console/playground',
   personal: '/console/personal',
+  vendor_channels: '/console/vendor/channels',
+  vendor_review: '/console/vendor/review',
+  vendor_applications: '/console/vendor_applications',
 };
 
 const SiderBar = ({ onNavigate = () => {} }) => {
@@ -235,6 +238,42 @@ const SiderBar = ({ onNavigate = () => {} }) => {
 
     return filteredItems;
   }, [isSuperAdmin(), t, isModuleVisible]);
+
+  const vendorItems = useMemo(() => {
+    const getUserRole = () => {
+      try {
+        const raw = localStorage.getItem('user');
+        if (!raw) return 0;
+        const user = JSON.parse(raw);
+        return user.role || 0;
+      } catch (e) {
+        return 0;
+      }
+    };
+    const userRole = getUserRole();
+    if (userRole < 5) return [];
+    const items = [
+      {
+        text: t('我的渠道'),
+        itemKey: 'vendor_channels',
+        to: '/vendor/channels',
+      },
+    ];
+    // 管理员额外显示审核入口
+    if (userRole >= 10) {
+      items.push({
+        text: t('渠道审核'),
+        itemKey: 'vendor_review',
+        to: '/vendor/review',
+      });
+      items.push({
+        text: t('供应商审核'),
+        itemKey: 'vendor_applications',
+        to: '/vendor_applications',
+      });
+    }
+    return items;
+  }, [t]);
 
   const chatMenuItems = useMemo(() => {
     const items = [
@@ -520,6 +559,19 @@ const SiderBar = ({ onNavigate = () => {} }) => {
                   <div className='sidebar-group-label'>{t('管理员')}</div>
                 )}
                 {adminItems.map((item) => renderNavItem(item))}
+              </div>
+            </>
+          )}
+
+          {/* 供应商区域 */}
+          {vendorItems.length > 0 && (
+            <>
+              <Divider className='sidebar-divider' />
+              <div>
+                {!collapsed && (
+                  <div className='sidebar-group-label'>{t('供应商')}</div>
+                )}
+                {vendorItems.map((item) => renderNavItem(item))}
               </div>
             </>
           )}

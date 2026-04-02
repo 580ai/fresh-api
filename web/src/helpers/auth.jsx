@@ -111,4 +111,31 @@ export function AdminOrSuperAdminRoute({ children }) {
   return <Navigate to='/forbidden' replace />;
 }
 
+export function VendorRoute({ children }) {
+  const raw = localStorage.getItem('user');
+  if (!raw) {
+    return <Navigate to='/login' state={{ from: history.location }} />;
+  }
+  try {
+    const user = JSON.parse(raw);
+    if (user && typeof user.role === 'number' && user.role >= 5) {
+      return children;
+    }
+  } catch (e) {
+    // ignore
+  }
+  return <Navigate to='/forbidden' replace />;
+}
+
+export function isVendor() {
+  try {
+    const raw = localStorage.getItem('user');
+    if (!raw) return false;
+    const user = JSON.parse(raw);
+    return user && typeof user.role === 'number' && user.role >= 5;
+  } catch (e) {
+    return false;
+  }
+}
+
 export { PrivateRoute };

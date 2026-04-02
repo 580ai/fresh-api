@@ -140,12 +140,13 @@ const (
 const (
 	RoleGuestUser  = 0
 	RoleCommonUser = 1
+	RoleVendor     = 5
 	RoleAdminUser  = 10
 	RoleRootUser   = 100
 )
 
 func IsValidateRole(role int) bool {
-	return role == RoleGuestUser || role == RoleCommonUser || role == RoleAdminUser || role == RoleRootUser
+	return role == RoleGuestUser || role == RoleCommonUser || role == RoleVendor || role == RoleAdminUser || role == RoleRootUser
 }
 
 var (
@@ -206,6 +207,8 @@ const (
 	ChannelStatusEnabled          = 1 // don't use 0, 0 is the default value!
 	ChannelStatusManuallyDisabled = 2 // also don't use 0
 	ChannelStatusAutoDisabled     = 3
+	ChannelStatusPendingReview    = 4
+	ChannelStatusRejected         = 5
 )
 
 const (
