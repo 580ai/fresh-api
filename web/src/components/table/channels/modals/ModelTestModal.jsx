@@ -28,8 +28,9 @@ import {
   Select,
   Switch,
   Banner,
+  Collapsible,
 } from '@douyinfe/semi-ui';
-import { IconSearch, IconInfoCircle } from '@douyinfe/semi-icons';
+import { IconSearch, IconInfoCircle, IconCopy } from '@douyinfe/semi-icons';
 import { copy, showError, showInfo, showSuccess } from '../../../../helpers';
 import { MODEL_TABLE_PAGE_SIZE } from '../../../../constants';
 
@@ -57,6 +58,7 @@ const ModelTestModal = ({
   t,
 }) => {
   const hasChannel = Boolean(currentTestChannel);
+  const [expandedModel, setExpandedModel] = React.useState(null);
   const streamToggleDisabled = [
     'embeddings',
     'image-generation',
@@ -167,19 +169,75 @@ const ModelTestModal = ({
           );
         }
 
+        const isExpanded = expandedModel === record.model;
+
         return (
-          <div className='flex items-center gap-2'>
-            <Tag color={testResult.success ? 'green' : 'red'} shape='circle'>
-              {testResult.success ? t('成功') : t('失败')}
-            </Tag>
-            {testResult.success && (
-              <Typography.Text type='tertiary'>
-                {t('请求时长: ${time}s').replace(
-                  '${time}',
-                  testResult.time.toFixed(2),
+          <div className='flex flex-col gap-1'>
+            <div className='flex items-center gap-2'>
+              <Tag color={testResult.success ? 'green' : 'red'} shape='circle'>
+                {testResult.success ? t('成功') : t('失败')}
+              </Tag>
+              {testResult.success && (
+                <Typography.Text type='tertiary'>
+                  {t('请求时长: ${time}s').replace(
+                    '${time}',
+                    testResult.time.toFixed(2),
+                  )}
+                </Typography.Text>
+              )}
+              <Button
+                type='tertiary'
+                size='small'
+                theme='borderless'
+                onClick={() =>
+                  setExpandedModel(isExpanded ? null : record.model)
+                }
+              >
+                {isExpanded ? t('收起') : t('详情')}
+              </Button>
+            </div>
+            <Collapsible isOpen={isExpanded}>
+              <div className='mt-1 p-2 rounded bg-[var(--semi-color-fill-0)] max-h-48 overflow-auto'>
+                {testResult.success ? (
+                  <div>
+                    <div className='flex items-center justify-between mb-1'>
+                      <Typography.Text size='small' strong>
+                        {t('响应内容')}
+                      </Typography.Text>
+                      <Button
+                        icon={<IconCopy />}
+                        size='small'
+                        theme='borderless'
+                        type='tertiary'
+                        onClick={() => {
+                          copy(testResult.response || '').then((ok) => {
+                            if (ok) showSuccess(t('复制成功'));
+                          });
+                        }}
+                      />
+                    </div>
+                    <Typography.Paragraph
+                      className='!text-xs !font-mono whitespace-pre-wrap break-all'
+                      type='tertiary'
+                    >
+                      {testResult.response || t('无响应内容')}
+                    </Typography.Paragraph>
+                  </div>
+                ) : (
+                  <div>
+                    <Typography.Text size='small' strong>
+                      {t('错误详情')}
+                    </Typography.Text>
+                    <Typography.Paragraph
+                      className='!text-xs !font-mono whitespace-pre-wrap break-all mt-1'
+                      type='danger'
+                    >
+                      {testResult.message || t('未知错误')}
+                    </Typography.Paragraph>
+                  </div>
                 )}
-              </Typography.Text>
-            )}
+              </div>
+            </Collapsible>
           </div>
         );
       },

@@ -2521,6 +2521,8 @@
     "错误": "errors",
     "退款": "Refund",
     "错误详情": "Error Details",
+    "响应内容": "Response Content",
+    "无响应内容": "No response content",
     "异步任务退款": "Async Task Refund",
     "任务ID": "Task ID",
     "失败原因": "Failure Reason",

@@ -773,9 +773,8 @@ html.dark .with-pastel-balls::before {
 
 /* ==================== 模型定价页面布局 ==================== */
 .pricing-layout {
-  height: calc(100vh - 60px);
+  height: calc(100vh - 64px);
   overflow: hidden;
-  margin-top: 60px;
 }
 
 .pricing-sidebar {

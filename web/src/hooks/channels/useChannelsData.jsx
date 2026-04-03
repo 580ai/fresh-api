@@ -973,7 +973,7 @@ export const useChannelsData = () => {
         return Promise.resolve();
       }
 
-      const { success, message, time } = res.data;
+      const { success, message, time, response } = res.data;
 
       // 更新测试结果
       setModelTestResults((prev) => ({
@@ -982,6 +982,7 @@ export const useChannelsData = () => {
           success,
           message,
           time: time || 0,
+          response: response || '',
           timestamp: Date.now(),
         },
       }));

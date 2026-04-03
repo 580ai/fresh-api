@@ -37,9 +37,10 @@ import (
 )
 
 type testResult struct {
-	context     *gin.Context
-	localErr    error
-	newAPIError *types.NewAPIError
+	context      *gin.Context
+	localErr     error
+	newAPIError  *types.NewAPIError
+	responseBody string
 }
 
 func normalizeChannelTestEndpoint(channel *model.Channel, modelName, endpointType string) string {
@@ -490,10 +491,17 @@ func testChannel(channel *model.Channel, testModel string, endpointType string, 
 		Other:            other,
 	})
 	common.SysLog(fmt.Sprintf("testing channel #%d, response: \n%s", channel.Id, string(respBody)))
+	// 截断响应体，最多返回 4KB 给前端
+	respBodyStr := string(respBody)
+	const maxResponseSize = 4096
+	if len(respBodyStr) > maxResponseSize {
+		respBodyStr = respBodyStr[:maxResponseSize] + "...(truncated)"
+	}
 	return testResult{
-		context:     c,
-		localErr:    nil,
-		newAPIError: nil,
+		context:      c,
+		localErr:     nil,
+		newAPIError:  nil,
+		responseBody: respBodyStr,
 	}
 }
 
@@ -750,9 +758,10 @@ func TestChannel(c *gin.Context) {
 	result := testChannel(channel, testModel, endpointType, isStream)
 	if result.localErr != nil {
 		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": result.localErr.Error(),
-			"time":    0.0,
+			"success":  false,
+			"message":  result.localErr.Error(),
+			"time":     0.0,
+			"response": "",
 		})
 		return
 	}
@@ -762,16 +771,18 @@ func TestChannel(c *gin.Context) {
 	consumedTime := float64(milliseconds) / 1000.0
 	if result.newAPIError != nil {
 		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": result.newAPIError.Error(),
-			"time":    consumedTime,
+			"success":  false,
+			"message":  result.newAPIError.Error(),
+			"time":     consumedTime,
+			"response": "",
 		})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "",
-		"time":    consumedTime,
+		"success":  true,
+		"message":  "",
+		"time":     consumedTime,
+		"response": result.responseBody,
 	})
 }
 

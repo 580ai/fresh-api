@@ -21,6 +21,16 @@ type VendorSubmitChannelRequest struct {
 	TestModel *string `json:"test_model"`
 }
 
+type VendorUpdateChannelRequest struct {
+	Name      string  `json:"name" binding:"required"`
+	Type      int     `json:"type" binding:"required"`
+	Key       string  `json:"key"`
+	BaseURL   *string `json:"base_url"`
+	Models    string  `json:"models" binding:"required"`
+	Group     string  `json:"group"`
+	TestModel *string `json:"test_model"`
+}
+
 func VendorSubmitChannel(c *gin.Context) {
 	userId := c.GetInt("id")
 	var req VendorSubmitChannelRequest
@@ -139,14 +149,16 @@ func VendorUpdateChannel(c *gin.Context) {
 		common.ApiErrorMsg(c, "只能编辑待审核或已拒绝的渠道")
 		return
 	}
-	var req VendorSubmitChannelRequest
+	var req VendorUpdateChannelRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		common.ApiError(c, err)
 		return
 	}
 	channel.Name = req.Name
 	channel.Type = req.Type
-	channel.Key = req.Key
+	if req.Key != "" {
+		channel.Key = req.Key
+	}
 	channel.BaseURL = req.BaseURL
 	channel.Models = req.Models
 	channel.TestModel = req.TestModel

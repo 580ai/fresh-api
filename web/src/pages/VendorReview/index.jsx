@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   Table,
   Tag,
@@ -8,10 +8,14 @@ import {
   Space,
   Select,
   TextArea,
+  SplitButtonGroup,
 } from '@douyinfe/semi-ui';
-import { API, showError, showSuccess } from '../../helpers';
+import { IconTreeTriangleDown } from '@douyinfe/semi-icons';
+import { API, showError, showSuccess, showInfo } from '../../helpers';
 import { useTranslation } from 'react-i18next';
 import { CHANNEL_OPTIONS } from '../../constants/channel.constants';
+import ModelTestModal from '../../components/table/channels/modals/ModelTestModal';
+import { useIsMobile } from '../../hooks/common/useIsMobile';
 
 const { Text } = Typography;
 
@@ -22,6 +26,7 @@ CHANNEL_OPTIONS.forEach((opt) => {
 
 const VendorReviewPage = () => {
   const { t } = useTranslation();
+  const isMobile = useIsMobile();
   const [channels, setChannels] = useState([]);
   const [loading, setLoading] = useState(false);
   const [total, setTotal] = useState(0);
@@ -33,6 +38,20 @@ const VendorReviewPage = () => {
   const [reviewAction, setReviewAction] = useState('');
   const [remark, setRemark] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  // Model test states
+  const [showModelTestModal, setShowModelTestModal] = useState(false);
+  const [currentTestChannel, setCurrentTestChannel] = useState(null);
+  const [modelSearchKeyword, setModelSearchKeyword] = useState('');
+  const [modelTestResults, setModelTestResults] = useState({});
+  const [testingModels, setTestingModels] = useState(new Set());
+  const [selectedModelKeys, setSelectedModelKeys] = useState([]);
+  const [isBatchTesting, setIsBatchTesting] = useState(false);
+  const [modelTablePage, setModelTablePage] = useState(1);
+  const [selectedEndpointType, setSelectedEndpointType] = useState('');
+  const [isStreamTest, setIsStreamTest] = useState(false);
+  const shouldStopBatchTestingRef = useRef(false);
+  const allSelectingRef = useRef(false);
 
   const fetchChannels = async () => {
     setLoading(true);
@@ -106,6 +125,113 @@ const VendorReviewPage = () => {
     }
   };
 
+  // 单个模型测试（复用管理员测试接口）
+  const testChannelModel = async (record, model, endpointType = '', stream = false) => {
+    const testKey = `${record.id}-${model}`;
+    if (shouldStopBatchTestingRef.current && isBatchTesting) return;
+
+    setTestingModels((prev) => new Set([...prev, model]));
+    try {
+      let url = `/api/channel/test/${record.id}?model=${model}`;
+      if (endpointType) url += `&endpoint_type=${endpointType}`;
+      if (stream) url += `&stream=true`;
+      const res = await API.get(url);
+
+      if (shouldStopBatchTestingRef.current && isBatchTesting) return;
+
+      const { success, message, time, response } = res.data;
+      setModelTestResults((prev) => ({
+        ...prev,
+        [testKey]: { success, message, time: time || 0, response: response || '', timestamp: Date.now() },
+      }));
+
+      if (success) {
+        showInfo(
+          t('通道 ${name} 测试成功，模型 ${model} 耗时 ${time.toFixed(2)} 秒。')
+            .replace('${name}', record.name)
+            .replace('${model}', model)
+            .replace('${time.toFixed(2)}', time.toFixed(2)),
+        );
+      } else {
+        showError(`${t('模型')} ${model}: ${message}`);
+      }
+    } catch (error) {
+      setModelTestResults((prev) => ({
+        ...prev,
+        [testKey]: { success: false, message: error.message || t('网络错误'), time: 0, response: '', timestamp: Date.now() },
+      }));
+      showError(`${t('模型')} ${model}: ${error.message || t('测试失败')}`);
+    } finally {
+      setTestingModels((prev) => {
+        const newSet = new Set(prev);
+        newSet.delete(model);
+        return newSet;
+      });
+    }
+  };
+
+  // 批量测试
+  const batchTestModels = async () => {
+    if (!currentTestChannel || !currentTestChannel.models) {
+      showError(t('渠道模型信息不完整'));
+      return;
+    }
+    const models = currentTestChannel.models
+      .split(',')
+      .filter((m) => m.toLowerCase().includes(modelSearchKeyword.toLowerCase()));
+    if (models.length === 0) {
+      showError(t('没有找到匹配的模型'));
+      return;
+    }
+
+    setIsBatchTesting(true);
+    shouldStopBatchTestingRef.current = false;
+    setModelTestResults((prev) => {
+      const newResults = { ...prev };
+      models.forEach((m) => delete newResults[`${currentTestChannel.id}-${m}`]);
+      return newResults;
+    });
+
+    try {
+      showInfo(t('开始批量测试 ${count} 个模型，已清空上次结果...').replace('${count}', models.length));
+      const concurrencyLimit = 5;
+      for (let i = 0; i < models.length; i += concurrencyLimit) {
+        if (shouldStopBatchTestingRef.current) { showInfo(t('批量测试已停止')); break; }
+        const batch = models.slice(i, i + concurrencyLimit);
+        await Promise.allSettled(
+          batch.map((m) => testChannelModel(currentTestChannel, m, selectedEndpointType, isStreamTest)),
+        );
+        if (shouldStopBatchTestingRef.current) { showInfo(t('批量测试已停止')); break; }
+        if (i + concurrencyLimit < models.length) await new Promise((r) => setTimeout(r, 100));
+      }
+      if (!shouldStopBatchTestingRef.current) {
+        showSuccess(t('批量测试完成！成功: ${success}, 失败: ${fail}, 总计: ${total}')
+          .replace('${success}', models.filter((m) => modelTestResults[`${currentTestChannel.id}-${m}`]?.success).length)
+          .replace('${fail}', models.filter((m) => !modelTestResults[`${currentTestChannel.id}-${m}`]?.success).length)
+          .replace('${total}', models.length));
+      }
+    } catch (error) {
+      showError(t('批量测试过程中发生错误: ') + error.message);
+    } finally {
+      setIsBatchTesting(false);
+    }
+  };
+
+  const handleCloseTestModal = () => {
+    if (isBatchTesting) {
+      shouldStopBatchTestingRef.current = true;
+      showInfo(t('关闭弹窗，已停止批量测试'));
+    }
+    setShowModelTestModal(false);
+    setModelSearchKeyword('');
+    setIsBatchTesting(false);
+    setTestingModels(new Set());
+    setSelectedModelKeys([]);
+    setModelTablePage(1);
+    setSelectedEndpointType('');
+    setIsStreamTest(false);
+  };
+
   const columns = [
     { title: 'ID', dataIndex: 'id', width: 60 },
     { title: t('名称'), dataIndex: 'name' },
@@ -136,9 +262,19 @@ const VendorReviewPage = () => {
       title: t('操作'),
       render: (_, record) => (
         <Space>
-          <Button size='small' onClick={() => handleRetest(record.id)}>
-            {t('重新测试')}
-          </Button>
+          <SplitButtonGroup className='overflow-hidden'>
+            <Button size='small' onClick={() => handleRetest(record.id)}>
+              {t('测试')}
+            </Button>
+            <Button
+              size='small'
+              icon={<IconTreeTriangleDown />}
+              onClick={() => {
+                setCurrentTestChannel(record);
+                setShowModelTestModal(true);
+              }}
+            />
+          </SplitButtonGroup>
           {record.status === 4 && (
             <>
               <Button
@@ -223,6 +359,29 @@ const VendorReviewPage = () => {
           rows={3}
         />
       </Modal>
+      <ModelTestModal
+        showModelTestModal={showModelTestModal}
+        currentTestChannel={currentTestChannel}
+        handleCloseModal={handleCloseTestModal}
+        isBatchTesting={isBatchTesting}
+        batchTestModels={batchTestModels}
+        modelSearchKeyword={modelSearchKeyword}
+        setModelSearchKeyword={setModelSearchKeyword}
+        selectedModelKeys={selectedModelKeys}
+        setSelectedModelKeys={setSelectedModelKeys}
+        modelTestResults={modelTestResults}
+        testingModels={testingModels}
+        testChannel={testChannelModel}
+        modelTablePage={modelTablePage}
+        setModelTablePage={setModelTablePage}
+        selectedEndpointType={selectedEndpointType}
+        setSelectedEndpointType={setSelectedEndpointType}
+        isStreamTest={isStreamTest}
+        setIsStreamTest={setIsStreamTest}
+        allSelectingRef={allSelectingRef}
+        isMobile={isMobile}
+        t={t}
+      />
     </div>
   );
 };
