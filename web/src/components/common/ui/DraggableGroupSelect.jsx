@@ -349,19 +349,122 @@ const DraggableGroupSelect = ({
       {/* 优先级说明 */}
       <div style={{
         marginTop: '12px',
-        padding: '12px',
+        padding: '16px',
         backgroundColor: 'var(--semi-color-fill-0)',
-        borderRadius: '8px',
+        borderRadius: '10px',
         border: '1px solid var(--semi-color-border)',
       }}>
-        <Text strong style={{ display: 'block', marginBottom: '8px' }}>
-          {t('优先级说明')}
+        <Text strong style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '12px', fontSize: '14px' }}>
+          <span style={{ fontSize: '16px' }}>📋</span>
+          {t('分组选择指南')}
         </Text>
-        <ul style={{ margin: 0, paddingLeft: '20px', color: 'var(--semi-color-text-2)', fontSize: '13px', lineHeight: '1.8' }}>
-          <li>{t('选择顺序决定分组优先级（第一个为主分组）')}</li>
-          <li>{t('系统会按优先级顺序尝试各分组渠道')}</li>
-          <li>{t('建议选择2-3个分组以确保服务稳定性')}</li>
-        </ul>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          {/* 企业新手用户 */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: '10px',
+            padding: '10px 12px',
+            borderRadius: '8px',
+            backgroundColor: 'var(--semi-color-primary-light-default)',
+            border: '1px solid var(--semi-color-primary-light-active)',
+          }}>
+            <span style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: '22px',
+              height: '22px',
+              borderRadius: '50%',
+              backgroundColor: 'var(--semi-color-primary)',
+              color: '#fff',
+              fontSize: '12px',
+              fontWeight: 700,
+              flexShrink: 0,
+              marginTop: '1px',
+            }}>1</span>
+            <div style={{ flex: 1 }}>
+              <Text strong style={{ fontSize: '13px', color: 'var(--semi-color-text-0)' }}>
+                {t('企业新手用户')}
+              </Text>
+              <div style={{ fontSize: '12px', color: 'var(--semi-color-text-2)', marginTop: '3px', lineHeight: '1.5' }}>
+                {t('可直接选择分组')}
+                <Tag size="small" color="blue" style={{ marginLeft: '4px', verticalAlign: 'middle' }}>
+                  {t('企业极速|一key调用全模型')}
+                </Tag>
+              </div>
+            </div>
+          </div>
+          {/* 个人新手用户 */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: '10px',
+            padding: '10px 12px',
+            borderRadius: '8px',
+            backgroundColor: 'var(--semi-color-success-light-default)',
+            border: '1px solid var(--semi-color-success-light-active)',
+          }}>
+            <span style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: '22px',
+              height: '22px',
+              borderRadius: '50%',
+              backgroundColor: 'var(--semi-color-success)',
+              color: '#fff',
+              fontSize: '12px',
+              fontWeight: 700,
+              flexShrink: 0,
+              marginTop: '1px',
+            }}>2</span>
+            <div style={{ flex: 1 }}>
+              <Text strong style={{ fontSize: '13px', color: 'var(--semi-color-text-0)' }}>
+                {t('个人新手用户')}
+              </Text>
+              <div style={{ fontSize: '12px', color: 'var(--semi-color-text-2)', marginTop: '3px', lineHeight: '1.5' }}>
+                {t('可直接选择分组')}
+                <Tag size="small" color="green" style={{ marginLeft: '4px', verticalAlign: 'middle' }}>
+                  {t('中转低价|一key调用全模型')}
+                </Tag>
+              </div>
+            </div>
+          </div>
+          {/* 专业用户 */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: '10px',
+            padding: '10px 12px',
+            borderRadius: '8px',
+            backgroundColor: 'var(--semi-color-warning-light-default)',
+            border: '1px solid var(--semi-color-warning-light-active)',
+          }}>
+            <span style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: '22px',
+              height: '22px',
+              borderRadius: '50%',
+              backgroundColor: 'var(--semi-color-warning)',
+              color: '#fff',
+              fontSize: '12px',
+              fontWeight: 700,
+              flexShrink: 0,
+              marginTop: '1px',
+            }}>3</span>
+            <div style={{ flex: 1 }}>
+              <Text strong style={{ fontSize: '13px', color: 'var(--semi-color-text-0)' }}>
+                {t('专业用户')}
+              </Text>
+              <div style={{ fontSize: '12px', color: 'var(--semi-color-text-2)', marginTop: '3px', lineHeight: '1.5' }}>
+                {t('可自选分组，同时选中多个分组，请求会先打到第一个分组，再打到下一个分组')}
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
