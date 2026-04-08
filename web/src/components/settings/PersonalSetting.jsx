@@ -41,6 +41,7 @@ import AccountManagement from './personal/cards/AccountManagement';
 import NotificationSettings from './personal/cards/NotificationSettings';
 import PreferencesSettings from './personal/cards/PreferencesSettings';
 import CheckinCalendar from './personal/cards/CheckinCalendar';
+import RateLimitInfo from './personal/cards/RateLimitInfo';
 import EmailBindModal from './personal/modals/EmailBindModal';
 import WeChatBindModal from './personal/modals/WeChatBindModal';
 import AccountDeleteModal from './personal/modals/AccountDeleteModal';
@@ -489,12 +490,17 @@ const PersonalSetting = () => {
             </div>
 
             {/* 右侧：其他设置 */}
-            <NotificationSettings
-              t={t}
-              notificationSettings={notificationSettings}
-              handleNotificationSettingChange={handleNotificationSettingChange}
-              saveNotificationSettings={saveNotificationSettings}
-            />
+            <div className='flex flex-col gap-4 md:gap-6'>
+              {/* 速率限制信息 */}
+              <RateLimitInfo />
+
+              <NotificationSettings
+                t={t}
+                notificationSettings={notificationSettings}
+                handleNotificationSettingChange={handleNotificationSettingChange}
+                saveNotificationSettings={saveNotificationSettings}
+              />
+            </div>
           </div>
         </div>
       </div>

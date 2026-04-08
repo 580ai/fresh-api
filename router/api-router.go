@@ -91,6 +91,7 @@ func SetApiRouter(router *gin.Engine) {
 				selfRoute.POST("/creem/pay", middleware.CriticalRateLimit(), controller.RequestCreemPay)
 				selfRoute.POST("/aff_transfer", controller.TransferAffQuota)
 				selfRoute.PUT("/setting", controller.UpdateUserSetting)
+				selfRoute.GET("/rate_limit", controller.GetSelfRateLimit)
 
 				// 2FA routes
 				selfRoute.GET("/2fa/status", controller.Get2FAStatus)
@@ -246,6 +247,9 @@ func SetApiRouter(router *gin.Engine) {
 			channelRoute.DELETE("/ollama/delete", controller.OllamaDeleteModel)
 			channelRoute.GET("/ollama/version/:id", controller.OllamaVersion)
 			channelRoute.POST("/batch/tag", controller.BatchSetChannelTag)
+			channelRoute.POST("/batch/enable", controller.BatchEnableChannels)
+			channelRoute.POST("/batch/disable", controller.BatchDisableChannels)
+			channelRoute.POST("/batch/edit", controller.BatchEditChannels)
 			channelRoute.GET("/tag/models", controller.GetTagModels)
 			channelRoute.POST("/copy/:id", controller.CopyChannel)
 			channelRoute.POST("/multi_key/manage", controller.ManageMultiKeys)

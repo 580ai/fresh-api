@@ -1017,6 +1017,91 @@ func DeleteChannelBatch(c *gin.Context) {
 	return
 }
 
+func BatchEnableChannels(c *gin.Context) {
+	channelBatch := ChannelBatch{}
+	err := c.ShouldBindJSON(&channelBatch)
+	if err != nil || len(channelBatch.Ids) == 0 {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "参数错误",
+		})
+		return
+	}
+	err = model.BatchUpdateChannelStatus(channelBatch.Ids, 1)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	model.InitChannelCache()
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "",
+		"data":    len(channelBatch.Ids),
+	})
+}
+
+func BatchDisableChannels(c *gin.Context) {
+	channelBatch := ChannelBatch{}
+	err := c.ShouldBindJSON(&channelBatch)
+	if err != nil || len(channelBatch.Ids) == 0 {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "参数错误",
+		})
+		return
+	}
+	err = model.BatchUpdateChannelStatus(channelBatch.Ids, 2)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	model.InitChannelCache()
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "",
+		"data":    len(channelBatch.Ids),
+	})
+}
+
+type ChannelBatchEdit struct {
+	Ids    []int   `json:"ids"`
+	MaxRPM *int    `json:"max_rpm"`
+	Proxy  *string `json:"proxy"`
+}
+
+func BatchEditChannels(c *gin.Context) {
+	req := ChannelBatchEdit{}
+	err := c.ShouldBindJSON(&req)
+	if err != nil || len(req.Ids) == 0 {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "参数错误",
+		})
+		return
+	}
+	if req.MaxRPM != nil && *req.MaxRPM != -1 {
+		for _, id := range req.Ids {
+			if err := model.SetChannelMaxRPM(id, *req.MaxRPM); err != nil {
+				common.ApiError(c, err)
+				return
+			}
+		}
+	}
+	if req.Proxy != nil {
+		if err := model.BatchUpdateChannelProxy(req.Ids, *req.Proxy); err != nil {
+			common.ApiError(c, err)
+			return
+		}
+		service.ResetProxyClientCache()
+	}
+	model.InitChannelCache()
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "",
+		"data":    len(req.Ids),
+	})
+}
+
 type PatchChannel struct {
 	model.Channel
 	MultiKeyMode *string `json:"multi_key_mode"`

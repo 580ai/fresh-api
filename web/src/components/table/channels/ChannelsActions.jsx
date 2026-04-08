@@ -31,7 +31,10 @@ import CompactModeToggle from '../../common/ui/CompactModeToggle';
 const ChannelsActions = ({
   enableBatchDelete,
   batchDeleteChannels,
+  batchEnableChannels,
+  batchDisableChannels,
   setShowBatchSetTag,
+  setShowBatchEdit,
   testAllChannels,
   fixChannelsAbilities,
   updateAllChannelsBalance,
@@ -85,6 +88,46 @@ const ChannelsActions = ({
             className='w-full md:w-auto'
           >
             {t('批量设置标签')}
+          </Button>
+
+          <Button
+            size='small'
+            disabled={!enableBatchDelete}
+            type='tertiary'
+            onClick={() => {
+              Modal.confirm({
+                title: t('确定是否要启用所选通道？'),
+                onOk: () => batchEnableChannels(),
+              });
+            }}
+            className='w-full md:w-auto'
+          >
+            {t('批量启用')}
+          </Button>
+
+          <Button
+            size='small'
+            disabled={!enableBatchDelete}
+            type='warning'
+            onClick={() => {
+              Modal.confirm({
+                title: t('确定是否要禁用所选通道？'),
+                onOk: () => batchDisableChannels(),
+              });
+            }}
+            className='w-full md:w-auto'
+          >
+            {t('批量禁用')}
+          </Button>
+
+          <Button
+            size='small'
+            disabled={!enableBatchDelete}
+            type='tertiary'
+            onClick={() => setShowBatchEdit(true)}
+            className='w-full md:w-auto'
+          >
+            {t('批量编辑')}
           </Button>
 
           <Button

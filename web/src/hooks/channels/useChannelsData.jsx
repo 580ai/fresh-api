@@ -62,6 +62,7 @@ export const useChannelsData = () => {
   const [enableTagMode, setEnableTagMode] = useState(false);
   const [showBatchSetTag, setShowBatchSetTag] = useState(false);
   const [batchSetTagValue, setBatchSetTagValue] = useState('');
+  const [showBatchEdit, setShowBatchEdit] = useState(false);
   const [compactMode, setCompactMode] = useTableCompactMode('channels');
 
   // Column visibility states
@@ -736,6 +737,77 @@ export const useChannelsData = () => {
     }
   };
 
+  const batchEnableChannels = async () => {
+    if (selectedChannels.length === 0) {
+      showError(t('请先选择要启用的通道！'));
+      return;
+    }
+    setLoading(true);
+    const ids = selectedChannels.map((channel) => channel.id);
+    try {
+      const res = await API.post('/api/channel/batch/enable', { ids });
+      const { success, message, data } = res.data;
+      if (success) {
+        showSuccess(
+          t('已启用 ${data} 个通道！').replace('${data}', data),
+        );
+        await refresh();
+      } else {
+        showError(message);
+      }
+    } catch (e) {
+      showError(e.message);
+    }
+    setLoading(false);
+  };
+
+  const batchDisableChannels = async () => {
+    if (selectedChannels.length === 0) {
+      showError(t('请先选择要禁用的通道！'));
+      return;
+    }
+    setLoading(true);
+    const ids = selectedChannels.map((channel) => channel.id);
+    try {
+      const res = await API.post('/api/channel/batch/disable', { ids });
+      const { success, message, data } = res.data;
+      if (success) {
+        showSuccess(
+          t('已禁用 ${data} 个通道！').replace('${data}', data),
+        );
+        await refresh();
+      } else {
+        showError(message);
+      }
+    } catch (e) {
+      showError(e.message);
+    }
+    setLoading(false);
+  };
+
+  const batchEditChannels = async (editData) => {
+    if (selectedChannels.length === 0) {
+      showError(t('请先选择要编辑的通道！'));
+      return;
+    }
+    setLoading(true);
+    const ids = selectedChannels.map((channel) => channel.id);
+    try {
+      const res = await API.post('/api/channel/batch/edit', { ids, ...editData });
+      const { success, message } = res.data;
+      if (success) {
+        showSuccess(t('批量编辑成功！'));
+        await refresh();
+        setShowBatchEdit(false);
+      } else {
+        showError(message);
+      }
+    } catch (e) {
+      showError(e.message);
+    }
+    setLoading(false);
+  };
+
   const batchDeleteChannels = async () => {
     if (selectedChannels.length === 0) {
       showError(t('请先选择要删除的通道！'));
@@ -1244,6 +1316,8 @@ export const useChannelsData = () => {
     setShowBatchSetTag,
     batchSetTagValue,
     setBatchSetTagValue,
+    showBatchEdit,
+    setShowBatchEdit,
 
     // Column states
     visibleColumns,
@@ -1308,6 +1382,9 @@ export const useChannelsData = () => {
     handleRow,
     batchSetChannelTag,
     batchDeleteChannels,
+    batchEnableChannels,
+    batchDisableChannels,
+    batchEditChannels,
     testAllChannels,
     deleteAllDisabledChannels,
     refreshSelectedChannelsStats,

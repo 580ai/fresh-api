@@ -1270,3 +1270,44 @@ func UpdateUserSetting(c *gin.Context) {
 
 	common.ApiSuccessI18n(c, i18n.MsgSettingSaved, nil)
 }
+
+// GetSelfRateLimit 获取当前用户的速率限制信息
+func GetSelfRateLimit(c *gin.Context) {
+	userId := c.GetInt("id")
+
+	// 默认使用全局配置
+	totalCount := setting.ModelRequestRateLimitCount
+	successCount := setting.ModelRequestRateLimitSuccessCount
+	durationMinutes := setting.ModelRequestRateLimitDurationMinutes
+	enabled := setting.ModelRequestRateLimitEnabled
+	source := "global" // 标记限制来源：global/group/user
+
+	// 检查用户级别限制（最高优先级）
+	userTotal, userSuccess, userFound := setting.GetUserRateLimit(userId)
+	if userFound {
+		totalCount = userTotal
+		successCount = userSuccess
+		source = "user"
+	} else {
+		// 检查分组级别限制
+		userGroup, _ := model.GetUserGroup(userId, false)
+		groupTotal, groupSuccess, groupFound := setting.GetGroupRateLimit(userGroup)
+		if groupFound {
+			totalCount = groupTotal
+			successCount = groupSuccess
+			source = "group"
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "",
+		"data": gin.H{
+			"enabled":          enabled,
+			"total_count":      totalCount,
+			"success_count":    successCount,
+			"duration_minutes": durationMinutes,
+			"source":           source,
+		},
+	})
+}

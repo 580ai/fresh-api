@@ -406,6 +406,32 @@ func BatchDeleteChannels(ids []int) error {
 	return tx.Commit().Error
 }
 
+func BatchUpdateChannelStatus(ids []int, status int) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	return DB.Model(&Channel{}).Where("id in (?)", ids).Update("status", status).Error
+}
+
+func BatchUpdateChannelProxy(ids []int, proxy string) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	for _, id := range ids {
+		channel, err := GetChannelById(id, true)
+		if err != nil {
+			return err
+		}
+		setting := channel.GetSetting()
+		setting.Proxy = proxy
+		channel.SetSetting(setting)
+		if err := channel.Save(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (channel *Channel) GetPriority() int64 {
 	if channel.Priority == nil {
 		return 0
