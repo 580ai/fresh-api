@@ -83,6 +83,7 @@ import {
   IconGlobe,
   IconBolt,
   IconSearch,
+  IconChevronUp,
   IconChevronDown,
 } from '@douyinfe/semi-icons';
 
@@ -841,7 +842,6 @@ const EditChannelModal = (props) => {
   const clearParamOverride = () => {
     handleInputChange('param_override', '');
   };
-
 
   const loadChannel = async () => {
     setLoading(true);

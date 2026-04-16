@@ -38,6 +38,7 @@ import {
   showSuccess,
   showError,
   showInfo,
+  toBoolean,
 } from '../../../helpers';
 import {
   CHANNEL_OPTIONS,
@@ -285,6 +286,25 @@ const getUpstreamUpdateMeta = (record) => {
       ? parsed.pendingRemoveModels
       : [],
   };
+};
+
+const isRequestPassThroughEnabled = (record) => {
+  const settings = record?.settings;
+  if (!settings) {
+    return false;
+  }
+  if (typeof settings === 'object') {
+    return toBoolean(settings.pass_through_body_enabled);
+  }
+  if (typeof settings !== 'string') {
+    return false;
+  }
+  try {
+    const parsed = JSON.parse(settings);
+    return toBoolean(parsed?.pass_through_body_enabled);
+  } catch (error) {
+    return false;
+  }
 };
 
 export const getChannelsColumns = ({
@@ -771,7 +791,6 @@ export const getChannelsColumns = ({
               onClick: () => checkOllamaVersion(record),
             });
           }
-
 
           return (
             <Space wrap>
