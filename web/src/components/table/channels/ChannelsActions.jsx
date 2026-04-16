@@ -40,6 +40,10 @@ const ChannelsActions = ({
   updateAllChannelsBalance,
   deleteAllDisabledChannels,
   refreshSelectedChannelsStats,
+  applyAllUpstreamUpdates,
+  detectAllUpstreamUpdates,
+  detectAllUpstreamUpdatesLoading,
+  applyAllUpstreamUpdatesLoading,
   compactMode,
   setCompactMode,
   idSort,
@@ -150,6 +154,8 @@ const ChannelsActions = ({
                     size='small'
                     type='tertiary'
                     className='w-full'
+                    loading={detectAllUpstreamUpdatesLoading}
+                    disabled={detectAllUpstreamUpdatesLoading}
                     onClick={() => {
                       Modal.confirm({
                         title: t('确定？'),
@@ -198,6 +204,46 @@ const ChannelsActions = ({
                     }}
                   >
                     {t('更新所有已启用通道余额')}
+                  </Button>
+                </Dropdown.Item>
+                <Dropdown.Item>
+                  <Button
+                    size='small'
+                    type='tertiary'
+                    className='w-full'
+                    onClick={() => {
+                      Modal.confirm({
+                        title: t('确定？'),
+                        content: t(
+                          '确定要仅检测全部渠道上游模型更新吗？（不执行新增/删除）',
+                        ),
+                        onOk: () => detectAllUpstreamUpdates(),
+                        size: 'sm',
+                        centered: true,
+                      });
+                    }}
+                  >
+                    {t('检测全部渠道上游更新')}
+                  </Button>
+                </Dropdown.Item>
+                <Dropdown.Item>
+                  <Button
+                    size='small'
+                    type='primary'
+                    className='w-full'
+                    loading={applyAllUpstreamUpdatesLoading}
+                    disabled={applyAllUpstreamUpdatesLoading}
+                    onClick={() => {
+                      Modal.confirm({
+                        title: t('确定？'),
+                        content: t('确定要对全部渠道执行上游模型更新吗？'),
+                        onOk: () => applyAllUpstreamUpdates(),
+                        size: 'sm',
+                        centered: true,
+                      });
+                    }}
+                  >
+                    {t('处理全部渠道上游更新')}
                   </Button>
                 </Dropdown.Item>
                 <Dropdown.Item>

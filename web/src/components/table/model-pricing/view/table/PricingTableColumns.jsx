@@ -24,6 +24,7 @@ import {
   renderModelTag,
   stringToColor,
   calculateModelPrice,
+  getModelPriceItems,
   getLobeHubIcon,
 } from '../../../../../helpers';
 import {
@@ -108,6 +109,7 @@ export const getPricingTableColumns = ({
   setModalImageUrl,
   setIsModalOpenurl,
   currency,
+  siteDisplayType,
   tokenUnit,
   displayPrice,
   showRatio,
@@ -125,6 +127,7 @@ export const getPricingTableColumns = ({
         tokenUnit,
         displayPrice,
         currency,
+        quotaDisplayType: siteDisplayType,
       });
       priceDataCache.set(record, cache);
     }
@@ -226,54 +229,23 @@ export const getPricingTableColumns = ({
   };
 
   const priceColumn = {
-    title: t('模型价格'),
+    title: siteDisplayType === 'TOKENS' ? t('计费摘要') : t('模型价格'),
     dataIndex: 'model_price',
     ...(isMobile ? {} : { fixed: 'right' }),
     render: (text, record, index) => {
       const priceData = getPriceData(record);
+      const priceItems = getModelPriceItems(priceData, t, siteDisplayType);
 
-      // 文本模型阶梯价格
-      if (priceData.hasTextModelPrice) {
-        return (
-          <div className='space-y-1'>
-            <div className='text-gray-700'>
-              {t('输入')} {priceData.inputPrice} / 1{priceData.unitLabel} tokens {t('起')}
+      return (
+        <div className='space-y-1'>
+          {priceItems.map((item) => (
+            <div key={item.key} className='text-gray-700'>
+              {item.label} {item.value}
+              {item.suffix}
             </div>
-            <div className='text-gray-700'>
-              {t('输出')} {priceData.outputPrice} / 1{priceData.unitLabel} tokens {t('起')}
-            </div>
-          </div>
-        );
-      }
-
-      // 特殊价格（分辨率价格）
-      if (priceData.hasSpecialPrices) {
-        return (
-          <div className='text-gray-700'>
-            {priceData.price} {t('起')}
-          </div>
-        );
-      }
-
-      if (priceData.isPerToken) {
-        return (
-          <div className='space-y-1'>
-            <div className='text-gray-700'>
-              {t('输入')} {priceData.inputPrice} / 1{priceData.unitLabel} tokens
-            </div>
-            <div className='text-gray-700'>
-              {t('输出')} {priceData.completionPrice} / 1{priceData.unitLabel}{' '}
-              tokens
-            </div>
-          </div>
-        );
-      } else {
-        return (
-          <div className='text-gray-700'>
-            {t('模型价格')}：{priceData.price}
-          </div>
-        );
-      }
+          ))}
+        </div>
+      );
     },
   };
 

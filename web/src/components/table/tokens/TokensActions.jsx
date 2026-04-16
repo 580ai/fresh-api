@@ -120,8 +120,7 @@ const TokensActions = ({
       <CopyTokensModal
         visible={showCopyModal}
         onCancel={() => setShowCopyModal(false)}
-        selectedKeys={selectedKeys}
-        copyText={copyText}
+        batchCopyTokens={batchCopyTokens}
         t={t}
       />
 

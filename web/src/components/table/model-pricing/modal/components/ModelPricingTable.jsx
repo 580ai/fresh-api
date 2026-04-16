@@ -20,7 +20,7 @@ For commercial licensing, please contact support@quantumnous.com
 import React from 'react';
 import { Card, Avatar, Typography, Table, Tag } from '@douyinfe/semi-ui';
 import { IconCoinMoneyStroked } from '@douyinfe/semi-icons';
-import { calculateModelPrice } from '../../../../../helpers';
+import { calculateModelPrice, getModelPriceItems } from '../../../../../helpers';
 
 const { Text } = Typography;
 
@@ -28,6 +28,7 @@ const ModelPricingTable = ({
   modelData,
   groupRatio,
   currency,
+  siteDisplayType,
   tokenUnit,
   displayPrice,
   showRatio,
@@ -109,6 +110,7 @@ const ModelPricingTable = ({
             tokenUnit,
             displayPrice,
             currency,
+            quotaDisplayType: siteDisplayType,
           })
         : { inputPrice: '-', outputPrice: '-', price: '-' };
 
@@ -126,12 +128,7 @@ const ModelPricingTable = ({
             : modelData?.quota_type === 1
               ? t('按次计费')
               : '-',
-        inputPrice: modelData?.quota_type === 0 ? priceData.inputPrice : '-',
-        outputPrice:
-          modelData?.quota_type === 0
-            ? priceData.completionPrice || priceData.outputPrice
-            : '-',
-        fixedPrice: modelData?.quota_type === 1 ? priceData.price : '-',
+        priceItems: getModelPriceItems(priceData, t, siteDisplayType),
       };
 
       // 如果有特殊价格，计算每个分辨率的价格（基础价格 × 分组倍率）
@@ -189,71 +186,22 @@ const ModelPricingTable = ({
       },
     });
 
-    // 根据计费类型添加价格列
-    if (modelData?.quota_type === 0) {
-      // 按量计费
-      columns.push(
-        {
-          title: t('提示'),
-          dataIndex: 'inputPrice',
-          render: (text) => (
-            <>
-              <div className='font-semibold text-orange-600'>{text}</div>
-              <div className='text-xs text-gray-500'>
-                / {tokenUnit === 'K' ? '1K' : '1M'} tokens
+    columns.push({
+      title: siteDisplayType === 'TOKENS' ? t('计费摘要') : t('价格摘要'),
+      dataIndex: 'priceItems',
+      render: (items) => (
+        <div className='space-y-1'>
+          {items.map((item) => (
+            <div key={item.key}>
+              <div className='font-semibold text-orange-600'>
+                {item.label} {item.value}
               </div>
-            </>
-          ),
-        },
-        {
-          title: t('补全'),
-          dataIndex: 'outputPrice',
-          render: (text) => (
-            <>
-              <div className='font-semibold text-orange-600'>{text}</div>
-              <div className='text-xs text-gray-500'>
-                / {tokenUnit === 'K' ? '1K' : '1M'} tokens
-              </div>
-            </>
-          ),
-        },
-      );
-    } else if (hasSpecialPrices && availableSizes.length > 0) {
-      // 按次计费 + 有特殊价格（分辨率价格）- 嵌套两列：分辨率 + 价格
-      columns.push({
-        title: t('价格'),
-        dataIndex: 'specialPrices',
-        render: (specialPrices) => (
-          <div className='flex flex-col gap-1'>
-            {availableSizes.map((size) => (
-              <div key={size} className='flex items-center justify-between gap-4'>
-                <Tag color='white' size='small' shape='circle'>
-                  {size.toUpperCase()}
-                </Tag>
-                <div className='text-right'>
-                  <span className='font-semibold text-orange-600'>
-                    {formatPrice(specialPrices[size])}
-                  </span>
-                  <span className='text-xs text-gray-500 ml-1'>/ {t('次')}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        ),
-      });
-    } else {
-      // 按次计费（无特殊价格）
-      columns.push({
-        title: t('价格'),
-        dataIndex: 'fixedPrice',
-        render: (text) => (
-          <>
-            <div className='font-semibold text-orange-600'>{text}</div>
-            <div className='text-xs text-gray-500'>/ {t('次')}</div>
-          </>
-        ),
-      });
-    }
+              <div className='text-xs text-gray-500'>{item.suffix}</div>
+            </div>
+          ))}
+        </div>
+      ),
+    });
 
     return (
       <Table
