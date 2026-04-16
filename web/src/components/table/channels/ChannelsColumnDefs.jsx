@@ -373,6 +373,8 @@ export const getChannelsColumns = ({
             >
               <span>{text}</span>
             </Tooltip>
+          ) : (
+            <span>{text}</span>
           );
 
         if (!passThroughEnabled && !showUpstreamUpdateTag) {

@@ -4005,7 +4005,7 @@ const EditChannelModal = (props) => {
                       />
                     </div>
                   </div>
-                )
+                )}
               </div>
             </Spin>
 
