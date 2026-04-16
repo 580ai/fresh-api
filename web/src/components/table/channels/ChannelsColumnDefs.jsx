@@ -289,19 +289,22 @@ const getUpstreamUpdateMeta = (record) => {
 };
 
 const isRequestPassThroughEnabled = (record) => {
-  const settings = record?.settings;
-  if (!settings) {
+  if (!record || record.children !== undefined) {
     return false;
   }
-  if (typeof settings === 'object') {
-    return toBoolean(settings.pass_through_body_enabled);
+  const settingValue = record.setting;
+  if (!settingValue) {
+    return false;
   }
-  if (typeof settings !== 'string') {
+  if (typeof settingValue === 'object') {
+    return settingValue.pass_through_body_enabled === true;
+  }
+  if (typeof settingValue !== 'string') {
     return false;
   }
   try {
-    const parsed = JSON.parse(settings);
-    return toBoolean(parsed?.pass_through_body_enabled);
+    const parsed = JSON.parse(settingValue);
+    return parsed?.pass_through_body_enabled === true;
   } catch (error) {
     return false;
   }
