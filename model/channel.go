@@ -530,6 +530,14 @@ func (channel *Channel) Update() error {
 	return err
 }
 
+func (channel *Channel) UpdateModels() error {
+	err := DB.Model(channel).Select("models").Updates(map[string]interface{}{"models": channel.Models}).Error
+	if err != nil {
+		return err
+	}
+	return channel.UpdateAbilities(nil)
+}
+
 func (channel *Channel) UpdateResponseTime(responseTime int64) {
 	err := DB.Model(channel).Select("response_time", "test_time").Updates(Channel{
 		TestTime:     common.GetTimestamp(),

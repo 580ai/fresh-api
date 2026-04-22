@@ -678,6 +678,17 @@ func AddChannel(c *gin.Context) {
 	}
 	service.ResetProxyClientCache()
 
+	// BatchInsertChannels 内部 lo.Chunk 会拷贝元素，GORM 回填的 ID 不会传回 channels。
+	// 通过 created_time 精确查回刚插入的渠道 ID。
+	channelIds := make([]int, 0, len(channels))
+	if len(channels) > 0 {
+		var insertedChannels []model.Channel
+		model.DB.Select("id").Where("created_time = ?", channels[0].CreatedTime).Find(&insertedChannels)
+		for _, ch := range insertedChannels {
+			channelIds = append(channelIds, ch.Id)
+		}
+	}
+
 	// 记录操作日志
 	userId := c.GetInt("id")
 	for _, ch := range channels {
@@ -686,10 +697,18 @@ func AddChannel(c *gin.Context) {
 			fmt.Sprintf("创建渠道: %s", ch.Name))
 	}
 
-	c.JSON(http.StatusOK, gin.H{
+	resp := gin.H{
 		"success": true,
 		"message": "",
-	})
+		"data": gin.H{
+			"ids": channelIds,
+		},
+	}
+	// 兼容前端在单渠道创建场景下读取 data.id 的写法
+	if len(channelIds) == 1 {
+		resp["data"].(gin.H)["id"] = channelIds[0]
+	}
+	c.JSON(http.StatusOK, resp)
 	return
 }
 
@@ -1105,6 +1124,35 @@ func UpdateChannel(c *gin.Context) {
 		"data":    channel,
 	})
 	return
+}
+
+// PatchChannelModels 仅更新渠道的 models 字段（用于预测试后过滤无效模型）
+func PatchChannelModels(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	var req struct {
+		Models string `json:"models"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	channel, err := model.GetChannelById(id, false)
+	if err != nil || channel == nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "渠道不存在"})
+		return
+	}
+	channel.Models = req.Models
+	if err := channel.UpdateModels(); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	model.InitChannelCache()
+	service.ResetProxyClientCache()
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": ""})
 }
 
 func FetchModels(c *gin.Context) {

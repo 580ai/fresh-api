@@ -57,6 +57,7 @@ export default function SettingsMonitoring(props) {
     AutomaticDisableStatusCodes: '401',
     AutomaticRetryStatusCodes:
       '100-199,300-399,401-407,409-499,500-503,505-523,525-599',
+    ClaudePreTestEnabled: true,
     'monitor_setting.auto_test_channel_enabled': false,
     'monitor_setting.auto_test_channel_minutes': 10,
     // 渠道优先级监控设置
@@ -231,6 +232,24 @@ export default function SettingsMonitoring(props) {
           style={{ marginBottom: 15 }}
         >
           <Form.Section text={t('监控设置')}>
+            <Row gutter={16}>
+              <Col xs={24} sm={12} md={8} lg={8} xl={8}>
+                <Form.Switch
+                  field={'ClaudePreTestEnabled'}
+                  label={t('新建 Claude 渠道时自动预测试模型')}
+                  extraText={t('开启后，新建 Anthropic Claude 渠道时会自动测试每个模型，剔除上游无可用渠道的模型')}
+                  size='default'
+                  checkedText='｜'
+                  uncheckedText='〇'
+                  onChange={(value) =>
+                    setInputs({
+                      ...inputs,
+                      ClaudePreTestEnabled: value,
+                    })
+                  }
+                />
+              </Col>
+            </Row>
             <Row gutter={16}>
               <Col xs={24} sm={12} md={8} lg={8} xl={8}>
                 <Form.Switch

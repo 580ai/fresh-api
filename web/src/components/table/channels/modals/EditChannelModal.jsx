@@ -65,6 +65,7 @@ import ParamOverrideEditorModal from './ParamOverrideEditorModal';
 import JSONEditor from '../../../common/ui/JSONEditor';
 import SecureVerificationModal from '../../../common/modals/SecureVerificationModal';
 import StatusCodeRiskGuardModal from './StatusCodeRiskGuardModal';
+import ClaudeModelPreTestModal from './ClaudeModelPreTestModal';
 import ChannelKeyDisplay from '../../../common/ui/ChannelKeyDisplay';
 import { useSecureVerification } from '../../../../hooks/common/useSecureVerification';
 import { parseChannelConnectionString } from '../../../../helpers/token';
@@ -405,6 +406,8 @@ const EditChannelModal = (props) => {
   const [statusCodeRiskDetailItems, setStatusCodeRiskDetailItems] = useState(
     [],
   );
+  const [claudeTestVisible, setClaudeTestVisible] = useState(false);
+  const [claudeTestPayload, setClaudeTestPayload] = useState([]);
 
   // 剪贴板连接信息自动检测
   const [clipboardConfig, setClipboardConfig] = useState(null);
@@ -2122,9 +2125,48 @@ const EditChannelModal = (props) => {
     if (success) {
       // 保存自动启用状态
       const savedChannelId = isEdit ? channelId : data?.id;
+      const createdIds = isEdit ? [] : (data?.ids || (data?.id ? [data.id] : []));
       if (savedChannelId) {
         await saveAutoEnableStatus(savedChannelId, autoEnable);
       }
+
+      // 新增 Anthropic Claude 渠道时，自动预测试模型并过滤无可用渠道的模型
+      let claudePreTestEnabled = true;
+      if (!isEdit && localInputs.type === 14) {
+        try {
+          const optRes = await API.get('/api/option/');
+          if (optRes.data?.success) {
+            const opt = (optRes.data.data || []).find(
+              (o) => o.key === 'ClaudePreTestEnabled',
+            );
+            if (opt) {
+              claudePreTestEnabled = opt.value === 'true';
+            }
+          }
+        } catch (_) {
+          // 获取失败时保持默认开启
+        }
+      }
+
+      const shouldRunClaudePreTest =
+        !isEdit &&
+        localInputs.type === 14 &&
+        claudePreTestEnabled &&
+        createdIds.length > 0 &&
+        localInputs.models.length > 0;
+
+      if (shouldRunClaudePreTest) {
+        const modelList = localInputs.models.split(',').map((m) => m.trim()).filter(Boolean);
+        const channelsForTest = createdIds.map((id) => ({
+          id,
+          name: localInputs.name,
+          models: modelList,
+        }));
+        setClaudeTestPayload(channelsForTest);
+        setClaudeTestVisible(true);
+        return;
+      }
+
       if (isEdit) {
         showSuccess(t('渠道更新成功！'));
       } else {
@@ -4235,6 +4277,27 @@ const EditChannelModal = (props) => {
             formApiRef.current.setValue('models', nextModels);
           }
           showSuccess(t('模型列表已追加更新'));
+        }}
+      />
+      <ClaudeModelPreTestModal
+        visible={claudeTestVisible}
+        channels={claudeTestPayload}
+        t={t}
+        onDone={(summary) => {
+          setClaudeTestVisible(false);
+          if (summary.totalRemoved > 0) {
+            showSuccess(
+              t('渠道创建成功！共测试 {{total}} 个模型，剔除 {{removed}} 个无可用渠道的模型。')
+                .replace('{{total}}', summary.totalModels)
+                .replace('{{removed}}', summary.totalRemoved),
+            );
+          } else {
+            showSuccess(t('渠道创建成功！'));
+          }
+          setInputs(originInputs);
+          setAutoEnable(false);
+          props.refresh();
+          props.handleClose();
         }}
       />
     </>

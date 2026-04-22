@@ -235,6 +235,7 @@ func SetApiRouter(router *gin.Engine) {
 			channelRoute.POST("/priority_monitor", controller.RunChannelPriorityMonitorAPI)
 			channelRoute.POST("/", controller.AddChannel)
 			channelRoute.PUT("/", controller.UpdateChannel)
+			channelRoute.PATCH("/:id/models", controller.PatchChannelModels)
 			channelRoute.DELETE("/disabled", controller.DeleteDisabledChannel)
 			channelRoute.POST("/tag/disabled", controller.DisableTagChannels)
 			channelRoute.POST("/tag/enabled", controller.EnableTagChannels)
