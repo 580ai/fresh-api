@@ -207,10 +207,11 @@ const renderSuccessRate = (stats, t) => {
     );
   }
 
-  const { success_rate, total_count, success_count, fail_count, timeout_count, timeout_rate } = stats;
+  const { success_rate, total_count, success_count, fail_count, timeout_count, timeout_rate, rpm } = stats;
   const successRateStr = success_rate?.toFixed(1) || '0.0';
   const failRate = total_count > 0 ? (100 - success_rate).toFixed(1) : '0.0';
   const timeoutRateStr = timeout_rate?.toFixed(1) || '0.0';
+  const rpmValue = rpm ?? 0;
 
   let successColor = 'green';
   if (success_rate < 50) {
@@ -230,6 +231,17 @@ const renderSuccessRate = (stats, t) => {
     timeoutColor = 'cyan';
   }
 
+  let rpmColor = 'grey';
+  if (rpmValue >= 200) {
+    rpmColor = 'green';
+  } else if (rpmValue >= 50) {
+    rpmColor = 'teal';
+  } else if (rpmValue >= 10) {
+    rpmColor = 'cyan';
+  } else if (rpmValue > 0) {
+    rpmColor = 'blue';
+  }
+
   return (
     <Tooltip
       content={
@@ -238,6 +250,7 @@ const renderSuccessRate = (stats, t) => {
           <div>{t('成功')}: {success_count}</div>
           <div>{t('失败')}: {fail_count}</div>
           <div>{t('超时')}: {timeout_count || 0}</div>
+          <div>{t('最近1分钟请求数')}: {rpmValue}</div>
           <div className='text-xs text-gray-400 mt-1'>{t('最近24小时')}</div>
         </div>
       }
@@ -253,6 +266,10 @@ const renderSuccessRate = (stats, t) => {
         <span>/</span>
         <Tag color={timeoutColor} shape='circle'>
           {timeoutRateStr}%
+        </Tag>
+        <span>/</span>
+        <Tag color={rpmColor} shape='circle'>
+          RPM {rpmValue}
         </Tag>
       </Space>
     </Tooltip>
@@ -341,7 +358,7 @@ export const getChannelsColumns = ({
     },
     {
       key: COLUMN_KEYS.SUCCESS_RATE,
-      title: t('成功/失败/超时'),
+      title: t('成功/失败/超时/RPM'),
       dataIndex: 'stats',
       render: (text, record, index) => <div>{renderSuccessRate(record.stats, t)}</div>,
     },

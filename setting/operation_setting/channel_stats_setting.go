@@ -26,6 +26,7 @@ type ChannelStats struct {
 	TimeoutCount int     `json:"timeout_count"` // 超时数
 	SuccessRate  float64 `json:"success_rate"`  // 成功率 (0-100)
 	TimeoutRate  float64 `json:"timeout_rate"`  // 超时率 (0-100)
+	Rpm          int     `json:"rpm"`           // 最近 60 秒请求数，由 controller 实时填充
 }
 
 // 默认配置

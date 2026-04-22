@@ -2098,6 +2098,11 @@ func GetChannelStats(c *gin.Context) {
 	stats := operation_setting.GetAllChannelStats()
 	updatedAt := operation_setting.GetChannelStatsUpdatedAt()
 
+	// 实时 RPM：合并到缓存快照里（轻量查询，最近 60 秒按 channel_id 分组的 COUNT）
+	if rpmMap, err := model.GetChannelRpmFromLogs(); err == nil {
+		mergeChannelRpm(stats, rpmMap)
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"data": gin.H{
@@ -2139,6 +2144,11 @@ func RefreshChannelStats(c *gin.Context) {
 		}
 	}
 
+	// 合并实时 RPM
+	if rpmMap, err := model.GetChannelRpmFromLogs(); err == nil {
+		mergeChannelRpm(stats, rpmMap)
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"data": gin.H{
@@ -2146,4 +2156,18 @@ func RefreshChannelStats(c *gin.Context) {
 			"updated_at": time.Now().Unix(),
 		},
 	})
+}
+
+// mergeChannelRpm 将实时 RPM 合并到渠道统计里；对于只有 RPM 无历史统计的渠道也补齐条目
+func mergeChannelRpm(stats map[int]*operation_setting.ChannelStats, rpmMap map[int]int) {
+	for channelId, rpm := range rpmMap {
+		if s, ok := stats[channelId]; ok {
+			s.Rpm = rpm
+		} else {
+			stats[channelId] = &operation_setting.ChannelStats{
+				ChannelID: channelId,
+				Rpm:       rpm,
+			}
+		}
+	}
 }
