@@ -2148,6 +2148,23 @@ func GetChannelStats(c *gin.Context) {
 
 	// 实时 RPM：合并到缓存快照里（轻量查询，最近 60 秒按 channel_id 分组的 COUNT）
 	if rpmMap, err := model.GetChannelRpmFromLogs(); err == nil {
+		// 对于 RPM 有数据但缓存里没有的渠道（冷启动、非 master 节点、刷新间隔内新增流量等场景），
+		// 现场查一次 24h 统计补齐，避免前端出现“RPM 有数 / 其它三列全 0”。
+		var missing []int
+		for channelId := range rpmMap {
+			if _, ok := stats[channelId]; !ok {
+				missing = append(missing, channelId)
+			}
+		}
+		if len(missing) > 0 {
+			if results, qerr := model.GetChannelStatsFromLogs(); qerr == nil {
+				for _, channelId := range missing {
+					if result, ok := results[channelId]; ok {
+						stats[channelId] = buildChannelStats(channelId, result)
+					}
+				}
+			}
+		}
 		mergeChannelRpm(stats, rpmMap)
 	}
 
@@ -2175,21 +2192,7 @@ func RefreshChannelStats(c *gin.Context) {
 	// 转换为 ChannelStats 格式
 	stats := make(map[int]*operation_setting.ChannelStats)
 	for channelId, result := range results {
-		successRate := float64(0)
-		timeoutRate := float64(0)
-		if result.TotalCount > 0 {
-			successRate = float64(result.SuccessCount) / float64(result.TotalCount) * 100
-			timeoutRate = float64(result.TimeoutCount) / float64(result.TotalCount) * 100
-		}
-		stats[channelId] = &operation_setting.ChannelStats{
-			ChannelID:    channelId,
-			TotalCount:   result.TotalCount,
-			SuccessCount: result.SuccessCount,
-			FailCount:    result.FailCount,
-			TimeoutCount: result.TimeoutCount,
-			SuccessRate:  successRate,
-			TimeoutRate:  timeoutRate,
-		}
+		stats[channelId] = buildChannelStats(channelId, result)
 	}
 
 	// 合并实时 RPM
@@ -2204,6 +2207,25 @@ func RefreshChannelStats(c *gin.Context) {
 			"updated_at": time.Now().Unix(),
 		},
 	})
+}
+
+// buildChannelStats 将 24h 聚合结果转换成 ChannelStats
+func buildChannelStats(channelId int, result *model.ChannelStatsResult) *operation_setting.ChannelStats {
+	successRate := float64(0)
+	timeoutRate := float64(0)
+	if result.TotalCount > 0 {
+		successRate = float64(result.SuccessCount) / float64(result.TotalCount) * 100
+		timeoutRate = float64(result.TimeoutCount) / float64(result.TotalCount) * 100
+	}
+	return &operation_setting.ChannelStats{
+		ChannelID:    channelId,
+		TotalCount:   result.TotalCount,
+		SuccessCount: result.SuccessCount,
+		FailCount:    result.FailCount,
+		TimeoutCount: result.TimeoutCount,
+		SuccessRate:  successRate,
+		TimeoutRate:  timeoutRate,
+	}
 }
 
 // mergeChannelRpm 将实时 RPM 合并到渠道统计里；对于只有 RPM 无历史统计的渠道也补齐条目
