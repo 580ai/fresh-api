@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import { Toast, Pagination } from '@douyinfe/semi-ui';
-import { toastConstants } from '../constants';
+import { toastConstants, BILLING_PRICING_VARS, BILLING_VAR_REGEX } from '../constants';
 import React from 'react';
 import { toast } from 'react-toastify';
 import {
@@ -666,14 +666,23 @@ export const calculateModelPrice = ({
 
   const symbol = getCurrencySymbol();
 
-  // 2. 检查是否有文本模型阶梯价格
+  // 2. 动态计费（tiered_expr）
+  if (record.billing_mode === 'tiered_expr' && record.billing_expr) {
+    return {
+      isDynamicPricing: true,
+      billingExpr: record.billing_expr,
+      usedGroup,
+      usedGroupRatio,
+    };
+  }
+
+  // 2.5 检查是否有文本模型阶梯价格
   const hasTextModelPrice =
     record.text_model_price &&
     ((record.text_model_price.tiers && record.text_model_price.tiers.length > 0) ||
       (record.text_model_price.thinking_tiers && record.text_model_price.thinking_tiers.length > 0));
 
   if (hasTextModelPrice) {
-    // 找到所有阶梯中的最低输入价格和对应的输出价格
     const tiers = record.text_model_price.tiers || [];
     const thinkingTiers = record.text_model_price.thinking_tiers || [];
     const allTiers = [...tiers, ...thinkingTiers];
@@ -687,7 +696,6 @@ export const calculateModelPrice = ({
       }
     });
 
-    // 找到所有可用分组中倍率最小的
     let minGroupRatio = usedGroupRatio;
     if (
       Array.isArray(record.enable_groups) &&
@@ -701,11 +709,8 @@ export const calculateModelPrice = ({
       });
     }
 
-    // 最低价格 = 最低阶梯价格 × 最低分组倍率
-    // 价格单位是 $/1M tokens
     let minInput = minInputPrice * minGroupRatio;
     let minOutput = minOutputPrice * minGroupRatio;
-    // 如果是 CNY，需要转换
     if (currency === 'CNY') {
       minInput = minInput * 7;
       minOutput = minOutput * 7;
@@ -872,7 +877,6 @@ export const getModelPriceItems = (
   t,
   quotaDisplayType = 'USD',
 ) => {
-  // 有文本模型阶梯价格时，返回最低输入和输出价格起
   if (priceData.hasTextModelPrice) {
     const unitSuffix = ` / 1${priceData.unitLabel} Tokens`;
     return [
@@ -891,6 +895,17 @@ export const getModelPriceItems = (
     ];
   }
 
+  if (priceData.isDynamicPricing) {
+    return [
+      {
+        key: 'dynamic',
+        label: t('动态计费'),
+        value: '',
+        suffix: '',
+        isDynamic: true,
+      },
+    ];
+  }
 
   if (priceData.isPerToken) {
     if (quotaDisplayType === 'TOKENS' || priceData.isTokensDisplay) {
@@ -1011,6 +1026,98 @@ export const getModelPriceItems = (
       suffix: ` / ${t('次')}`,
     },
   ].filter((item) => item.value !== null && item.value !== undefined && item.value !== '');
+};
+
+// 格式化动态计费摘要（用于卡片视图，与 formatPriceInfo 风格统一）
+export const formatDynamicPriceSummary = (billingExpr, t, groupRatio = 1) => {
+  if (!billingExpr) return <span style={{ color: 'var(--semi-color-text-1)' }}>{t('动态计费')}</span>;
+
+  const quotaDisplayType = localStorage.getItem('quota_display_type') || 'USD';
+  let symbol = '$';
+  let rate = 1;
+  try {
+    const s = JSON.parse(localStorage.getItem('status') || '{}');
+    if (quotaDisplayType === 'CNY') {
+      symbol = '¥';
+      rate = s?.usd_exchange_rate || 7;
+    } else if (quotaDisplayType === 'CUSTOM') {
+      symbol = s?.custom_currency_symbol || '¤';
+      rate = s?.custom_currency_exchange_rate || 1;
+    }
+  } catch (e) {}
+
+  const gr = groupRatio || 1;
+  const exprBody = billingExpr.replace(/^v\d+:/, '');
+  const tierMatches = exprBody.match(/tier\(/g) || [];
+  const tierCount = tierMatches.length;
+
+  const varCoeffs = {};
+  const varRe = new RegExp(BILLING_VAR_REGEX.source, 'g');
+  let vm;
+  while ((vm = varRe.exec(exprBody)) !== null) {
+    if (!(vm[1] in varCoeffs)) varCoeffs[vm[1]] = Number(vm[2]);
+  }
+  const hasCoeffs = 'p' in varCoeffs || 'c' in varCoeffs;
+
+  const varLabels = BILLING_PRICING_VARS.map((v) => [v.key, v.label]);
+
+  const hasTimeCondition = /\b(?:hour|minute|weekday|month|day)\(/.test(exprBody);
+  const hasRequestCondition = /\b(?:param|header)\(/.test(exprBody);
+
+  const tags = [];
+  if (tierCount > 1) tags.push(`${tierCount}${t('档')}`);
+  if (hasTimeCondition) tags.push(t('含时间条件'));
+  if (hasRequestCondition) tags.push(t('含请求条件'));
+
+  const unitSuffix = ' / 1M Tokens';
+  const lineStyle = { color: 'var(--semi-color-text-1)' };
+
+  return (
+    <>
+      {hasCoeffs && (
+        <>
+          {varLabels.map(([key, label]) =>
+            key in varCoeffs ? (
+              <span key={key} style={lineStyle}>
+                {`${t(label)} ${symbol}${(varCoeffs[key] * gr * rate).toFixed(4)}${unitSuffix}`}
+              </span>
+            ) : null,
+          )}
+        </>
+      )}
+      {(tierCount > 1 || hasTimeCondition || hasRequestCondition) && (
+      <span style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+        <span
+          style={{
+            display: 'inline-block',
+            padding: '1px 6px',
+            borderRadius: 4,
+            fontSize: 11,
+            background: 'var(--semi-color-warning-light-default)',
+            color: 'var(--semi-color-warning)',
+          }}
+        >
+          {t('动态计费')}
+        </span>
+        {tags.map((tag) => (
+          <span
+            key={tag}
+            style={{
+              display: 'inline-block',
+              padding: '1px 6px',
+              borderRadius: 4,
+              fontSize: 11,
+              background: 'var(--semi-color-fill-1)',
+              color: 'var(--semi-color-text-2)',
+            }}
+          >
+            {tag}
+          </span>
+        ))}
+      </span>
+      )}
+    </>
+  );
 };
 
 // 格式化价格信息（用于卡片视图）
