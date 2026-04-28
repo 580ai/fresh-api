@@ -25,10 +25,10 @@ import { ChevronLeft } from 'lucide-react';
 import { useSidebarCollapsed } from '../../hooks/common/useSidebarCollapsed';
 import { useSidebar } from '../../hooks/common/useSidebar';
 import { useMinimumLoadingTime } from '../../hooks/common/useMinimumLoadingTime';
-import { isAdmin, isRoot, showError, isSuperAdmin } from '../../helpers';
+import { isAdmin, isRoot, showError, isSuperAdmin, API } from '../../helpers';
 import SkeletonWrapper from './components/SkeletonWrapper';
 
-import { Nav, Divider, Button } from '@douyinfe/semi-ui';
+import { Nav, Divider, Button, Tooltip } from '@douyinfe/semi-ui';
 
 const routerMap = {
   home: '/',
@@ -68,6 +68,31 @@ const SiderBar = ({ onNavigate = () => {} }) => {
   const [openedKeys, setOpenedKeys] = useState([]);
   const location = useLocation();
   const [routerMapState, setRouterMapState] = useState(routerMap);
+  const [badChannelCount, setBadChannelCount] = useState(0);
+
+  // 仅管理员需要轮询失败率高的渠道数量
+  useEffect(() => {
+    if (!isAdmin()) return;
+
+    let cancelled = false;
+    const fetchBadCount = async () => {
+      try {
+        const res = await API.get('/api/channel/bad_count');
+        if (!cancelled && res.data?.success) {
+          setBadChannelCount(res.data.data?.count ?? 0);
+        }
+      } catch (e) {
+        // 忽略：避免在网络异常时打扰管理员
+      }
+    };
+
+    fetchBadCount();
+    const timer = setInterval(fetchBadCount, 60000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, []);
 
   const workspaceItems = useMemo(() => {
     const items = [
@@ -356,10 +381,29 @@ const SiderBar = ({ onNavigate = () => {} }) => {
         itemKey={item.itemKey}
         text={
           <span
-            className='truncate font-medium text-sm'
+            className='truncate font-medium text-sm inline-flex items-center gap-1.5'
             style={{ color: textColor }}
           >
             {item.text}
+            {item.itemKey === 'channel' && badChannelCount > 0 && (
+              <Tooltip
+                content={`目前有 ${badChannelCount} 个失败率超过 95% 的渠道`}
+                position='right'
+              >
+                <span
+                  className='inline-flex items-center justify-center rounded-full text-white font-semibold leading-none'
+                  style={{
+                    backgroundColor: 'var(--semi-color-danger)',
+                    minWidth: '18px',
+                    height: '18px',
+                    padding: '0 5px',
+                    fontSize: '11px',
+                  }}
+                >
+                  {badChannelCount > 99 ? '99+' : badChannelCount}
+                </span>
+              </Tooltip>
+            )}
           </span>
         }
         icon={

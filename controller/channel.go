@@ -2283,3 +2283,43 @@ func mergeChannelRpm(stats map[int]*operation_setting.ChannelStats, rpmMap map[i
 		}
 	}
 }
+
+// GetBadChannelCount 返回当前启用渠道里失败率 >= 95% 的数量（用于侧边栏 Badge 提示）
+// 失败率定义：(FailCount + TimeoutCount) / TotalCount = 1 - SuccessRate/100
+// 仅统计 TotalCount > 0 的渠道，避免无流量渠道被算成 100% 失败
+const badChannelSuccessRateThreshold = 5.0
+
+func GetBadChannelCount(c *gin.Context) {
+	var enabledIds []int
+	if err := model.DB.Model(&model.Channel{}).
+		Where("status = ?", common.ChannelStatusEnabled).
+		Pluck("id", &enabledIds).Error; err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	enabledSet := make(map[int]struct{}, len(enabledIds))
+	for _, id := range enabledIds {
+		enabledSet[id] = struct{}{}
+	}
+
+	stats := operation_setting.GetAllChannelStats()
+	count := 0
+	for channelId, s := range stats {
+		if _, ok := enabledSet[channelId]; !ok {
+			continue
+		}
+		if s == nil || s.TotalCount <= 0 {
+			continue
+		}
+		if s.SuccessRate <= badChannelSuccessRateThreshold {
+			count++
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data": gin.H{
+			"count": count,
+		},
+	})
+}
