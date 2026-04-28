@@ -54,12 +54,28 @@ const (
 	ChannelTypeDoubaoVideo    = 54
 	ChannelTypeSora           = 55
 	ChannelTypeReplicate      = 56
-	ChannelTypeCodex          = 57
-	ChannelTypeDummy          // this one is only for count, do not add any channel after this
+	ChannelTypeCodex = 57
+	ChannelTypeDummy // this one is only for count, do not add any channel after this
 
 )
 
-var ChannelBaseURLs = []string{
+// 自定义渠道类型 ID 从 9000 起，避免与上游新增类型冲突。
+const (
+	ChannelTypeAnthropicBatch = 9001
+)
+
+// ChannelTypesExtraRange 列出 ID 不在 1..ChannelTypeDummy 连续区间内的自定义渠道类型，
+// 供需要遍历"全部已知渠道类型"的逻辑使用（例如初始化模型列表）。
+var ChannelTypesExtraRange = []int{
+	ChannelTypeAnthropicBatch,
+}
+
+// channelBaseURLs 是按 channel.Type 索引的 base URL 列表。
+// 1..ChannelTypeDummy 连续段在 channelBaseURLContiguous 中维护；
+// ID 不连续的自定义类型（如 ChannelTypeAnthropicBatch=9001）通过
+// channelBaseURLExtras 注入，最终在 init() 中合并成一个稀疏切片，
+// 这样所有现有 `ChannelBaseURLs[channel.Type]` 调用点无需改动。
+var channelBaseURLContiguous = []string{
 	"",                                    // 0
 	"https://api.openai.com",              // 1
 	"https://oa.api2d.net",                // 2
@@ -120,6 +136,27 @@ var ChannelBaseURLs = []string{
 	"https://chatgpt.com",                       //57
 }
 
+var channelBaseURLExtras = map[int]string{
+	ChannelTypeAnthropicBatch: "https://api.anthropic.com",
+}
+
+var ChannelBaseURLs = buildChannelBaseURLs()
+
+func buildChannelBaseURLs() []string {
+	maxIdx := len(channelBaseURLContiguous) - 1
+	for k := range channelBaseURLExtras {
+		if k > maxIdx {
+			maxIdx = k
+		}
+	}
+	arr := make([]string, maxIdx+1)
+	copy(arr, channelBaseURLContiguous)
+	for k, v := range channelBaseURLExtras {
+		arr[k] = v
+	}
+	return arr
+}
+
 var ChannelTypeNames = map[int]string{
 	ChannelTypeUnknown:        "Unknown",
 	ChannelTypeOpenAI:         "OpenAI",
@@ -175,6 +212,7 @@ var ChannelTypeNames = map[int]string{
 	ChannelTypeSora:           "Sora",
 	ChannelTypeReplicate:      "Replicate",
 	ChannelTypeCodex:          "Codex",
+	ChannelTypeAnthropicBatch: "Anthropic Claude批量",
 }
 
 func GetChannelTypeName(channelType int) string {

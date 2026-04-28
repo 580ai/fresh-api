@@ -92,10 +92,10 @@ func init() {
 		openAIModelsMap[aiModel.Id] = aiModel
 	}
 	channelId2Models = make(map[int][]string)
-	for i := 1; i <= constant.ChannelTypeDummy; i++ {
+	loadModelsForChannelType := func(i int) {
 		apiType, success := common.ChannelType2APIType(i)
 		if !success || apiType == constant.APITypeAIProxyLibrary {
-			continue
+			return
 		}
 		meta := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{
 			ChannelType: i,
@@ -103,6 +103,12 @@ func init() {
 		adaptor := relay.GetAdaptor(apiType)
 		adaptor.Init(meta)
 		channelId2Models[i] = adaptor.GetModelList()
+	}
+	for i := 1; i <= constant.ChannelTypeDummy; i++ {
+		loadModelsForChannelType(i)
+	}
+	for _, i := range constant.ChannelTypesExtraRange {
+		loadModelsForChannelType(i)
 	}
 	openAIModels = lo.UniqBy(openAIModels, func(m dto.OpenAIModels) string {
 		return m.Id

@@ -603,6 +603,48 @@ func AddChannel(c *gin.Context) {
 
 	addChannelRequest.Channel.CreatedTime = common.GetTimestamp()
 	keys := make([]string, 0)
+
+	if addChannelRequest.Mode == "anthropic_batch" {
+		channels, err := handleAnthropicBatchAdd(&addChannelRequest)
+		if err != nil {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": err.Error(),
+			})
+			return
+		}
+		if err := model.BatchInsertChannels(channels); err != nil {
+			common.ApiError(c, err)
+			return
+		}
+		service.ResetProxyClientCache()
+
+		channelIds := make([]int, 0, len(channels))
+		if len(channels) > 0 {
+			var insertedChannels []model.Channel
+			model.DB.Select("id").Where("created_time = ?", channels[0].CreatedTime).Find(&insertedChannels)
+			for _, ch := range insertedChannels {
+				channelIds = append(channelIds, ch.Id)
+			}
+		}
+
+		userId := c.GetInt("id")
+		for _, ch := range channels {
+			model.RecordOperationLog(c, userId, model.OperationModuleChannel, model.OperationActionCreate,
+				strconv.Itoa(ch.Id), ch.Name, nil, sanitizeChannelForLog(&ch),
+				fmt.Sprintf("创建渠道: %s", ch.Name))
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"success": true,
+			"message": "",
+			"data": gin.H{
+				"ids": channelIds,
+			},
+		})
+		return
+	}
+
 	switch addChannelRequest.Mode {
 	case "multi_to_single":
 		addChannelRequest.Channel.ChannelInfo.IsMultiKey = true

@@ -706,6 +706,12 @@ const EditChannelModal = (props) => {
         }
         setInputs((prev) => ({ ...prev, vertex_files: [] }));
       }
+
+      if (value === 9001) {
+        setBatch(true);
+        setMultiToSingle(false);
+        setMultiKeyMode('random');
+      }
     }
     //setAutoBan
   };
@@ -2125,6 +2131,9 @@ const EditChannelModal = (props) => {
     if (batch) {
       mode = multiToSingle ? 'multi_to_single' : 'batch';
     }
+    if (!isEdit && localInputs.type === 9001) {
+      mode = 'anthropic_batch';
+    }
 
     if (isEdit) {
       res = await API.put(`/api/channel/`, {
@@ -2285,14 +2294,17 @@ const EditChannelModal = (props) => {
     }
   };
 
-  const batchAllowed = (!isEdit || isMultiKeyChannel) && inputs.type !== 57;
+  const isAnthropicBatchType = inputs.type === 9001;
+  const batchAllowed =
+    (!isEdit || isMultiKeyChannel) && inputs.type !== 57;
   const batchExtra = batchAllowed ? (
     <Space>
       {!isEdit && (
         <Checkbox
-          disabled={isEdit}
-          checked={batch}
+          disabled={isEdit || isAnthropicBatchType}
+          checked={isAnthropicBatchType ? true : batch}
           onChange={(e) => {
+            if (isAnthropicBatchType) return;
             const checked = e.target.checked;
 
             if (!checked && vertexFileList.length > 1) {
@@ -2345,27 +2357,37 @@ const EditChannelModal = (props) => {
       )}
       {batch && (
         <>
-          <Checkbox
-            disabled={isEdit}
-            checked={multiToSingle}
-            onChange={() => {
-              setMultiToSingle((prev) => {
-                const nextValue = !prev;
-                setInputs((prevInputs) => {
-                  const newInputs = { ...prevInputs };
-                  if (nextValue) {
-                    newInputs.multi_key_mode = multiKeyMode;
-                  } else {
-                    delete newInputs.multi_key_mode;
-                  }
-                  return newInputs;
+          {isAnthropicBatchType ? (
+            <Tooltip content={t('聚合会根据提交的账号进行自动聚合')}>
+              <span>
+                <Checkbox disabled checked={false}>
+                  {t('密钥聚合模式')}
+                </Checkbox>
+              </span>
+            </Tooltip>
+          ) : (
+            <Checkbox
+              disabled={isEdit}
+              checked={multiToSingle}
+              onChange={() => {
+                setMultiToSingle((prev) => {
+                  const nextValue = !prev;
+                  setInputs((prevInputs) => {
+                    const newInputs = { ...prevInputs };
+                    if (nextValue) {
+                      newInputs.multi_key_mode = multiKeyMode;
+                    } else {
+                      delete newInputs.multi_key_mode;
+                    }
+                    return newInputs;
+                  });
+                  return nextValue;
                 });
-                return nextValue;
-              });
-            }}
-          >
-            {t('密钥聚合模式')}
-          </Checkbox>
+              }}
+            >
+              {t('密钥聚合模式')}
+            </Checkbox>
+          )}
 
           {inputs.type !== 41 && (
             <Button
@@ -3117,15 +3139,17 @@ const EditChannelModal = (props) => {
                           field='key'
                           label={t('密钥')}
                           placeholder={
-                            inputs.type === 33
-                              ? inputs.aws_key_type === 'api_key'
-                                ? t(
-                                    '请输入 API Key，一行一个，格式：APIKey|Region',
-                                  )
-                                : t(
-                                    '请输入密钥，一行一个，格式：AccessKey|SecretAccessKey|Region',
-                                  )
-                              : t('请输入密钥，一行一个')
+                            inputs.type === 9001
+                              ? t('一行一个，格式为sk-xxxxxxxx/100（金额）')
+                              : inputs.type === 33
+                                ? inputs.aws_key_type === 'api_key'
+                                  ? t(
+                                      '请输入 API Key，一行一个，格式：APIKey|Region',
+                                    )
+                                  : t(
+                                      '请输入密钥，一行一个，格式：AccessKey|SecretAccessKey|Region',
+                                    )
+                                : t('请输入密钥，一行一个')
                           }
                           rules={
                             isEdit
