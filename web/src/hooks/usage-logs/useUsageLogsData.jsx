@@ -43,6 +43,9 @@ import { ITEMS_PER_PAGE } from '../../constants';
 import { useTableCompactMode } from '../common/useTableCompactMode';
 import ParamOverrideEntry from '../../components/table/usage-logs/components/ParamOverrideEntry';
 
+const ADMIN_DEFAULT_LOG_END_OFFSET_SECONDS = 2 * 3600;
+const USER_DEFAULT_LOG_END_OFFSET_SECONDS = 3600;
+
 export const useLogsData = () => {
   const { t } = useTranslation();
 
@@ -93,7 +96,12 @@ export const useLogsData = () => {
 
   // Form state
   const [formApi, setFormApi] = useState(null);
-  let now = new Date();
+  const getDefaultEndTimestamp = () => {
+    const offsetSeconds = isAdminUser
+      ? ADMIN_DEFAULT_LOG_END_OFFSET_SECONDS
+      : USER_DEFAULT_LOG_END_OFFSET_SECONDS;
+    return timestamp2string(new Date().getTime() / 1000 + offsetSeconds);
+  };
   const formInitValues = {
     username: '',
     token_name: '',
@@ -103,7 +111,7 @@ export const useLogsData = () => {
     request_id: '',
     dateRange: [
       timestamp2string(getTodayStartTimestamp()),
-      timestamp2string(now.getTime() / 1000 + 3600),
+      getDefaultEndTimestamp(),
     ],
     logType: '0',
   };
@@ -237,7 +245,7 @@ export const useLogsData = () => {
     const formValues = formApi ? formApi.getValues() : {};
 
     let start_timestamp = timestamp2string(getTodayStartTimestamp());
-    let end_timestamp = timestamp2string(now.getTime() / 1000 + 3600);
+    let end_timestamp = getDefaultEndTimestamp();
 
     if (
       formValues.dateRange &&

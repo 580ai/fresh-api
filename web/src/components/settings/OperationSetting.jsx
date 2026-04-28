@@ -45,6 +45,9 @@ const OperationSetting = () => {
     'channel_auto_enable_setting.success_rate_threshold': 50,
     'channel_auto_enable_setting.test_count': 2,
 
+    /* 渠道优先级自动平衡 */
+    'channel_priority_balance_setting.enabled': true,
+
     /* 通用设置 */
     TopUpLink: '',
     'general_setting.docs_link': '',
