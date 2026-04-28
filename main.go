@@ -123,6 +123,9 @@ func main() {
 	controller.InitChannelAutoEnableTestFunc()
 	service.StartChannelAutoEnableTask()
 
+	// 渠道优先级自动平衡定时任务（仅 type=ChannelTypeAnthropicBatch）
+	service.StartChannelPriorityBalanceTask()
+
 	// Subscription quota reset task (daily/weekly/monthly/custom)
 	service.StartSubscriptionQuotaResetTask()
 

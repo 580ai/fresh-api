@@ -42,6 +42,7 @@ export default function SettingsCreditLimit(props) {
     'channel_auto_enable_setting.timeout_seconds': 30,
     'channel_auto_enable_setting.success_rate_threshold': 50,
     'channel_auto_enable_setting.test_count': 2,
+    'channel_priority_balance_setting.enabled': true,
   });
   const refForm = useRef();
   const [inputsRow, setInputsRow] = useState(inputs);
@@ -290,6 +291,31 @@ export default function SettingsCreditLimit(props) {
             <Row>
               <Button size='default' onClick={onSubmit}>
                 {t('保存渠道自动启用设置')}
+              </Button>
+            </Row>
+          </Form.Section>
+
+          <Form.Section text={t('渠道优先级自动平衡')}>
+            <Row>
+              <Col>
+                <Form.Switch
+                  label={t('启用渠道优先级自动平衡')}
+                  field={'channel_priority_balance_setting.enabled'}
+                  extraText={t(
+                    '开启后，系统每分钟自动检测「Anthropic Claude 批量」渠道：若优先级二中存在 RPM > 10 的渠道且优先级一未满 7，则按 t4→t3→t2→t1 顺序提升一个；若优先级二不足 10，则从优先级三按相同顺序补足。',
+                  )}
+                  onChange={(value) =>
+                    setInputs({
+                      ...inputs,
+                      'channel_priority_balance_setting.enabled': value,
+                    })
+                  }
+                />
+              </Col>
+            </Row>
+            <Row>
+              <Button size='default' onClick={onSubmit}>
+                {t('保存优先级平衡设置')}
               </Button>
             </Row>
           </Form.Section>
