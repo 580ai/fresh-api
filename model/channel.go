@@ -560,10 +560,19 @@ func (channel *Channel) UpdateBalance(balance float64) {
 
 // UpdateChannelPriorityAndWeight 更新渠道的优先级和权重
 func UpdateChannelPriorityAndWeight(channelId int, priority int64, weight uint) error {
-	err := DB.Model(&Channel{}).Where("id = ?", channelId).Updates(map[string]interface{}{
-		"priority": priority,
-		"weight":   weight,
-	}).Error
+	err := DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&Channel{}).Where("id = ?", channelId).Updates(map[string]interface{}{
+			"priority": priority,
+			"weight":   weight,
+		}).Error; err != nil {
+			return err
+		}
+
+		return tx.Model(&Ability{}).Where("channel_id = ?", channelId).Updates(map[string]interface{}{
+			"priority": priority,
+			"weight":   weight,
+		}).Error
+	})
 	if err != nil {
 		common.SysLog(fmt.Sprintf("failed to update priority and weight: channel_id=%d, error=%v", channelId, err))
 		return err
