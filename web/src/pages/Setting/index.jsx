@@ -34,12 +34,14 @@ import {
   CreditCard,
   Server,
   Activity,
+  Cloud,
 } from 'lucide-react';
 
 import SystemSetting from '../../components/settings/SystemSetting';
 import { isRoot } from '../../helpers';
 import OtherSetting from '../../components/settings/OtherSetting';
 import OperationSetting from '../../components/settings/OperationSetting';
+import AwsSetting from '../../components/settings/AwsSetting';
 import RateLimitSetting from '../../components/settings/RateLimitSetting';
 import ModelSetting from '../../components/settings/ModelSetting';
 import DashboardSetting from '../../components/settings/DashboardSetting';
@@ -67,6 +69,16 @@ const Setting = () => {
       ),
       content: <OperationSetting />,
       itemKey: 'operation',
+    });
+    panes.push({
+      tab: (
+        <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+          <Cloud size={18} />
+          {t('AWS设置')}
+        </span>
+      ),
+      content: <AwsSetting />,
+      itemKey: 'aws',
     });
     panes.push({
       tab: (

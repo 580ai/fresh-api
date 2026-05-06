@@ -356,6 +356,15 @@ func SetApiRouter(router *gin.Engine) {
 			groupRoute.GET("/", controller.GetGroups)
 		}
 
+		awsSettingRoute := apiRouter.Group("/aws_setting")
+		awsSettingRoute.Use(middleware.RootAuth())
+		{
+			awsSettingRoute.GET("/", controller.GetAwsSetting)
+			awsSettingRoute.PUT("/", controller.UpdateAwsSetting)
+			awsSettingRoute.GET("/bans", controller.GetAwsModelBans)
+			awsSettingRoute.DELETE("/bans/:id", controller.RestoreAwsModelBan)
+		}
+
 		prefillGroupRoute := apiRouter.Group("/prefill_group")
 		prefillGroupRoute.Use(middleware.AdminAuth())
 		{

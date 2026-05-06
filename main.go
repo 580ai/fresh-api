@@ -110,6 +110,9 @@ func main() {
 
 	go controller.AutomaticallyTestChannels()
 
+	// AWS model auto-ban task
+	go service.StartAwsModelBanTask()
+
 	// 渠道优先级监控定时任务
 	go controller.AutomaticallyRunChannelPriorityMonitor()
 
