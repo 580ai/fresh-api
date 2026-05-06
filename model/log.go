@@ -607,8 +607,7 @@ func GetChannelStatsFromLogs() (map[int]*ChannelStatsResult, error) {
 	return results, nil
 }
 
-// GetChannelRpmFromLogs 获取每个渠道最近 60 秒的请求数（RPM）
-// 统计 consume + error 日志，与 24 小时成功/失败统计口径一致
+// GetChannelRpmFromLogs 获取每个渠道最近 60 秒的消费请求数（RPM）
 func GetChannelRpmFromLogs() (map[int]int, error) {
 	startTime := time.Now().Add(-60 * time.Second).Unix()
 
@@ -619,8 +618,7 @@ func GetChannelRpmFromLogs() (map[int]int, error) {
 	var rows []rpmRow
 	err := LOG_DB.Model(&Log{}).
 		Select("channel_id, COUNT(*) as rpm").
-		Where("type IN ? AND created_at >= ? AND channel_id > 0",
-			[]int{LogTypeConsume, LogTypeError}, startTime).
+		Where("type = ? AND created_at >= ? AND channel_id > 0", LogTypeConsume, startTime).
 		Group("channel_id").
 		Scan(&rows).Error
 	if err != nil {

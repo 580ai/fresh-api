@@ -197,7 +197,7 @@ const renderResponseTime = (responseTime, t) => {
   }
 };
 
-// 渲染成功率
+// 渲染渠道实时 RPM
 const renderSuccessRate = (stats, t) => {
   if (!stats) {
     return (
@@ -207,29 +207,8 @@ const renderSuccessRate = (stats, t) => {
     );
   }
 
-  const { success_rate, total_count, success_count, fail_count, timeout_count, timeout_rate, rpm } = stats;
-  const successRateStr = success_rate?.toFixed(1) || '0.0';
-  const failRate = total_count > 0 ? (100 - success_rate).toFixed(1) : '0.0';
-  const timeoutRateStr = timeout_rate?.toFixed(1) || '0.0';
+  const { rpm } = stats;
   const rpmValue = rpm ?? 0;
-
-  let successColor = 'green';
-  if (success_rate < 50) {
-    successColor = 'orange';
-  } else if (success_rate < 80) {
-    successColor = 'yellow';
-  } else if (success_rate < 95) {
-    successColor = 'lime';
-  }
-
-  let timeoutColor = 'blue';
-  if (timeout_rate > 20) {
-    timeoutColor = 'purple';
-  } else if (timeout_rate > 10) {
-    timeoutColor = 'indigo';
-  } else if (timeout_rate > 5) {
-    timeoutColor = 'cyan';
-  }
 
   let rpmColor = 'grey';
   if (rpmValue >= 200) {
@@ -246,28 +225,14 @@ const renderSuccessRate = (stats, t) => {
     <Tooltip
       content={
         <div>
-          <div>{t('总请求')}: {total_count}</div>
-          <div>{t('成功')}: {success_count}</div>
-          <div>{t('失败')}: {fail_count}</div>
-          <div>{t('超时')}: {timeout_count || 0}</div>
-          <div>{t('最近1分钟请求数')}: {rpmValue}</div>
-          <div className='text-xs text-gray-400 mt-1'>{t('最近24小时')}</div>
+          <div>
+            {t('最近1分钟请求数')}: {rpmValue}
+          </div>
         </div>
       }
     >
       <Space spacing={4}>
-        <Tag color={successColor} shape='circle'>
-          {successRateStr}%
-        </Tag>
-        <span>/</span>
-        <Tag color='red' shape='circle'>
-          {failRate}%
-        </Tag>
-        <span>/</span>
-        <Tag color={timeoutColor} shape='circle'>
-          {timeoutRateStr}%
-        </Tag>
-        <span>/</span>
+        {/* 成功率、失败率、超时率暂时隐藏，仅保留 RPM 展示。 */}
         <Tag color={rpmColor} shape='circle'>
           RPM {rpmValue}
         </Tag>
@@ -358,9 +323,11 @@ export const getChannelsColumns = ({
     },
     {
       key: COLUMN_KEYS.SUCCESS_RATE,
-      title: t('成功/失败/超时/RPM'),
+      title: t('RPM'),
       dataIndex: 'stats',
-      render: (text, record, index) => <div>{renderSuccessRate(record.stats, t)}</div>,
+      render: (text, record, index) => (
+        <div>{renderSuccessRate(record.stats, t)}</div>
+      ),
     },
     {
       key: COLUMN_KEYS.CREATED_TIME,
