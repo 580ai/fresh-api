@@ -373,6 +373,10 @@ func EpayNotify(c *gin.Context) {
 			logger.LogWarn(c.Request.Context(), fmt.Sprintf("易支付 回调订单不存在 trade_no=%s callback_type=%s client_ip=%s verify_info=%q", verifyInfo.ServiceTradeNo, verifyInfo.Type, c.ClientIP(), common.GetJsonString(verifyInfo)))
 			return
 		}
+		if topUp.PaymentProvider == "" {
+			logger.LogInfo(c.Request.Context(), fmt.Sprintf("易支付 订单支付网关为空，自动设置为 epay trade_no=%s client_ip=%s", verifyInfo.ServiceTradeNo, c.ClientIP()))
+			topUp.PaymentProvider = model.PaymentProviderEpay
+		}
 		if topUp.PaymentProvider != model.PaymentProviderEpay {
 			logger.LogWarn(c.Request.Context(), fmt.Sprintf("易支付 订单支付网关不匹配 trade_no=%s order_provider=%s callback_type=%s client_ip=%s", verifyInfo.ServiceTradeNo, topUp.PaymentProvider, verifyInfo.Type, c.ClientIP()))
 			return
