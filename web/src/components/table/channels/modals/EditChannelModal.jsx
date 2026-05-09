@@ -4030,6 +4030,18 @@ const EditChannelModal = (props) => {
                     initValue={autoBan}
                   />
 
+                  <Form.InputNumber
+                    field='max_rpm'
+                    label={t('RPM 限制')}
+                    placeholder={t('0 表示不限制')}
+                    min={0}
+                    onChange={(value) => setMaxRPM(value || 0)}
+                    extraText={t(
+                      '每分钟最大请求数，0 表示不限制。超过限制时请求将自动切换到其他渠道',
+                    )}
+                    initValue={maxRPM}
+                  />
+
                   {/* Test Model - Core Config */}
                   <Form.Input
                     field='test_model'
