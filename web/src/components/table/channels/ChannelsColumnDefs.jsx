@@ -198,7 +198,7 @@ const renderResponseTime = (responseTime, t) => {
 };
 
 // 渲染渠道失败率和实时 RPM
-const renderSuccessRate = (stats, t) => {
+const renderFailureRateAndRpm = (stats, t) => {
   if (!stats) {
     return (
       <Tag color='grey' shape='circle'>
@@ -254,15 +254,12 @@ const renderSuccessRate = (stats, t) => {
         </div>
       }
     >
-      <Space spacing={4}>
+      <Space spacing={6} className='whitespace-nowrap'>
         {/* 成功率、超时率暂时隐藏，仅保留失败率和 RPM 展示。 */}
         <Tag color={failColor} shape='circle'>
-          {failRateStr}%
+          {t('失败')} {failRateStr}%
         </Tag>
-        <span>/</span>
-        <Tag color={rpmColor} shape='circle'>
-          RPM {rpmValue}
-        </Tag>
+        <Tag color={rpmColor} shape='circle'>{`RPM ${rpmValue}`}</Tag>
       </Space>
     </Tooltip>
   );
@@ -350,10 +347,11 @@ export const getChannelsColumns = ({
     },
     {
       key: COLUMN_KEYS.SUCCESS_RATE,
-      title: t('失败/RPM'),
+      title: t('失败率/RPM'),
       dataIndex: 'stats',
+      width: 160,
       render: (text, record, index) => (
-        <div>{renderSuccessRate(record.stats, t)}</div>
+        <div>{renderFailureRateAndRpm(record.stats, t)}</div>
       ),
     },
     {
