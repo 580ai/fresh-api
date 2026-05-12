@@ -172,47 +172,18 @@ const SiderBar = ({ onNavigate = () => {} }) => {
   }, [t, isModuleVisible]);
 
   const adminItems = useMemo(() => {
-    // 获取用户角色
-    const getUserRole = () => {
-      try {
-        const raw = localStorage.getItem('user');
-        if (!raw) return 0;
-        const user = JSON.parse(raw);
-        return user.role || 0;
-      } catch (e) {
-        return 0;
-      }
-    };
-
-    const userRole = getUserRole();
-    const isSuperAdminUser = isSuperAdmin();
-
-    // 判断某个模块是否应该显示
-    const shouldShowModule = (moduleKey) => {
-      // 超级管理员可以看到所有模块
-      if (isSuperAdminUser) return true;
-
-      // 普通管理员（role=10）只能看到兑换码管理、用户管理和操作日志
-      if (userRole === 10) {
-        return moduleKey === 'redemption' || moduleKey === 'user' || moduleKey === 'operation_log';
-      }
-
-      // 其他用户看不到任何admin模块
-      return false;
-    };
-
     const items = [
       {
         text: t('渠道管理'),
         itemKey: 'channel',
         to: '/channel',
-        className: shouldShowModule('channel') ? '' : 'tableHiddle',
+        className: isAdmin() ? '' : 'tableHiddle',
       },
       {
         text: t('操作日志'),
         itemKey: 'operation_log',
         to: '/operation_log',
-        className: shouldShowModule('operation_log') ? '' : 'tableHiddle',
+        className: isAdmin() ? '' : 'tableHiddle',
       },
       {
         text: t('订阅管理'),
@@ -224,7 +195,7 @@ const SiderBar = ({ onNavigate = () => {} }) => {
         text: t('模型管理'),
         itemKey: 'models',
         to: '/console/models',
-        className: shouldShowModule('models') ? '' : 'tableHiddle',
+        className: isSuperAdmin() ? '' : 'tableHiddle',
       },
       {
         text: t('模型部署'),
@@ -236,19 +207,19 @@ const SiderBar = ({ onNavigate = () => {} }) => {
         text: t('兑换码管理'),
         itemKey: 'redemption',
         to: '/redemption',
-        className: shouldShowModule('redemption') ? '' : 'tableHiddle',
+        className: isAdmin() ? '' : 'tableHiddle',
       },
       {
         text: t('用户管理'),
         itemKey: 'user',
         to: '/user',
-        className: shouldShowModule('user') ? '' : 'tableHiddle',
+        className: isAdmin() ? '' : 'tableHiddle',
       },
       {
         text: t('系统设置'),
         itemKey: 'setting',
         to: '/setting',
-        className: shouldShowModule('setting') ? '' : 'tableHiddle',
+        className: isSuperAdmin() ? '' : 'tableHiddle',
       },
     ];
 
@@ -478,7 +449,7 @@ const SiderBar = ({ onNavigate = () => {} }) => {
         type='sidebar'
         className=''
         collapsed={collapsed}
-        showAdmin={isSuperAdmin()}
+        showAdmin={isAdmin()}
       >
         <Nav
           className='sidebar-nav'
