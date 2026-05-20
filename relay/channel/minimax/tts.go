@@ -12,7 +12,6 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/dto"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
-	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/types"
 	"github.com/gin-gonic/gin"
 )
@@ -186,7 +185,6 @@ func handleChatCompletionResponse(c *gin.Context, resp *http.Response, info *rel
 
 	// Set response headers
 	for key, values := range resp.Header {
-		// avoid overwriting local instance headers with upstream values
 		if key == common.RequestIdKey || key == "X-New-Api-Version" {
 			continue
 		}

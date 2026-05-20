@@ -441,18 +441,6 @@ func TaskBulkUpdateByID(ids []int64, params map[string]any) error {
 		Updates(params).Error
 }
 
-// TaskBulkUpdate updates multiple tasks by their task_id (string).
-// WARNING: This function bypasses optimistic locking and may overwrite
-// any concurrent status changes. DO NOT use in billing/quota lifecycle flows.
-func TaskBulkUpdate(taskIds []string, params map[string]any) error {
-	if len(taskIds) == 0 {
-		return nil
-	}
-	return DB.Model(&Task{}).
-		Where("task_id in (?)", taskIds).
-		Updates(params).Error
-}
-
 type TaskQuotaUsage struct {
 	Mode  string  `json:"mode"`
 	Count float64 `json:"count"`
