@@ -1,6 +1,6 @@
 <div align="center">
 
-![new-api](/web/public/logo.png)
+![new-api](/web/default/public/logo.png)
 
 # New API
 
@@ -49,13 +49,11 @@
 
 ## 📝 项目说明
 
-> [!NOTE]  
-> 本项目为开源项目，在 [One API](https://github.com/songquanpeng/one-api) 的基础上进行二次开发
-
-> [!IMPORTANT]  
-> - 本项目仅供个人学习使用，不保证稳定性，且不提供任何技术支持
-> - 使用者必须在遵循 OpenAI 的 [使用条款](https://openai.com/policies/terms-of-use) 以及**法律法规**的情况下使用，不得用于非法用途
-> - 根据 [《生成式人工智能服务管理暂行办法》](http://www.cac.gov.cn/2023-07/13/c_1690898327029107.htm) 的要求，请勿对中国地区公众提供一切未经备案的生成式人工智能服务
+> [!IMPORTANT]
+> - This project is intended solely for lawful and authorized AI API gateway, organization-level authentication, multi-model management, usage analytics, cost accounting, and private deployment scenarios.
+> - Users must lawfully obtain upstream API keys, accounts, model services, and interface permissions, and must comply with upstream terms of service and applicable laws and regulations.
+> - Users should ensure their use complies with upstream terms of service and applicable laws and regulations.
+> - When providing generative AI services to the public, users should comply with applicable regulatory requirements and fulfill all filing, licensing, content safety, real-name verification, log retention, tax, and upstream authorization obligations required by their jurisdiction.
 
 ---
 
@@ -146,7 +144,10 @@ docker run --name new-api -d --restart always \
 
 🎉 部署完成后，访问 `http://localhost:3000` 即可使用！
 
-📖 更多部署方式请参考 [部署指南](https://docs.newapi.pro/zh/docs/installation)
+> [!WARNING]
+> When operating this project as a public generative AI service or API resale service, users should first complete all required filing, licensing, content safety, real-name verification, log retention, tax, payment, and upstream authorization obligations.
+
+📖 For more deployment methods, please refer to [Deployment Guide](https://docs.newapi.pro/en/docs/installation)
 
 ---
 
@@ -184,20 +185,20 @@ docker run --name new-api -d --restart always \
 | 📈 数据看板 | 可视化控制台与统计分析 |
 | 🔒 权限管理 | 令牌分组、模型限制、用户管理 |
 
-### 💰 支付与计费
+### 💰 Authorized Usage Accounting and Billing
 
-- ✅ 在线充值（易支付、Stripe）
-- ✅ 模型按次数收费
-- ✅ 缓存计费支持（OpenAI、Azure、DeepSeek、Claude、Qwen等所有支持的模型）
-- ✅ 灵活的计费策略配置
+- ✅ Internal top-up and quota allocation for lawful authorized scenarios (EPay, Stripe)
+- ✅ Organization-level per-request, usage-based, and cache-hit cost accounting
+- ✅ Cache billing statistics for OpenAI, Azure, DeepSeek, Claude, Qwen, and supported models
+- ✅ Flexible billing policies for internal management or authorized enterprise customers
 
 ### 🔐 授权与安全
 
-- 😈 Discord 授权登录
-- 🤖 LinuxDO 授权登录
-- 📱 Telegram 授权登录
-- 🔑 OIDC 统一认证
-- 🔍 Key 查询使用额度（配合 [neko-api-key-tool](https://github.com/Calcium-Ion/neko-api-key-tool)）
+- 😈 Discord authorization login
+- 🤖 LinuxDO authorization login
+- 📱 Telegram authorization login
+- 🔑 OIDC unified authentication
+- 🔍 Key quota query usage (with [new-api-key-tool](https://github.com/Calcium-Ion/new-api-key-tool))
 
 ### 🚀 高级功能
 
@@ -249,18 +250,19 @@ docker run --name new-api -d --restart always \
 
 ## 🤖 模型支持
 
-> 详情请参考 [接口文档 - 中继接口](https://docs.newapi.pro/zh/docs/api)
+> For details, please refer to [API Documentation - Gateway Interface](https://docs.newapi.pro/en/docs/api)
 
 | 模型类型 | 说明 | 文档 |
 |---------|------|------|
-| 🤖 OpenAI GPTs | gpt-4-gizmo-* 系列 | - |
-| 🎨 Midjourney-Proxy | [Midjourney-Proxy(Plus)](https://github.com/novicezk/midjourney-proxy) | [文档](https://doc.newapi.pro/api/midjourney-proxy-image) |
-| 🎵 Suno-API | [Suno API](https://github.com/Suno-API/Suno-API) | [文档](https://doc.newapi.pro/api/suno-music) |
-| 🔄 Rerank | Cohere、Jina | [文档](https://docs.newapi.pro/zh/docs/api/ai-model/rerank/create-rerank) |
-| 💬 Claude | Messages 格式 | [文档](https://docs.newapi.pro/zh/docs/api/ai-model/chat/create-message) |
-| 🌐 Gemini | Google Gemini 格式 | [文档](https://doc.newapi.pro/api/google-gemini-chat) |
-| 🔧 Dify | ChatFlow 模式 | - |
-| 🎯 自定义 | 支持完整调用地址 | - |
+| 🤖 OpenAI-Compatible | OpenAI compatible models | [Documentation](https://docs.newapi.pro/en/docs/api/ai-model/chat/openai/createchatcompletion) |
+| 🤖 OpenAI Responses | OpenAI Responses format | [Documentation](https://docs.newapi.pro/en/docs/api/ai-model/chat/openai/createresponse) |
+| 🎨 Midjourney-Proxy | [Midjourney-Proxy(Plus)](https://github.com/novicezk/midjourney-proxy) | [Documentation](https://doc.newapi.pro/api/midjourney-proxy-image) |
+| 🎵 Suno-API | [Suno API](https://github.com/Suno-API/Suno-API) | [Documentation](https://doc.newapi.pro/api/suno-music) |
+| 🔄 Rerank | Cohere, Jina | [Documentation](https://docs.newapi.pro/en/docs/api/ai-model/rerank/creatererank) |
+| 💬 Claude | Messages format | [Documentation](https://docs.newapi.pro/en/docs/api/ai-model/chat/createmessage) |
+| 🌐 Gemini | Google Gemini format | [Documentation](https://docs.newapi.pro/en/docs/api/ai-model/chat/gemini/geminirelayv1beta) |
+| 🔧 Dify | ChatFlow mode | - |
+| 🎯 Custom upstream | Supports configuring legally authorized upstream endpoints | - |
 
 ### 📡 支持的接口
 
@@ -410,8 +412,8 @@ docker run --name new-api -d --restart always \
 
 | 项目 | 说明 |
 |------|------|
-| [neko-api-key-tool](https://github.com/Calcium-Ion/neko-api-key-tool) | Key 额度查询工具 |
-| [new-api-horizon](https://github.com/Calcium-Ion/new-api-horizon) | New API 高性能优化版 |
+| [new-api-key-tool](https://github.com/Calcium-Ion/new-api-key-tool) | Key quota query tool |
+| [new-api-horizon](https://github.com/Calcium-Ion/new-api-horizon) | New API high-performance optimized version |
 
 ---
 
@@ -430,10 +432,28 @@ docker run --name new-api -d --restart always \
 
 欢迎各种形式的贡献！
 
-- 🐛 报告 Bug
-- 💡 提出新功能
-- 📝 改进文档
-- 🔧 提交代码
+- 🐛 Report Bugs
+- 💡 Propose New Features
+- 📝 Improve Documentation
+- 🔧 Submit Code
+
+---
+
+## 📜 License
+
+This project is licensed under the [GNU Affero General Public License v3.0 (AGPLv3)](./LICENSE).
+
+Additional terms under AGPLv3 Section 7 apply. Modified versions must preserve
+the author attribution notice `Frontend design and development by New API
+contributors.` in the appropriate legal notices and in any prominent about,
+legal, footer, or attribution location presented by the user interface.
+
+Modified versions that present a user interface must also preserve a visible
+link to the original project: <https://github.com/QuantumNous/new-api>.
+
+This is an open-source project developed based on [One API](https://github.com/songquanpeng/one-api) (MIT License).
+
+If your organization's policies do not permit the use of AGPLv3-licensed software, or if you wish to avoid the open-source obligations of AGPLv3, please contact us at: [support@quantumnous.com](mailto:support@quantumnous.com)
 
 ---
 
