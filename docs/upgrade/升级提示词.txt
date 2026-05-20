@@ -1,2 +1,2 @@
-我的这个项目是一个基于new-api中转的二次开发项目，现在线上的new-api项目有新的更新，我需要你帮我合并最新版本的代码到我们这个项目里面，但是要保留我们已经实现的功能。
-你可以通过git提交记录查看我们改动的记录，主要开发人员是LittleROCK和wen。帮我把new-api开源项目合并到self分支上，new-api项目地址：https://github.com/QuantumNous/new-api
+我的这个项目是一个基于new-api中转的二次开发项目，现在线上的new-api项目有新的更新，我需要你帮我合并最新版本的代码到我们这个项目里面，但是要保留我们已经实现的功能，不要不小心删除或者覆盖了。
+你可以通过git提交记录查看我们改动的记录，主要开发人员是LittleROCK和wen和Pluto。帮我把new-api开源项目合并到self分支上，new-api项目地址：https://github.com/QuantumNous/new-api
