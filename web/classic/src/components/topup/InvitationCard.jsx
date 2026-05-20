@@ -27,7 +27,7 @@ import {
   Badge,
   Space,
 } from '@douyinfe/semi-ui';
-import { Copy, Users, TrendingUp, Gift } from 'lucide-react';
+import { Copy, Users, TrendingUp, Gift, Zap } from 'lucide-react';
 import { getRealInviteCount, getInviteIncome } from '../../helpers/pythonApi';
 
 const { Text } = Typography;
