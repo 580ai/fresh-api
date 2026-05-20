@@ -43,7 +43,6 @@ const RedemptionsTable = (redemptionsData) => {
     setEditingRedemption,
     setShowEdit,
     refresh,
-    currentUserRole,
     t,
   } = redemptionsData;
 
@@ -69,7 +68,6 @@ const RedemptionsTable = (redemptionsData) => {
       redemptions,
       activePage,
       showDeleteRedemptionModal,
-      currentUserRole,
     });
   }, [
     t,
@@ -81,7 +79,6 @@ const RedemptionsTable = (redemptionsData) => {
     redemptions,
     activePage,
     showDeleteRedemptionModal,
-    currentUserRole,
   ]);
 
   // Handle compact mode by removing fixed positioning

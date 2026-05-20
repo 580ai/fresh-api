@@ -87,7 +87,6 @@ const RedemptionsPage = () => {
               setShowEdit={setShowEdit}
               batchCopyRedemptions={batchCopyRedemptions}
               batchDeleteRedemptions={batchDeleteRedemptions}
-              currentUserRole={redemptionsData.currentUserRole}
               t={t}
             />
 

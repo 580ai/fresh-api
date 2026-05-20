@@ -318,7 +318,6 @@ export const getUsersColumns = ({
   showResetPasskeyModal,
   showResetTwoFAModal,
   showUserSubscriptionsModal,
-  currentUserRole,
 }) => {
   const columns = [
     {
@@ -390,29 +389,6 @@ export const getUsersColumns = ({
         }),
     },
   ];
-
-  // Admin (role 10) can view but not edit
-  if (currentUserRole === 10) {
-    return columns.map((col) => {
-      if (col.dataIndex !== 'operate') return col;
-      return {
-        ...col,
-        render: (text, record, index) =>
-          renderOperations(text, record, {
-            setEditingUser: null,
-            setShowEditUser: null,
-            showPromoteModal,
-            showDemoteModal,
-            showEnableDisableModal,
-            showDeleteModal,
-            showResetPasskeyModal,
-            showResetTwoFAModal,
-            showUserSubscriptionsModal,
-            t,
-          }),
-      };
-    });
-  }
 
   return columns;
 };

@@ -31,21 +31,6 @@ import { useTableCompactMode } from '../common/useTableCompactMode';
 export const useRedemptionsData = () => {
   const { t } = useTranslation();
 
-  // 获取当前登录用户角色
-  const getCurrentUserRole = () => {
-    const raw = localStorage.getItem('user');
-    if (raw) {
-      try {
-        const user = JSON.parse(raw);
-        return user.role || 1;
-      } catch {
-        return 1;
-      }
-    }
-    return 1;
-  };
-  const currentUserRole = getCurrentUserRole();
-
   // Basic state
   const [redemptions, setRedemptions] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -327,7 +312,6 @@ export const useRedemptionsData = () => {
     pageSize,
     tokenCount,
     selectedKeys,
-    currentUserRole,
 
     // Edit state
     editingRedemption,
