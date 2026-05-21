@@ -315,6 +315,11 @@ export function Wallet(props: WalletProps) {
               />
             </div>
 
+            {/*
+              [CUSTOM-DISABLED] 邀请奖励卡片已被本二开项目隐藏，请勿重新启用
+              原因：本二开版本不展示「邀请奖励 / Referral Program」入口。
+              历史：每次合并 upstream(QuantumNous/new-api) 后该卡片会被还原，
+                    此处通过注释固定保留隐藏状态。如需恢复，请先与产品负责人确认。
             <AffiliateRewardsCard
               user={user}
               affiliateLink={affiliateLink}
@@ -324,6 +329,7 @@ export function Wallet(props: WalletProps) {
               }
               loading={affiliateLoading}
             />
+            */}
           </div>
         </SectionPageLayout.Content>
       </SectionPageLayout>

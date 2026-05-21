@@ -81,16 +81,24 @@ const UserInfoModal = ({
           {/* 基本信息 */}
           <div style={rowStyle}>
             <div style={colStyle}>
+              {renderLabel(t('用户 ID'), 'primary')}
+              <div style={valueStyle}>{userInfoData.id}</div>
+            </div>
+            <div style={colStyle}>
               {renderLabel(t('用户名'), 'primary')}
               <div style={valueStyle}>{userInfoData.username}</div>
             </div>
-            {userInfoData.display_name && (
+          </div>
+
+          {userInfoData.display_name && (
+            <div style={rowStyle}>
               <div style={colStyle}>
                 {renderLabel(t('显示名称'), 'primary')}
                 <div style={valueStyle}>{userInfoData.display_name}</div>
               </div>
-            )}
-          </div>
+              <div style={colStyle} />
+            </div>
+          )}
 
           {/* 余额信息 */}
           <div style={rowStyle}>

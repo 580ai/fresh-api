@@ -18,15 +18,17 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import React, { useState } from 'react';
-import { Tabs, TabPane, Pagination } from '@douyinfe/semi-ui';
+import { Tabs, TabPane } from '@douyinfe/semi-ui';
 import { useTranslation } from 'react-i18next';
 import TokensTable from '../../components/table/tokens';
-import TokenConsumptionTable, { useTokenConsumption, TokenConsumptionToolbar } from '../../components/table/tokens/TokenConsumptionTable';
+// 消耗统计子面板功能暂时取消，保留引用代码便于后续恢复。
+// import TokenConsumptionTable, { useTokenConsumption, TokenConsumptionToolbar } from '../../components/table/tokens/TokenConsumptionTable';
 
 const Token = () => {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState('list');
-  const consumptionData = useTokenConsumption();
+  // 消耗统计子面板功能暂时取消，避免继续请求消耗统计接口。
+  // const consumptionData = useTokenConsumption();
 
   return (
     <div className='mt-[60px] px-2'>
@@ -34,7 +36,8 @@ const Token = () => {
         <TabPane tab={t('令牌列表')} itemKey='list'>
           <TokensTable />
         </TabPane>
-        <TabPane tab={t('消耗统计')} itemKey='consumption'>
+        {/* 消耗统计子面板功能暂时取消，保留原始面板代码便于后续恢复。 */}
+        {/* <TabPane tab={t('消耗统计')} itemKey='consumption'>
           <div className='flex flex-col gap-4'>
             <TokenConsumptionToolbar
               monthLabel={consumptionData.monthLabel}
@@ -63,7 +66,7 @@ const Token = () => {
               </div>
             )}
           </div>
-        </TabPane>
+        </TabPane> */}
       </Tabs>
     </div>
   );
