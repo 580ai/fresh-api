@@ -24,6 +24,8 @@ type GeneralSetting struct {
 	CustomCurrencyExchangeRate float64 `json:"custom_currency_exchange_rate"`
 	// 每个分组的最大重试次数（多分组场景下，每个分组最多尝试多少次后切换到下一个分组）
 	MaxRetryPerGroup int `json:"max_retry_per_group"`
+	// 是否允许在创建/编辑渠道时填写自定义 API 地址（BaseURL）
+	ChannelBaseURLInputEnabled bool `json:"channel_base_url_input_enabled"`
 }
 
 // 默认配置
@@ -37,6 +39,7 @@ var generalSetting = GeneralSetting{
 	CustomCurrencySymbol:       "¤",
 	CustomCurrencyExchangeRate: 1.0,
 	MaxRetryPerGroup:           2,
+	ChannelBaseURLInputEnabled: true,
 }
 
 func init() {
@@ -103,4 +106,9 @@ func GetMaxRetryPerGroup() int {
 		return 2 // 默认值
 	}
 	return generalSetting.MaxRetryPerGroup
+}
+
+// IsChannelBaseURLInputEnabled 是否允许填写渠道自定义 API 地址
+func IsChannelBaseURLInputEnabled() bool {
+	return generalSetting.ChannelBaseURLInputEnabled
 }

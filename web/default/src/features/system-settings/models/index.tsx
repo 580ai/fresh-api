@@ -29,6 +29,8 @@ const defaultModelSettings: ModelSettings = {
   'global.chat_completions_to_responses_policy': '{}',
   'general_setting.ping_interval_enabled': false,
   'general_setting.ping_interval_seconds': 60,
+  'general_setting.channel_base_url_input_enabled': true,
+  'general_setting.channel_base_url_input_enabled': true,
   'gemini.safety_settings': '',
   'gemini.version_settings': '',
   'gemini.supported_imagine_models': '',

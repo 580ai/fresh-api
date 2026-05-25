@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React, { useEffect, useState, useRef, useMemo } from 'react';
+import React, { useEffect, useState, useRef, useMemo, useContext } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   API,
@@ -68,6 +68,7 @@ import StatusCodeRiskGuardModal from './StatusCodeRiskGuardModal';
 import ClaudeModelPreTestModal from './ClaudeModelPreTestModal';
 import ChannelKeyDisplay from '../../../common/ui/ChannelKeyDisplay';
 import { useSecureVerification } from '../../../../hooks/common/useSecureVerification';
+import { StatusContext } from '../../../../context/Status';
 import { parseChannelConnectionString } from '../../../../helpers/token';
 import { createApiCalls } from '../../../../services/secureVerification';
 import {
@@ -168,6 +169,9 @@ const EditChannelModal = (props) => {
   const isEdit = channelId !== undefined;
   const [loading, setLoading] = useState(isEdit);
   const isMobile = useIsMobile();
+  const [statusState] = useContext(StatusContext);
+  const baseUrlInputEnabled =
+    statusState?.status?.channel_base_url_input_enabled !== false;
   const handleCancel = () => {
     props.handleClose();
   };
@@ -3662,7 +3666,12 @@ const EditChannelModal = (props) => {
                                 handleInputChange('base_url', value)
                               }
                               showClear
-                              disabled={isIonetLocked}
+                              disabled={isIonetLocked || !baseUrlInputEnabled}
+                              extraText={
+                                !baseUrlInputEnabled
+                                  ? t('管理员已禁用自定义 API 地址')
+                                  : undefined
+                              }
                             />
                           </div>
                           <div>
@@ -3717,7 +3726,12 @@ const EditChannelModal = (props) => {
                                 handleInputChange('base_url', value)
                               }
                               showClear
-                              disabled={isIonetLocked}
+                              disabled={isIonetLocked || !baseUrlInputEnabled}
+                              extraText={
+                                !baseUrlInputEnabled
+                                  ? t('管理员已禁用自定义 API 地址')
+                                  : undefined
+                              }
                             />
                           </div>
                         </>
@@ -3749,10 +3763,14 @@ const EditChannelModal = (props) => {
                                 handleInputChange('base_url', value)
                               }
                               showClear
-                              disabled={isIonetLocked}
-                              extraText={t(
-                                '对于官方渠道，new-api已经内置地址，除非是第三方代理站点或者Azure的特殊接入地址，否则不需要填写',
-                              )}
+                              disabled={isIonetLocked || !baseUrlInputEnabled}
+                              extraText={
+                                !baseUrlInputEnabled
+                                  ? t('管理员已禁用自定义 API 地址')
+                                  : t(
+                                      '对于官方渠道，new-api已经内置地址，除非是第三方代理站点或者Azure的特殊接入地址，否则不需要填写',
+                                    )
+                              }
                             />
                           </div>
                         )}
@@ -3769,7 +3787,12 @@ const EditChannelModal = (props) => {
                               handleInputChange('base_url', value)
                             }
                             showClear
-                            disabled={isIonetLocked}
+                            disabled={isIonetLocked || !baseUrlInputEnabled}
+                            extraText={
+                              !baseUrlInputEnabled
+                                ? t('管理员已禁用自定义 API 地址')
+                                : undefined
+                            }
                           />
                         </div>
                       )}
@@ -3788,7 +3811,12 @@ const EditChannelModal = (props) => {
                               handleInputChange('base_url', value)
                             }
                             showClear
-                            disabled={isIonetLocked}
+                            disabled={isIonetLocked || !baseUrlInputEnabled}
+                            extraText={
+                              !baseUrlInputEnabled
+                                ? t('管理员已禁用自定义 API 地址')
+                                : undefined
+                            }
                           />
                         </div>
                       )}
@@ -3820,7 +3848,12 @@ const EditChannelModal = (props) => {
                               },
                             ]}
                             defaultValue='https://ark.cn-beijing.volces.com'
-                            disabled={isIonetLocked}
+                            disabled={isIonetLocked || !baseUrlInputEnabled}
+                            extraText={
+                              !baseUrlInputEnabled
+                                ? t('管理员已禁用自定义 API 地址')
+                                : undefined
+                            }
                           />
                         </div>
                       )}

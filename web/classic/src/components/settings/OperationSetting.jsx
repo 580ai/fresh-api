@@ -55,6 +55,7 @@ const OperationSetting = () => {
     USDExchangeRate: 0,
     RetryTimes: 0,
     'general_setting.quota_display_type': 'USD',
+    'general_setting.channel_base_url_input_enabled': true,
     'channel_stats_setting.refresh_interval_minutes': 5,
     'channel_stats_setting.stream_timeout_seconds': 10,
     'channel_stats_setting.non_stream_timeout_seconds': 30,

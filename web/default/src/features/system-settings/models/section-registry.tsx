@@ -60,6 +60,8 @@ const MODELS_SECTIONS = [
               settings['general_setting.ping_interval_enabled'],
             ping_interval_seconds:
               settings['general_setting.ping_interval_seconds'],
+            channel_base_url_input_enabled:
+              settings['general_setting.channel_base_url_input_enabled'] ?? true,
           },
         }}
       />

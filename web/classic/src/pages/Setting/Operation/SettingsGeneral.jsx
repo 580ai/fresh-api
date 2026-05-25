@@ -54,6 +54,7 @@ export default function GeneralSettings(props) {
     'general_setting.custom_currency_symbol': '¤',
     'general_setting.custom_currency_exchange_rate': '',
     'general_setting.max_retry_per_group': 2,
+    'general_setting.channel_base_url_input_enabled': true,
     'channel_stats_setting.refresh_interval_minutes': 5,
     'channel_stats_setting.stream_timeout_seconds': 10,
     'channel_stats_setting.non_stream_timeout_seconds': 30,
@@ -245,6 +246,22 @@ export default function GeneralSettings(props) {
     if (props.options['general_setting.max_retry_per_group'] !== undefined) {
       const val = props.options['general_setting.max_retry_per_group'];
       currentInputs['general_setting.max_retry_per_group'] = typeof val === 'string' ? parseInt(val, 10) || 2 : val;
+    }
+    // 回填渠道自定义 API 地址输入开关
+    if (
+      props.options['general_setting.channel_base_url_input_enabled'] !== undefined
+    ) {
+      const v = props.options['general_setting.channel_base_url_input_enabled'];
+      currentInputs['general_setting.channel_base_url_input_enabled'] =
+        typeof v === 'string' ? v === 'true' || v === '1' : Boolean(v);
+    }
+    // 回填渠道自定义 API 地址输入开关
+    if (
+      props.options['general_setting.channel_base_url_input_enabled'] !== undefined
+    ) {
+      const v = props.options['general_setting.channel_base_url_input_enabled'];
+      currentInputs['general_setting.channel_base_url_input_enabled'] =
+        typeof v === 'string' ? v === 'true' || v === '1' : Boolean(v);
     }
     setInputs(currentInputs);
     setInputsRow(structuredClone(currentInputs));
@@ -439,6 +456,21 @@ export default function GeneralSettings(props) {
                   checkedText='｜'
                   uncheckedText='〇'
                   onChange={handleFieldChange('SelfUseModeEnabled')}
+                />
+              </Col>
+              <Col xs={24} sm={12} md={8} lg={8} xl={8}>
+                <Form.Switch
+                  field={'general_setting.channel_base_url_input_enabled'}
+                  label={t('允许渠道自定义 API 地址')}
+                  extraText={t(
+                    '开启后，管理员在创建/编辑渠道时可以填写自定义 API 地址；关闭后将禁用API地址输入项',
+                  )}
+                  size='default'
+                  checkedText='｜'
+                  uncheckedText='〇'
+                  onChange={handleFieldChange(
+                    'general_setting.channel_base_url_input_enabled',
+                  )}
                 />
               </Col>
             </Row>

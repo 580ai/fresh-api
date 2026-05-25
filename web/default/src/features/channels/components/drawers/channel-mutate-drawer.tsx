@@ -160,6 +160,10 @@ import {
 import { ParamOverrideEditorDialog } from '../dialogs/param-override-editor-dialog'
 import { StatusCodeRiskDialog } from '../dialogs/status-code-risk-dialog'
 import { ModelMappingEditor } from '../model-mapping-editor'
+import {
+  getOptionValue,
+  useSystemOptions,
+} from '@/features/system-settings/hooks/use-system-options'
 
 type ChannelMutateDrawerProps = {
   open: boolean
@@ -299,6 +303,13 @@ export function ChannelMutateDrawer({
   const { t } = useTranslation()
   const queryClient = useQueryClient()
   const { setOpen } = useChannels()
+  const { data: systemOptionsData } = useSystemOptions()
+  const baseUrlInputEnabled = useMemo(() => {
+    const parsed = getOptionValue(systemOptionsData?.data, {
+      'general_setting.channel_base_url_input_enabled': true,
+    })
+    return parsed['general_setting.channel_base_url_input_enabled']
+  }, [systemOptionsData])
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [customModel, setCustomModel] = useState('')
   const [fetchModelsDialogOpen, setFetchModelsDialogOpen] = useState(false)
@@ -1239,11 +1250,14 @@ export function ChannelMutateDrawer({
                               placeholder={t(
                                 'e.g., https://docs-test-001.openai.azure.com'
                               )}
+                              disabled={!baseUrlInputEnabled}
                               {...field}
                             />
                           </FormControl>
                           <FormDescription>
-                            {t('Your Azure OpenAI endpoint URL')}
+                            {!baseUrlInputEnabled
+                              ? t('管理员已禁用自定义 API 地址')
+                              : t('Your Azure OpenAI endpoint URL')}
                           </FormDescription>
                           <FormMessage />
                         </FormItem>
@@ -1309,13 +1323,18 @@ export function ChannelMutateDrawer({
                             placeholder={t(
                               'e.g., https://api.openai.com/v1/chat/completions'
                             )}
+                            disabled={!baseUrlInputEnabled}
                             {...field}
                           />
                         </FormControl>
                         <FormDescription>
-                          {t('Enter the complete URL, supports')} {'{'}
-                          {t('model')}
-                          {'}'} {t('variable')}
+                          {!baseUrlInputEnabled
+                            ? t('管理员已禁用自定义 API 地址')
+                            : t('Enter the complete URL, supports') +
+                              ' {' +
+                              t('model') +
+                              '} ' +
+                              t('variable')}
                         </FormDescription>
                         <FormMessage />
                       </FormItem>
@@ -1454,13 +1473,16 @@ export function ChannelMutateDrawer({
                             placeholder={t(
                               'e.g., https://fastgpt.run/api/openapi'
                             )}
+                            disabled={!baseUrlInputEnabled}
                             {...field}
                           />
                         </FormControl>
                         <FormDescription>
-                          {t(
-                            'For private deployments, format: https://fastgpt.run/api/openapi'
-                          )}
+                          {!baseUrlInputEnabled
+                            ? t('管理员已禁用自定义 API 地址')
+                            : t(
+                                'For private deployments, format: https://fastgpt.run/api/openapi'
+                              )}
                         </FormDescription>
                         <FormMessage />
                       </FormItem>
@@ -1483,13 +1505,16 @@ export function ChannelMutateDrawer({
                             placeholder={t(
                               'e.g., https://api.example.com (path before /suno)'
                             )}
+                            disabled={!baseUrlInputEnabled}
                             {...field}
                           />
                         </FormControl>
                         <FormDescription>
-                          {t(
-                            'Enter the path before /suno, usually just the domain'
-                          )}
+                          {!baseUrlInputEnabled
+                            ? t('管理员已禁用自定义 API 地址')
+                            : t(
+                                'Enter the path before /suno, usually just the domain'
+                              )}
                         </FormDescription>
                         <FormMessage />
                       </FormItem>
@@ -1713,9 +1738,10 @@ export function ChannelMutateDrawer({
                           value={
                             field.value || 'https://ark.cn-beijing.volces.com'
                           }
+                          disabled={!baseUrlInputEnabled}
                         >
                           <FormControl>
-                            <SelectTrigger>
+                            <SelectTrigger disabled={!baseUrlInputEnabled}>
                               <SelectValue />
                             </SelectTrigger>
                           </FormControl>
@@ -1734,7 +1760,9 @@ export function ChannelMutateDrawer({
                           </SelectContent>
                         </Select>
                         <FormDescription>
-                          {t('Select the API endpoint region')}
+                          {!baseUrlInputEnabled
+                            ? t('管理员已禁用自定义 API 地址')
+                            : t('Select the API endpoint region')}
                         </FormDescription>
                         <FormMessage />
                       </FormItem>
@@ -1755,11 +1783,14 @@ export function ChannelMutateDrawer({
                             placeholder={t(
                               'e.g., https://ark.cn-beijing.volces.com'
                             )}
+                            disabled={!baseUrlInputEnabled}
                             {...field}
                           />
                         </FormControl>
                         <FormDescription>
-                          {t('Enter custom API endpoint URL')}
+                          {!baseUrlInputEnabled
+                            ? t('管理员已禁用自定义 API 地址')
+                            : t('Enter custom API endpoint URL')}
                         </FormDescription>
                         <FormMessage />
                       </FormItem>
@@ -1801,13 +1832,16 @@ export function ChannelMutateDrawer({
                         <FormControl>
                           <Input
                             placeholder={t(FIELD_PLACEHOLDERS.BASE_URL)}
+                            disabled={!baseUrlInputEnabled}
                             {...field}
                           />
                         </FormControl>
                         <FormDescription>
-                          {t(
-                            'Custom API base URL. For official channels, New API has built-in addresses. Only fill this for third-party proxy sites or special endpoints. Do not add /v1 or trailing slash.'
-                          )}
+                          {!baseUrlInputEnabled
+                            ? t('管理员已禁用自定义 API 地址')
+                            : t(
+                                'Custom API base URL. For official channels, New API has built-in addresses. Only fill this for third-party proxy sites or special endpoints. Do not add /v1 or trailing slash.'
+                              )}
                         </FormDescription>
                         <FormMessage />
                       </FormItem>

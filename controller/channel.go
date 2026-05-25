@@ -481,6 +481,13 @@ func validateChannel(channel *model.Channel, isAdd bool) error {
 		return fmt.Errorf("渠道额外设置[channel setting] 格式错误：%s", err.Error())
 	}
 
+	// 如果禁用了自定义 API 地址输入，则不允许提交 BaseURL
+	if !operation_setting.IsChannelBaseURLInputEnabled() {
+		if channel != nil && channel.BaseURL != nil && strings.TrimSpace(*channel.BaseURL) != "" {
+			return fmt.Errorf("管理员已禁用自定义 API 地址，请勿填写 API 地址")
+		}
+	}
+
 	// 如果是添加操作，检查 channel 和 key 是否为空
 	if isAdd {
 		if channel == nil || channel.Key == "" {
@@ -1234,6 +1241,9 @@ func FetchModels(c *gin.Context) {
 	}
 
 	baseURL := req.BaseURL
+	if !operation_setting.IsChannelBaseURLInputEnabled() {
+		baseURL = ""
+	}
 	if baseURL == "" {
 		baseURL = constant.ChannelBaseURLs[req.Type]
 	}
