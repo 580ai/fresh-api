@@ -2,11 +2,13 @@ package relay
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -115,6 +117,9 @@ func RelayMidjourneyNotify(c *gin.Context) *dto.MidjourneyResponse {
 	midjourneyTask.StartTime = midjRequest.StartTime
 	midjourneyTask.FinishTime = midjRequest.FinishTime
 	midjourneyTask.ImageUrl = midjRequest.ImageUrl
+	if common.GetJsonType(midjRequest.ImageUrls) == "array" {
+		midjourneyTask.ImageUrls = string(midjRequest.ImageUrls)
+	}
 	midjourneyTask.VideoUrl = midjRequest.VideoUrl
 	videoUrlsStr, _ := json.Marshal(midjRequest.VideoUrls)
 	midjourneyTask.VideoUrls = string(videoUrlsStr)
@@ -148,6 +153,12 @@ func coverMidjourneyTaskDto(c *gin.Context, originTask *model.Midjourney) (midjo
 	} else {
 		midjourneyTask.ImageUrl = originTask.ImageUrl
 	}
+	midjourneyTask.ImageUrls = json.RawMessage(`[]`)
+	if originTask.ImageUrls != "" &&
+		json.Valid([]byte(originTask.ImageUrls)) &&
+		common.GetJsonType(json.RawMessage(originTask.ImageUrls)) == "array" {
+		midjourneyTask.ImageUrls = json.RawMessage(originTask.ImageUrls)
+	}
 	if originTask.VideoUrl != "" {
 		midjourneyTask.VideoUrl = originTask.VideoUrl
 	}
@@ -178,6 +189,80 @@ func coverMidjourneyTaskDto(c *gin.Context, originTask *model.Midjourney) (midjo
 		}
 	}
 	return
+}
+
+func fetchMidjourneyImageUrls(ctx context.Context, channel *model.Channel, taskId string) (json.RawMessage, error) {
+	requestURL := fmt.Sprintf(
+		"%s/mj/task/%s/fetch",
+		strings.TrimRight(channel.GetBaseURL(), "/"),
+		url.PathEscape(taskId),
+	)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("mj-api-secret", strings.TrimPrefix(channel.Key, "Bearer "))
+
+	httpClient := service.GetHttpClient()
+	if httpClient == nil {
+		httpClient = http.DefaultClient
+	}
+	if proxy := channel.GetSetting().Proxy; proxy != "" {
+		httpClient, err = service.NewProxyHttpClient(proxy)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("upstream returned status %d", resp.StatusCode)
+	}
+
+	responseBody, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
+	if err != nil {
+		return nil, err
+	}
+	var upstreamTask dto.MidjourneyDto
+	if err := common.Unmarshal(responseBody, &upstreamTask); err != nil {
+		return nil, err
+	}
+	if common.GetJsonType(upstreamTask.ImageUrls) != "array" {
+		return nil, nil
+	}
+	return upstreamTask.ImageUrls, nil
+}
+
+func hydrateMidjourneyImageUrls(c *gin.Context, task *model.Midjourney) {
+	if task.ImageUrls != "" || (task.Status != "SUCCESS" && task.Progress != "100%") {
+		return
+	}
+	channel, err := model.CacheGetChannel(task.ChannelId)
+	if err != nil {
+		logger.LogDebug(c, "failed to get channel for Midjourney imageUrls: %v", err)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 15*time.Second)
+	defer cancel()
+	imageUrls, err := fetchMidjourneyImageUrls(ctx, channel, task.MjId)
+	if err != nil {
+		logger.LogDebug(c, "failed to fetch Midjourney imageUrls from upstream: %v", err)
+		return
+	}
+	if len(imageUrls) == 0 {
+		return
+	}
+
+	task.ImageUrls = string(imageUrls)
+	if err := task.UpdateImageUrls(); err != nil {
+		logger.LogError(c, "failed to persist Midjourney imageUrls: "+err.Error())
+	}
 }
 
 func RelaySwapFace(c *gin.Context, info *relaycommon.RelayInfo) *dto.MidjourneyResponse {
@@ -330,6 +415,7 @@ func RelayMidjourneyTask(c *gin.Context, relayMode int) *dto.MidjourneyResponse 
 				Description: "task_no_found",
 			}
 		}
+		hydrateMidjourneyImageUrls(c, originTask)
 		midjourneyTask := coverMidjourneyTaskDto(c, originTask)
 		respBody, err = json.Marshal(midjourneyTask)
 		if err != nil {
@@ -602,6 +688,12 @@ func RelayMidjourneySubmit(c *gin.Context, relayInfo *relaycommon.RelayInfo) *dt
 		if ok {
 			imageUrl, ok1 := properties["imageUrl"].(string)
 			status, ok2 := properties["status"].(string)
+			if imageUrls, exists := properties["imageUrls"]; exists {
+				imageUrlsJSON, err := common.Marshal(imageUrls)
+				if err == nil && common.GetJsonType(imageUrlsJSON) == "array" {
+					midjourneyTask.ImageUrls = string(imageUrlsJSON)
+				}
+			}
 			if ok1 && ok2 {
 				midjourneyTask.ImageUrl = imageUrl
 				midjourneyTask.Status = status

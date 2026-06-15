@@ -1,5 +1,7 @@
 package dto
 
+import "encoding/json"
+
 //type SimpleMjRequest struct {
 //	Prompt   string `json:"prompt"`
 //	CustomId string `json:"customId"`
@@ -45,26 +47,27 @@ type MidjourneyResponseWithStatusCode struct {
 }
 
 type MidjourneyDto struct {
-	MjId        string      `json:"id"`
-	Action      string      `json:"action"`
-	CustomId    string      `json:"customId"`
-	BotType     string      `json:"botType"`
-	Prompt      string      `json:"prompt"`
-	PromptEn    string      `json:"promptEn"`
-	Description string      `json:"description"`
-	State       string      `json:"state"`
-	SubmitTime  int64       `json:"submitTime"`
-	StartTime   int64       `json:"startTime"`
-	FinishTime  int64       `json:"finishTime"`
-	ImageUrl    string      `json:"imageUrl"`
-	VideoUrl    string      `json:"videoUrl"`
-	VideoUrls   []ImgUrls   `json:"videoUrls"`
-	Status      string      `json:"status"`
-	Progress    string      `json:"progress"`
-	FailReason  string      `json:"failReason"`
-	Buttons     any         `json:"buttons"`
-	MaskBase64  string      `json:"maskBase64"`
-	Properties  *Properties `json:"properties"`
+	MjId        string          `json:"id"`
+	Action      string          `json:"action"`
+	CustomId    string          `json:"customId"`
+	BotType     string          `json:"botType"`
+	Prompt      string          `json:"prompt"`
+	PromptEn    string          `json:"promptEn"`
+	Description string          `json:"description"`
+	State       string          `json:"state"`
+	SubmitTime  int64           `json:"submitTime"`
+	StartTime   int64           `json:"startTime"`
+	FinishTime  int64           `json:"finishTime"`
+	ImageUrl    string          `json:"imageUrl"`
+	ImageUrls   json.RawMessage `json:"imageUrls"`
+	VideoUrl    string          `json:"videoUrl"`
+	VideoUrls   []ImgUrls       `json:"videoUrls"`
+	Status      string          `json:"status"`
+	Progress    string          `json:"progress"`
+	FailReason  string          `json:"failReason"`
+	Buttons     any             `json:"buttons"`
+	MaskBase64  string          `json:"maskBase64"`
+	Properties  *Properties     `json:"properties"`
 }
 
 type ImgUrls struct {

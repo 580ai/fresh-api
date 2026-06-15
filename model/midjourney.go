@@ -14,6 +14,7 @@ type Midjourney struct {
 	StartTime   int64  `json:"start_time" gorm:"index"`
 	FinishTime  int64  `json:"finish_time" gorm:"index"`
 	ImageUrl    string `json:"image_url"`
+	ImageUrls   string `json:"image_urls" gorm:"type:text"`
 	VideoUrl    string `json:"video_url"`
 	VideoUrls   string `json:"video_urls"`
 	Status      string `json:"status" gorm:"type:varchar(20);index"`
@@ -155,6 +156,10 @@ func (midjourney *Midjourney) Update() error {
 	var err error
 	err = DB.Save(midjourney).Error
 	return err
+}
+
+func (midjourney *Midjourney) UpdateImageUrls() error {
+	return DB.Model(midjourney).Update("image_urls", midjourney.ImageUrls).Error
 }
 
 // UpdateWithStatus performs a conditional UPDATE guarded by fromStatus (CAS).
