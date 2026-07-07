@@ -8,6 +8,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/i18n"
+	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 
@@ -43,8 +44,9 @@ func GetAllRedemptions(c *gin.Context) {
 
 func SearchRedemptions(c *gin.Context) {
 	keyword := c.Query("keyword")
+	status := c.Query("status")
 	pageInfo := common.GetPageQuery(c)
-	redemptions, total, err := model.SearchRedemptions(keyword, pageInfo.GetStartIdx(), pageInfo.GetPageSize())
+	redemptions, total, err := model.SearchRedemptions(keyword, status, pageInfo.GetStartIdx(), pageInfo.GetPageSize())
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -125,7 +127,6 @@ func AddRedemption(c *gin.Context) {
 		}
 		keys = append(keys, key)
 	}
-
 	// 记录操作日志
 	model.RecordOperationLog(c, c.GetInt("id"), model.ModuleRedemption, model.ActionCreate,
 		redemption.Name, redemption.Name, nil, map[string]interface{}{
@@ -136,6 +137,11 @@ func AddRedemption(c *gin.Context) {
 		},
 		fmt.Sprintf("创建兑换码: %s, 数量: %d", redemption.Name, redemption.Count))
 
+	recordManageAudit(c, "redemption.create", map[string]interface{}{
+		"name":  redemption.Name,
+		"count": redemption.Count,
+		"quota": logger.LogQuota(redemption.Quota),
+	})
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",

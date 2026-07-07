@@ -6,7 +6,7 @@ import "github.com/QuantumNous/new-api/common"
 // compatible with MySQL (SIGNED), PostgreSQL and SQLite (BIGINT).
 func DayTimestampExpr(column string) string {
 	castType := "BIGINT"
-	if common.UsingMySQL {
+	if common.UsingMainDatabase(common.DatabaseTypeMySQL) {
 		castType = "SIGNED"
 	}
 	return "CAST(FLOOR(" + column + " / 86400) * 86400 AS " + castType + ")"
@@ -18,9 +18,9 @@ func GetDBTimestamp() int64 {
 	var ts int64
 	var err error
 	switch {
-	case common.UsingPostgreSQL:
+	case common.UsingMainDatabase(common.DatabaseTypePostgreSQL):
 		err = DB.Raw("SELECT EXTRACT(EPOCH FROM NOW())::bigint").Scan(&ts).Error
-	case common.UsingSQLite:
+	case common.UsingMainDatabase(common.DatabaseTypeSQLite):
 		err = DB.Raw("SELECT strftime('%s','now')").Scan(&ts).Error
 	default:
 		err = DB.Raw("SELECT UNIX_TIMESTAMP()").Scan(&ts).Error

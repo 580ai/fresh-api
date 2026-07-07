@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"sort"
@@ -90,6 +91,11 @@ func RunChannelPriorityMonitorOptimized(
 	if len(targetChannels) == 0 {
 		common.SysLog("没有找到启用的渠道")
 		return nil
+	}
+
+	testUserID, err := resolveChannelTestUserID(nil)
+	if err != nil {
+		return fmt.Errorf("解析渠道测试用户失败: %v", err)
 	}
 
 	common.SysLog(fmt.Sprintf("开始测试所有渠道，共 %d 个", len(targetChannels)))
@@ -275,7 +281,7 @@ func RunChannelPriorityMonitorOptimized(
 			}
 
 			tik := time.Now()
-			result := testChannel(ch, testModel, "", false)
+			result := testChannel(context.Background(), ch, testUserID, testModel, "", false)
 			responseTime := time.Since(tik).Milliseconds()
 
 			testResult := &ChannelTestResult{

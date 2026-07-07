@@ -1,8 +1,6 @@
 package relay
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -76,7 +74,7 @@ func GeminiHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 		var imageConfig struct {
 			ImageSize string `json:"imageSize"`
 		}
-		if err := json.Unmarshal(geminiReq.GenerationConfig.ImageConfig, &imageConfig); err == nil && imageConfig.ImageSize != "" {
+		if err := common.Unmarshal(geminiReq.GenerationConfig.ImageConfig, &imageConfig); err == nil && imageConfig.ImageSize != "" {
 			c.Set("gemini_image_size", imageConfig.ImageSize)
 		}
 	}
@@ -186,7 +184,14 @@ func GeminiHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 
 		logger.LogDebug(c, "Gemini request body: %s", jsonData)
 
-		requestBody = bytes.NewReader(jsonData)
+		body, size, closer, err := relaycommon.NewOutboundJSONBody(jsonData)
+		if err != nil {
+			return types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
+		}
+		defer closer.Close()
+		jsonData = nil
+		info.UpstreamRequestBodySize = size
+		requestBody = body
 	}
 
 	resp, err := adaptor.DoRequest(c, info, requestBody)
@@ -284,7 +289,14 @@ func GeminiEmbeddingHandler(c *gin.Context, info *relaycommon.RelayInfo) (newAPI
 		}
 	}
 	logger.LogDebug(c, "Gemini embedding request body: %s", jsonData)
-	requestBody = bytes.NewReader(jsonData)
+	body, size, closer, err := relaycommon.NewOutboundJSONBody(jsonData)
+	if err != nil {
+		return types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
+	}
+	defer closer.Close()
+	jsonData = nil
+	info.UpstreamRequestBodySize = size
+	requestBody = body
 
 	resp, err := adaptor.DoRequest(c, info, requestBody)
 	if err != nil {

@@ -12,11 +12,13 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
+	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/model"
 	relaychannel "github.com/QuantumNous/new-api/relay/channel"
 	"github.com/QuantumNous/new-api/relay/channel/gemini"
 	"github.com/QuantumNous/new-api/relay/channel/ollama"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/service/authz"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 
 	"github.com/gin-gonic/gin"
@@ -108,6 +110,12 @@ func buildChannelListQuery(group string, statusFilter int, typeFilter int) *gorm
 		query = query.Where("type = ?", typeFilter)
 	}
 	return query
+}
+
+func GetChannelOps(c *gin.Context) {
+	common.ApiSuccess(c, gin.H{
+		"retry_times": common.RetryTimes,
+	})
 }
 
 func GetAllChannels(c *gin.Context) {
@@ -425,7 +433,6 @@ func GetChannel(c *gin.Context) {
 // GetChannelKey 获取渠道密钥（需要通过安全验证中间件）
 // 此函数依赖 SecureVerificationRequired 中间件，确保用户已通过安全验证
 func GetChannelKey(c *gin.Context) {
-	userId := c.GetInt("id")
 	channelId, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
 		common.ApiError(c, fmt.Errorf("渠道ID格式错误: %v", err))
@@ -444,8 +451,11 @@ func GetChannelKey(c *gin.Context) {
 		return
 	}
 
-	// 记录操作日志
-	model.RecordLog(userId, model.LogTypeSystem, fmt.Sprintf("查看渠道密钥信息 (渠道ID: %d)", channelId))
+	// 记录操作审计日志（高危：查看渠道密钥）
+	recordManageAudit(c, "channel.key_view", map[string]interface{}{
+		"id":   channelId,
+		"name": channel.Name,
+	})
 
 	// 返回渠道密钥
 	c.JSON(http.StatusOK, gin.H{
@@ -596,7 +606,7 @@ func getVertexArrayKeys(keys string) ([]string, error) {
 		case string:
 			keyStr = strings.TrimSpace(v)
 		default:
-			bytes, err := json.Marshal(v)
+			bytes, err := common.Marshal(v)
 			if err != nil {
 				return nil, fmt.Errorf("Vertex AI key JSON 编码失败: %w", err)
 			}
@@ -751,9 +761,10 @@ func AddChannel(c *gin.Context) {
 	// BatchInsertChannels 内部 lo.Chunk 会拷贝元素，GORM 回填的 ID 不会传回 channels。
 	// 通过 created_time 精确查回刚插入的渠道 ID。
 	channelIds := make([]int, 0, len(channels))
+	insertedChannels := channels
 	if len(channels) > 0 {
-		var insertedChannels []model.Channel
-		model.DB.Select("id").Where("created_time = ?", channels[0].CreatedTime).Find(&insertedChannels)
+		insertedChannels = make([]model.Channel, 0, len(channels))
+		model.DB.Where("created_time = ?", channels[0].CreatedTime).Order("id").Find(&insertedChannels)
 		for _, ch := range insertedChannels {
 			channelIds = append(channelIds, ch.Id)
 		}
@@ -761,12 +772,17 @@ func AddChannel(c *gin.Context) {
 
 	// 记录操作日志
 	userId := c.GetInt("id")
-	for _, ch := range channels {
+	for _, ch := range insertedChannels {
 		model.RecordOperationLog(c, userId, model.OperationModuleChannel, model.OperationActionCreate,
 			strconv.Itoa(ch.Id), ch.Name, nil, sanitizeChannelForLog(&ch),
 			fmt.Sprintf("创建渠道: %s", ch.Name))
 	}
 
+	recordManageAudit(c, "channel.create", map[string]interface{}{
+		"name":  addChannelRequest.Channel.Name,
+		"type":  addChannelRequest.Channel.Type,
+		"count": len(channels),
+	})
 	resp := gin.H{
 		"success": true,
 		"message": "",
@@ -788,6 +804,10 @@ func DeleteChannel(c *gin.Context) {
 	// 先获取渠道信息用于日志记录
 	oldChannel, _ := model.GetChannelById(id, false)
 
+	channelName := ""
+	if oldChannel != nil {
+		channelName = oldChannel.Name
+	}
 	channel := model.Channel{Id: id}
 	err := channel.Delete()
 	if err != nil {
@@ -798,14 +818,14 @@ func DeleteChannel(c *gin.Context) {
 
 	// 记录操作日志
 	userId := c.GetInt("id")
-	channelName := ""
-	if oldChannel != nil {
-		channelName = oldChannel.Name
-	}
 	model.RecordOperationLog(c, userId, model.OperationModuleChannel, model.OperationActionDelete,
 		strconv.Itoa(id), channelName, sanitizeChannelForLog(oldChannel), nil,
 		fmt.Sprintf("删除渠道: %s (ID: %d)", channelName, id))
 
+	recordManageAudit(c, "channel.delete", map[string]interface{}{
+		"id":   id,
+		"name": channelName,
+	})
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
@@ -820,6 +840,9 @@ func DeleteDisabledChannel(c *gin.Context) {
 		return
 	}
 	model.InitChannelCache()
+	recordManageAudit(c, "channel.delete_disabled", map[string]interface{}{
+		"count": rows,
+	})
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
@@ -856,6 +879,9 @@ func DisableTagChannels(c *gin.Context) {
 		return
 	}
 	model.InitChannelCache()
+	recordManageAudit(c, "channel.tag_disable", map[string]interface{}{
+		"tag": channelTag.Tag,
+	})
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
@@ -879,6 +905,9 @@ func EnableTagChannels(c *gin.Context) {
 		return
 	}
 	model.InitChannelCache()
+	recordManageAudit(c, "channel.tag_enable", map[string]interface{}{
+		"tag": channelTag.Tag,
+	})
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
@@ -901,6 +930,11 @@ func EditTagChannels(c *gin.Context) {
 			"success": false,
 			"message": "tag不能为空",
 		})
+		return
+	}
+	if (channelTag.ParamOverride != nil || channelTag.HeaderOverride != nil) &&
+		!authz.Can(c.GetInt("id"), c.GetInt("role"), authz.ChannelSensitiveWrite) {
+		common.ApiErrorI18n(c, i18n.MsgAuthInsufficientPrivilege)
 		return
 	}
 	if channelTag.ParamOverride != nil {
@@ -931,6 +965,9 @@ func EditTagChannels(c *gin.Context) {
 		return
 	}
 	model.InitChannelCache()
+	recordManageAudit(c, "channel.tag_edit", map[string]interface{}{
+		"tag": channelTag.Tag,
+	})
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
@@ -959,6 +996,9 @@ func DeleteChannelBatch(c *gin.Context) {
 		return
 	}
 	model.InitChannelCache()
+	recordManageAudit(c, "channel.delete_batch", map[string]interface{}{
+		"count": len(channelBatch.Ids),
+	})
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
@@ -1058,13 +1098,36 @@ type PatchChannel struct {
 	KeyMode      *string `json:"key_mode"` // 多key模式下密钥覆盖或者追加
 }
 
+type ChannelStatusRequest struct {
+	Status int `json:"status"`
+}
+
+type ChannelStatusBatchRequest struct {
+	Ids    []int `json:"ids"`
+	Status int   `json:"status"`
+}
+
 func UpdateChannel(c *gin.Context) {
 	channel := PatchChannel{}
-	err := c.ShouldBindJSON(&channel)
+	rawBody, err := c.GetRawData()
 	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
+	if err := common.Unmarshal(rawBody, &channel); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	var requestData map[string]any
+	if err := common.Unmarshal(rawBody, &requestData); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if _, ok := requestData["status"]; ok {
+		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
+		return
+	}
+	clearChannelReadOnlyFields(&channel, requestData)
 
 	// 使用统一的校验函数
 	if err := validateChannel(&channel.Channel, false); err != nil {
@@ -1087,6 +1150,12 @@ func UpdateChannel(c *gin.Context) {
 	// Always copy the original ChannelInfo so that fields like IsMultiKey and MultiKeySize are retained.
 	channel.ChannelInfo = originChannel.ChannelInfo
 
+	if channelHasSensitiveChanges(&channel, originChannel, requestData) &&
+		!authz.Can(c.GetInt("id"), c.GetInt("role"), authz.ChannelSensitiveWrite) {
+		common.ApiErrorI18n(c, i18n.MsgAuthInsufficientPrivilege)
+		return
+	}
+
 	// If the request explicitly specifies a new MultiKeyMode, apply it on top of the original info.
 	if channel.MultiKeyMode != nil && *channel.MultiKeyMode != "" {
 		channel.ChannelInfo.MultiKeyMode = constant.MultiKeyMode(*channel.MultiKeyMode)
@@ -1105,7 +1174,7 @@ func UpdateChannel(c *gin.Context) {
 				if strings.HasPrefix(strings.TrimSpace(originChannel.Key), "[") {
 					// JSON数组格式
 					var arr []json.RawMessage
-					if err := json.Unmarshal([]byte(strings.TrimSpace(originChannel.Key)), &arr); err == nil {
+					if err := common.Unmarshal([]byte(strings.TrimSpace(originChannel.Key)), &arr); err == nil {
 						existingKeys = make([]string, len(arr))
 						for i, v := range arr {
 							existingKeys[i] = string(v)
@@ -1186,6 +1255,28 @@ func UpdateChannel(c *gin.Context) {
 		strconv.Itoa(channel.Id), channel.Name, sanitizeChannelForLog(originChannel), sanitizeChannelForLog(&channel.Channel),
 		fmt.Sprintf("更新渠道: %s (ID: %d)", channel.Name, channel.Id))
 
+	// 记录变更的字段名（语言无关的字段标识），密钥仅记录"已更换"绝不记录内容。
+	changedFields := make([]string, 0)
+	if channel.Models != originChannel.Models {
+		changedFields = append(changedFields, "models")
+	}
+	if channel.Group != originChannel.Group {
+		changedFields = append(changedFields, "group")
+	}
+	if channel.Type != originChannel.Type {
+		changedFields = append(changedFields, "type")
+	}
+	if !equalStringPtr(channel.BaseURL, originChannel.BaseURL) {
+		changedFields = append(changedFields, "base_url")
+	}
+	if channel.Key != "" && channel.Key != originChannel.Key {
+		changedFields = append(changedFields, "key")
+	}
+	recordManageAudit(c, "channel.update", map[string]interface{}{
+		"id":             channel.Id,
+		"name":           channel.Name,
+		"changed_fields": changedFields,
+	})
 	channel.Key = ""
 	clearChannelInfo(&channel.Channel)
 	c.JSON(http.StatusOK, gin.H{
@@ -1223,6 +1314,77 @@ func PatchChannelModels(c *gin.Context) {
 	model.InitChannelCache()
 	service.ResetProxyClientCache()
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": ""})
+}
+
+func UpdateChannelStatus(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
+		return
+	}
+	req := ChannelStatusRequest{}
+	if err := c.ShouldBindJSON(&req); err != nil || !isManageableChannelStatus(req.Status) {
+		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
+		return
+	}
+	changed := model.UpdateChannelStatus(id, "", req.Status, "manual operation")
+	if changed {
+		model.InitChannelCache()
+		service.ResetProxyClientCache()
+	}
+	recordManageAudit(c, "channel.status_update", map[string]interface{}{
+		"id":      id,
+		"status":  req.Status,
+		"changed": changed,
+	})
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "",
+		"data":    changed,
+	})
+}
+
+func BatchUpdateChannelStatus(c *gin.Context) {
+	req := ChannelStatusBatchRequest{}
+	if err := c.ShouldBindJSON(&req); err != nil || len(req.Ids) == 0 || !isManageableChannelStatus(req.Status) {
+		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
+		return
+	}
+	changedCount := 0
+	for _, id := range req.Ids {
+		if model.UpdateChannelStatus(id, "", req.Status, "manual batch operation") {
+			changedCount++
+		}
+	}
+	if changedCount > 0 {
+		model.InitChannelCache()
+		service.ResetProxyClientCache()
+	}
+	recordManageAudit(c, "channel.status_update_batch", map[string]interface{}{
+		"count":  changedCount,
+		"total":  len(req.Ids),
+		"status": req.Status,
+	})
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "",
+		"data":    changedCount,
+	})
+}
+
+func isManageableChannelStatus(status int) bool {
+	return status == common.ChannelStatusEnabled || status == common.ChannelStatusManuallyDisabled
+}
+
+// equalStringPtr 比较两个 *string 是否相等（均为 nil 视为相等）。
+func equalStringPtr(a, b *string) bool {
+	if a == nil && b == nil {
+		return true
+	}
+	if a == nil || b == nil {
+		return false
+	}
+	return *a == *b
 }
 
 func FetchModels(c *gin.Context) {
@@ -1364,6 +1526,9 @@ func BatchSetChannelTag(c *gin.Context) {
 		return
 	}
 	model.InitChannelCache()
+	recordManageAudit(c, "channel.tag_batch_set", map[string]interface{}{
+		"count": len(channelBatch.Ids),
+	})
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
@@ -1455,12 +1620,17 @@ func CopyChannel(c *gin.Context) {
 	}
 
 	// insert
-	if err := model.BatchInsertChannels([]model.Channel{clone}); err != nil {
+	if err := clone.Insert(); err != nil {
 		common.SysError("failed to clone channel: " + err.Error())
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": "复制渠道失败，请稍后重试"})
 		return
 	}
 	model.InitChannelCache()
+	recordManageAudit(c, "channel.copy", map[string]interface{}{
+		"sourceId": id,
+		"id":       clone.Id,
+		"name":     clone.Name,
+	})
 	// success
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "", "data": gin.H{"id": clone.Id}})
 }
@@ -1520,6 +1690,21 @@ func ManageMultiKeys(c *gin.Context) {
 			"message": "该渠道不是多密钥模式",
 		})
 		return
+	}
+	if multiKeyActionRequiresSensitiveWrite(request.Action) &&
+		!authz.Can(c.GetInt("id"), c.GetInt("role"), authz.ChannelSensitiveWrite) {
+		common.ApiErrorI18n(c, i18n.MsgAuthInsufficientPrivilege)
+		return
+	}
+
+	// get_key_status 为只读查询，不记录审计；其余为修改操作，记录审计并跳过中间件兜底。
+	if request.Action == "get_key_status" {
+		markAuditLogged(c)
+	} else {
+		recordManageAudit(c, "channel.multi_key_manage", map[string]interface{}{
+			"action": request.Action,
+			"id":     channel.Id,
+		})
 	}
 
 	lock := model.GetChannelPollingLock(channel.Id)
@@ -1955,6 +2140,10 @@ func ManageMultiKeys(c *gin.Context) {
 	}
 }
 
+func multiKeyActionRequiresSensitiveWrite(action string) bool {
+	return action == "delete_key" || action == "delete_disabled_keys"
+}
+
 // OllamaPullModel 拉取 Ollama 模型
 func OllamaPullModel(c *gin.Context) {
 	var req struct {
@@ -2075,7 +2264,7 @@ func OllamaPullModelStream(c *gin.Context) {
 
 	// 创建进度回调函数
 	progressCallback := func(progress ollama.OllamaPullResponse) {
-		data, _ := json.Marshal(progress)
+		data, _ := common.Marshal(progress)
 		fmt.Fprintf(c.Writer, "data: %s\n\n", string(data))
 		c.Writer.Flush()
 	}
@@ -2084,12 +2273,12 @@ func OllamaPullModelStream(c *gin.Context) {
 	err = ollama.PullOllamaModelStream(baseURL, key, req.ModelName, progressCallback)
 
 	if err != nil {
-		errorData, _ := json.Marshal(gin.H{
+		errorData, _ := common.Marshal(gin.H{
 			"error": err.Error(),
 		})
 		fmt.Fprintf(c.Writer, "data: %s\n\n", string(errorData))
 	} else {
-		successData, _ := json.Marshal(gin.H{
+		successData, _ := common.Marshal(gin.H{
 			"message": fmt.Sprintf("Model %s pulled successfully", req.ModelName),
 		})
 		fmt.Fprintf(c.Writer, "data: %s\n\n", string(successData))
