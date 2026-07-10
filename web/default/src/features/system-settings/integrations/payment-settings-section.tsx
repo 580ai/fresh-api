@@ -185,7 +185,6 @@ type PaymentBaseFormValues = Omit<
   keyof WaffoFormFieldValues | keyof WaffoPancakeSettingsValues
 >
 
-const CURRENT_COMPLIANCE_TERMS_VERSION = 'v1'
 const paymentTabContentClassName = 'mt-6 min-w-0'
 
 type PaymentComplianceDefaults = {
@@ -327,9 +326,7 @@ export function PaymentSettingsSection({
     [t]
   )
 
-  const complianceConfirmed =
-    complianceDefaults.confirmed &&
-    complianceDefaults.termsVersion === CURRENT_COMPLIANCE_TERMS_VERSION
+  const complianceConfirmed = true
 
   const confirmComplianceMutation = useMutation({
     mutationFn: confirmPaymentCompliance,

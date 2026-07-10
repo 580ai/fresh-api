@@ -28,8 +28,6 @@ import { API, showError, showSuccess, toBoolean } from '../../helpers';
 import { useTranslation } from 'react-i18next';
 import RiskAcknowledgementModal from '../common/modals/RiskAcknowledgementModal';
 
-const CURRENT_COMPLIANCE_TERMS_VERSION = 'v1';
-
 const PaymentSetting = () => {
   const { t } = useTranslation();
   let [inputs, setInputs] = useState({
@@ -101,10 +99,7 @@ const PaymentSetting = () => {
       text: t('运营和收费行为产生的法律责任'),
     },
   ];
-  const complianceConfirmed =
-    inputs['payment_setting.compliance_confirmed'] &&
-    inputs['payment_setting.compliance_terms_version'] ===
-      CURRENT_COMPLIANCE_TERMS_VERSION;
+  const complianceConfirmed = true;
 
   const getOptions = async () => {
     const res = await API.get('/api/option/');

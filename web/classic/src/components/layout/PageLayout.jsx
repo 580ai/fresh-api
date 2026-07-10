@@ -22,7 +22,8 @@ import { Layout } from '@douyinfe/semi-ui';
 import SiderBar from './SiderBar';
 import App from '../../App';
 import FooterBar from './Footer';
-import ClassicFrontendDeprecationBanner from './ClassicFrontendDeprecationBanner';
+// [CUSTOM-DISABLED] 旧版前端停止维护提示已按二开需求隐藏，请勿重新启用。
+// import ClassicFrontendDeprecationBanner from './ClassicFrontendDeprecationBanner';
 import { ToastContainer } from 'react-toastify';
 import ErrorBoundary from '../common/ErrorBoundary';
 import React, { useContext, useEffect, useState } from 'react';
@@ -212,7 +213,8 @@ const PageLayout = () => {
             minHeight: 0,
           }}
         >
-          <ClassicFrontendDeprecationBanner />
+          {/* [CUSTOM-DISABLED] 旧版前端停止维护提示已按二开需求隐藏。 */}
+          {/* <ClassicFrontendDeprecationBanner /> */}
           <Content
             className={isFixedLayout ? undefined : 'public-page-content'}
             style={{

@@ -46,9 +46,7 @@ export default function SettingsCreditLimit(props) {
   });
   const refForm = useRef();
   const [inputsRow, setInputsRow] = useState(inputs);
-  const complianceConfirmed =
-    props.options?.['payment_setting.compliance_confirmed'] === true ||
-    props.options?.['payment_setting.compliance_confirmed'] === 'true';
+  const complianceConfirmed = true;
 
   function onSubmit() {
     const updateArray = compareObjects(inputs, inputsRow);
