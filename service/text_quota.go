@@ -298,7 +298,11 @@ func calculateTextQuotaSummary(ctx *gin.Context, relayInfo *relaycommon.RelayInf
 		summary.Quota = decimalToQuota(quotaCalculateDecimal)
 	}
 
+	// 如果总 tokens 为 0，不扣费
 	if summary.TotalTokens == 0 {
+		summary.Quota = 0
+	} else if summary.CompletionTokens == 0 {
+		// 如果输出 tokens 为 0（输出为空或异常），不扣费
 		summary.Quota = 0
 	} else if !ratio.IsZero() && summary.Quota == 0 {
 		summary.Quota = 1
@@ -371,6 +375,9 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 	if summary.TotalTokens == 0 {
 		extraContent = append(extraContent, "上游没有返回计费信息，无法扣费（可能是上游超时）")
 		logger.LogError(ctx, fmt.Sprintf("total tokens is 0, cannot consume quota, userId %d, channelId %d, tokenId %d, model %s， pre-consumed quota %d", relayInfo.UserId, relayInfo.ChannelId, relayInfo.TokenId, summary.ModelName, relayInfo.FinalPreConsumedQuota))
+	} else if summary.CompletionTokens == 0 {
+		extraContent = append(extraContent, "输出为空或异常，不扣费")
+		logger.LogError(ctx, fmt.Sprintf("completion tokens is 0 (empty output), cannot consume quota, userId %d, channelId %d, tokenId %d, model %s, prompt tokens %d, pre-consumed quota %d", relayInfo.UserId, relayInfo.ChannelId, relayInfo.TokenId, summary.ModelName, summary.PromptTokens, relayInfo.FinalPreConsumedQuota))
 	} else {
 		model.UpdateUserUsedQuotaAndRequestCount(relayInfo.UserId, summary.Quota)
 		model.UpdateChannelUsedQuota(relayInfo.ChannelId, summary.Quota)
