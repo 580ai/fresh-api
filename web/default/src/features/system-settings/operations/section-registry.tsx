@@ -98,6 +98,13 @@ const OPERATIONS_SECTIONS = [
     build: (settings: OperationsSettings) => (
       <LogSettingsSection
         defaultEnabled={Boolean(settings.LogConsumeEnabled)}
+        logContentDefaults={{
+          'log_content_setting.enabled': Boolean(
+            settings['log_content_setting.enabled']
+          ),
+          'log_content_setting.filter_user_ids':
+            settings['log_content_setting.filter_user_ids'] ?? '',
+        }}
       />
     ),
   },

@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
@@ -48,8 +49,10 @@ func sanitizeTokenName(tokenName string) string {
 }
 
 // writeLogContentToFile 写入数据到指定令牌的文件（即开即关，不缓存句柄）
-func writeLogContentToFile(tokenName string, data []byte) error {
-	contentDir := getContentDir()
+// 按 用户ID/令牌名 分层存储：logs/content/<userId>/<令牌名>.json
+func writeLogContentToFile(userId int, tokenName string, data []byte) error {
+	// 用户ID为纯数字，天然是合法目录名，无需清洗
+	contentDir := filepath.Join(getContentDir(), strconv.Itoa(userId))
 	if err := os.MkdirAll(contentDir, 0755); err != nil {
 		return err
 	}
@@ -92,7 +95,7 @@ func RecordLogContent(userId int, tokenName string, requestId string, requestBod
 		}
 
 		data := append(jsonData, '\n')
-		if err := writeLogContentToFile(tokenName, data); err != nil {
+		if err := writeLogContentToFile(userId, tokenName, data); err != nil {
 			common.SysLog("failed to write log content: " + err.Error())
 		}
 	})

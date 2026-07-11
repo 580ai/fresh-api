@@ -333,14 +333,14 @@ export default function SettingsLog(props) {
                 <Form.Input
                   field={'log_content_setting.filter_user_ids'}
                   label={t('记录请求内容的用户ID')}
-                  placeholder={t('输入用户ID，多个用逗号分隔，为空则不记录')}
+                  placeholder={t('输入用户ID，多个用逗号分隔，为空则记录全部用户')}
                   onChange={(value) => {
                     setInputs({
                       ...inputs,
                       'log_content_setting.filter_user_ids': value,
                     });
                   }}
-                  extraText={t('只记录指定用户ID的请求和响应内容，为空则不记录')}
+                  extraText={t('只记录指定用户ID的请求和响应内容，为空则记录全部用户')}
                 />
               </Col>
             </Row>

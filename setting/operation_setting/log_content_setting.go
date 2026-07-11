@@ -11,7 +11,7 @@ import (
 type LogContentSetting struct {
 	// 启用记录请求内容 - 开启后将请求和响应内容存储到日志表中
 	Enabled bool `json:"enabled"`
-	// 过滤用户ID - 逗号分隔的用户ID列表，只有匹配的用户才记录，为空则不记录
+	// 过滤用户ID - 逗号分隔的用户ID列表，只有匹配的用户才记录，为空则记录全部用户
 	FilterUserIds string `json:"filter_user_ids"`
 }
 
@@ -41,9 +41,11 @@ func IsLogContentEnabledForUser(userId int) bool {
 	if !logContentSetting.Enabled {
 		return false
 	}
+	// 未指定用户ID则记录全部用户
 	if logContentSetting.FilterUserIds == "" {
-		return false
+		return true
 	}
+	// 指定了用户ID则只记录匹配的用户
 	for _, idStr := range strings.Split(logContentSetting.FilterUserIds, ",") {
 		idStr = strings.TrimSpace(idStr)
 		if idStr == "" {

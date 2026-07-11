@@ -42,6 +42,7 @@ import {
   FormControl,
   FormDescription,
   FormField,
+  FormItem,
   FormLabel,
   FormMessage,
 } from '@/components/ui/form'
@@ -78,15 +79,43 @@ import { SettingsSection } from '../components/settings-section'
 import { useUpdateOption } from '../hooks/use-update-option'
 import type { LogCleanupTask } from '../types'
 
+/**
+ * IMPORTANT: react-hook-form 7 interprets dotted `name` strings as nested
+ * paths. So we model `log_content_setting` as a nested object in the form and
+ * only flatten it back to the server-side dotted key format right before
+ * persisting (mirrors the pattern in performance-section.tsx).
+ */
 const logSettingsSchema = z.object({
   LogConsumeEnabled: z.boolean(),
+  log_content_setting: z.object({
+    enabled: z.boolean(),
+    filter_user_ids: z.string(),
+  }),
 })
 
 type LogSettingsFormValues = z.infer<typeof logSettingsSchema>
 
+type LogContentDefaults = {
+  'log_content_setting.enabled': boolean
+  'log_content_setting.filter_user_ids': string
+}
+
 type LogSettingsSectionProps = {
   defaultEnabled: boolean
+  logContentDefaults: LogContentDefaults
 }
+
+const buildLogFormDefaults = (
+  defaultEnabled: boolean,
+  logContentDefaults: LogContentDefaults
+): LogSettingsFormValues => ({
+  LogConsumeEnabled: defaultEnabled,
+  log_content_setting: {
+    enabled: logContentDefaults['log_content_setting.enabled'],
+    filter_user_ids:
+      logContentDefaults['log_content_setting.filter_user_ids'] ?? '',
+  },
+})
 
 type ServerLogInfo = {
   enabled: boolean
@@ -141,14 +170,13 @@ function isActiveLogCleanupTask(task: LogCleanupTask | null) {
 
 export function LogSettingsSection({
   defaultEnabled,
+  logContentDefaults,
 }: LogSettingsSectionProps) {
   const { t } = useTranslation()
   const updateOption = useUpdateOption()
   const form = useForm<LogSettingsFormValues>({
     resolver: zodResolver(logSettingsSchema),
-    defaultValues: {
-      LogConsumeEnabled: defaultEnabled,
-    },
+    defaultValues: buildLogFormDefaults(defaultEnabled, logContentDefaults),
   })
 
   const [purgeDate, setPurgeDate] = useState<Date | undefined>(() =>
@@ -173,9 +201,12 @@ export function LogSettingsSection({
     }
   }, [])
 
+  const logContentSerialized = JSON.stringify(logContentDefaults)
   useEffect(() => {
-    form.reset({ LogConsumeEnabled: defaultEnabled })
-  }, [defaultEnabled, form])
+    form.reset(buildLogFormDefaults(defaultEnabled, logContentDefaults))
+    // logContentDefaults is folded into logContentSerialized for a stable dep
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [defaultEnabled, logContentSerialized, form])
 
   useEffect(() => {
     fetchServerLogInfo()
@@ -257,11 +288,38 @@ export function LogSettingsSection({
   }, [logCleanupActive, logCleanupTaskId, t])
 
   const onSubmit = async (values: LogSettingsFormValues) => {
-    if (values.LogConsumeEnabled === defaultEnabled) return
-    await updateOption.mutateAsync({
-      key: 'LogConsumeEnabled',
-      value: values.LogConsumeEnabled,
-    })
+    const updates: Array<{ key: string; value: string | boolean | number }> = []
+
+    if (values.LogConsumeEnabled !== defaultEnabled) {
+      updates.push({
+        key: 'LogConsumeEnabled',
+        value: values.LogConsumeEnabled,
+      })
+    }
+    if (
+      values.log_content_setting.enabled !==
+      logContentDefaults['log_content_setting.enabled']
+    ) {
+      updates.push({
+        key: 'log_content_setting.enabled',
+        value: values.log_content_setting.enabled,
+      })
+    }
+    if (
+      values.log_content_setting.filter_user_ids !==
+      logContentDefaults['log_content_setting.filter_user_ids']
+    ) {
+      updates.push({
+        key: 'log_content_setting.filter_user_ids',
+        value: values.log_content_setting.filter_user_ids,
+      })
+    }
+
+    if (updates.length === 0) return
+
+    for (const update of updates) {
+      await updateOption.mutateAsync(update)
+    }
   }
 
   const handleRequestCleanLogs = () => {
@@ -364,6 +422,59 @@ export function LogSettingsSection({
                 </FormControl>
                 <FormMessage />
               </SettingsSwitchItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name='log_content_setting.enabled'
+            render={({ field }) => (
+              <SettingsSwitchItem>
+                <SettingsSwitchContent>
+                  <FormLabel>{t('Record request content')}</FormLabel>
+                  <FormDescription>
+                    {t(
+                      'When enabled, request and response bodies are stored to log files under logs/content, one file per token name.'
+                    )}
+                  </FormDescription>
+                </SettingsSwitchContent>
+                <FormControl>
+                  <Switch
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                  />
+                </FormControl>
+                <FormMessage />
+              </SettingsSwitchItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name='log_content_setting.filter_user_ids'
+            render={({ field }) => (
+              <FormItem className='max-w-md'>
+                <FormLabel>{t('User IDs for recording request content')}</FormLabel>
+                <FormControl>
+                  <Input
+                    placeholder={t(
+                      'Enter user IDs separated by commas; leave empty to record all users'
+                    )}
+                    value={field.value ?? ''}
+                    onChange={(event) => field.onChange(event.target.value)}
+                    name={field.name}
+                    onBlur={field.onBlur}
+                    ref={field.ref}
+                    disabled={!form.watch('log_content_setting.enabled')}
+                  />
+                </FormControl>
+                <FormDescription>
+                  {t(
+                    'Only record request and response content for the specified user IDs; leave empty to record all users.'
+                  )}
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
             )}
           />
 
