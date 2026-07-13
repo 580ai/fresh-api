@@ -1,17 +1,18 @@
 package claude
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/relay/channel"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relay/helper"
+	"github.com/QuantumNous/new-api/service/relayconvert"
 	"github.com/QuantumNous/new-api/setting/model_setting"
 	"github.com/QuantumNous/new-api/types"
 
@@ -33,7 +34,7 @@ func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, info *relaycommon.RelayIn
 
 		if len(request.Metadata) > 0 {
 			// 尝试解析现有的 metadata，保留其他字段
-			if err := json.Unmarshal(request.Metadata, &existingMetadata); err != nil {
+			if err := common.Unmarshal(request.Metadata, &existingMetadata); err != nil {
 				existingMetadata = make(map[string]interface{})
 			}
 		} else {
@@ -46,7 +47,7 @@ func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, info *relaycommon.RelayIn
 			existingMetadata["user_id"] = stableUserId
 		}
 
-		metadataJSON, err := json.Marshal(existingMetadata)
+		metadataJSON, err := common.Marshal(existingMetadata)
 		if err == nil {
 			request.Metadata = metadataJSON
 		}
@@ -122,7 +123,11 @@ func (a *Adaptor) ConvertOpenAIRequest(c *gin.Context, info *relaycommon.RelayIn
 	if request == nil {
 		return nil, errors.New("request is nil")
 	}
-	return RequestOpenAI2ClaudeMessage(c, *request)
+	result, err := relayconvert.ConvertRequest(c, info, types.RelayFormatClaude, request)
+	if err != nil {
+		return nil, err
+	}
+	return result.Value, nil
 }
 
 func (a *Adaptor) ConvertRerankRequest(c *gin.Context, relayMode int, request dto.RerankRequest) (any, error) {

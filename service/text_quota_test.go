@@ -6,28 +6,17 @@ import (
 	"testing"
 	"time"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/types"
 
 	"github.com/gin-gonic/gin"
-	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/require"
 )
-
-// TestDecimalToQuotaSaturation guards the billing invariant that an oversized
-// quota product (e.g. per-call price multiplied by a huge image n ratio) must
-// saturate instead of wrapping into a negative charge (credit).
-func TestDecimalToQuotaSaturation(t *testing.T) {
-	// 2000 quota per call * n=18446744073686646784 overflows int64.
-	overflowing := decimal.NewFromInt(2000).Mul(decimal.NewFromFloat(1.8446744073686647e19))
-	require.Equal(t, math.MaxInt32, decimalToQuota(overflowing))
-
-	require.Equal(t, math.MinInt32, decimalToQuota(overflowing.Neg()))
-	require.Equal(t, 42, decimalToQuota(decimal.NewFromFloat(41.7)))
-}
 
 func TestCalculateTextQuotaSummaryUnifiedForClaudeSemantic(t *testing.T) {
 	gin.SetMode(gin.TestMode)
@@ -107,7 +96,7 @@ func TestCalculateTextQuotaSummaryUsesSplitClaudeCacheCreationRatios(t *testing.
 
 	usage := &dto.Usage{
 		PromptTokens:     100,
-		CompletionTokens: 0,
+		CompletionTokens: 1,
 		PromptTokensDetails: dto.InputTokenDetails{
 			CachedCreationTokens: 10,
 		},
@@ -117,8 +106,156 @@ func TestCalculateTextQuotaSummaryUsesSplitClaudeCacheCreationRatios(t *testing.
 
 	summary := calculateTextQuotaSummary(ctx, relayInfo, usage)
 
-	// 100 + remaining(5)*1 + 2*2 + 3*3 = 118
-	require.Equal(t, 118, summary.Quota)
+	// 100 + remaining(5)*1 + 2*2 + 3*3 + 1 = 119
+	require.Equal(t, 119, summary.Quota)
+}
+
+func TestCalculateTextQuotaSummaryDoesNotChargeEmptyOutput(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(w)
+
+	relayInfo := &relaycommon.RelayInfo{
+		RelayMode:       relayconstant.RelayModeChatCompletions,
+		RelayFormat:     types.RelayFormatOpenAI,
+		OriginModelName: "gpt-4o",
+		PriceData: types.PriceData{
+			ModelRatio:      1,
+			CompletionRatio: 2,
+			GroupRatioInfo:  types.GroupRatioInfo{GroupRatio: 1},
+		},
+		StartTime: time.Now(),
+	}
+
+	summary := calculateTextQuotaSummary(ctx, relayInfo, &dto.Usage{
+		PromptTokens:     100,
+		CompletionTokens: 0,
+		TotalTokens:      100,
+	})
+
+	require.Equal(t, 0, summary.Quota)
+}
+
+func TestTieredTextQuotaDoesNotChargeEmptyOutput(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	exprStr := `tier("base", p * 2 + c * 10)`
+	relayInfo := &relaycommon.RelayInfo{
+		RelayMode:       relayconstant.RelayModeChatCompletions,
+		RelayFormat:     types.RelayFormatOpenAI,
+		OriginModelName: "tiered-model",
+		PriceData: types.PriceData{
+			GroupRatioInfo: types.GroupRatioInfo{GroupRatio: 1},
+		},
+		TieredBillingSnapshot: &billingexpr.BillingSnapshot{
+			BillingMode:  "tiered_expr",
+			ExprString:   exprStr,
+			ExprHash:     billingexpr.ExprHashString(exprStr),
+			GroupRatio:   1,
+			QuotaPerUnit: common.QuotaPerUnit,
+		},
+		StartTime: time.Now(),
+	}
+	usage := &dto.Usage{
+		PromptTokens:     100,
+		CompletionTokens: 0,
+		TotalTokens:      100,
+	}
+
+	summary := calculateTextQuotaSummary(ctx, relayInfo, usage)
+	ok, tieredQuota, tieredResult := TryTieredSettle(
+		relayInfo,
+		BuildTieredTokenParams(usage, false, billingexpr.UsedVars(exprStr)),
+	)
+	require.True(t, ok)
+	require.Positive(t, tieredQuota, "the tiered expression would charge prompt tokens")
+
+	summary.Quota = composeTieredTextQuota(relayInfo, summary, tieredQuota, tieredResult)
+
+	require.Zero(t, summary.Quota)
+}
+
+func TestCalculateTextQuotaSummaryOnlyWaivesEmptyOutputForTextGeneration(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	usage := &dto.Usage{PromptTokens: 100, TotalTokens: 100}
+
+	tests := []struct {
+		name        string
+		relayMode   int
+		relayFormat types.RelayFormat
+		request     dto.Request
+		requestPath string
+		wantQuota   int
+	}{
+		{name: "chat", relayMode: relayconstant.RelayModeChatCompletions, relayFormat: types.RelayFormatOpenAI, wantQuota: 0},
+		{name: "claude messages", relayMode: relayconstant.RelayModeUnknown, relayFormat: types.RelayFormatClaude, wantQuota: 0},
+		{name: "responses", relayMode: relayconstant.RelayModeResponses, relayFormat: types.RelayFormatOpenAIResponses, wantQuota: 0},
+		{name: "gemini generate", relayMode: relayconstant.RelayModeGemini, relayFormat: types.RelayFormatGemini, request: &dto.GeminiChatRequest{}, requestPath: "/v1beta/models/gemini:generateContent", wantQuota: 0},
+		{name: "embedding", relayMode: relayconstant.RelayModeEmbeddings, relayFormat: types.RelayFormatEmbedding, wantQuota: 100},
+		{name: "gemini embedding", relayMode: relayconstant.RelayModeGemini, relayFormat: types.RelayFormatGemini, request: &dto.GeminiEmbeddingRequest{}, requestPath: "/v1beta/models/gemini:embedContent", wantQuota: 100},
+		{name: "rerank", relayMode: relayconstant.RelayModeRerank, relayFormat: types.RelayFormatRerank, wantQuota: 100},
+		{name: "image", relayMode: relayconstant.RelayModeImagesGenerations, relayFormat: types.RelayFormatOpenAIImage, wantQuota: 100},
+		{name: "audio", relayMode: relayconstant.RelayModeAudioSpeech, relayFormat: types.RelayFormatOpenAIAudio, wantQuota: 100},
+		{name: "moderation", relayMode: relayconstant.RelayModeModerations, relayFormat: types.RelayFormatOpenAI, wantQuota: 100},
+		{name: "unknown", relayMode: relayconstant.RelayModeUnknown, wantQuota: 100},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			relayInfo := &relaycommon.RelayInfo{
+				RelayMode:       tt.relayMode,
+				RelayFormat:     tt.relayFormat,
+				Request:         tt.request,
+				RequestURLPath:  tt.requestPath,
+				OriginModelName: "quota-mode-test",
+				PriceData: types.PriceData{
+					ModelRatio:      1,
+					CompletionRatio: 1,
+					GroupRatioInfo:  types.GroupRatioInfo{GroupRatio: 1},
+				},
+				StartTime: time.Now(),
+			}
+
+			summary := calculateTextQuotaSummary(ctx, relayInfo, usage)
+			require.Equal(t, tt.wantQuota, summary.Quota)
+		})
+	}
+}
+
+func TestTieredTextQuotaChargesEmbeddingWithoutCompletionTokens(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	exprStr := `tier("base", p * 2 + c * 10)`
+	relayInfo := &relaycommon.RelayInfo{
+		RelayMode:       relayconstant.RelayModeEmbeddings,
+		RelayFormat:     types.RelayFormatEmbedding,
+		OriginModelName: "tiered-embedding-model",
+		PriceData: types.PriceData{
+			GroupRatioInfo: types.GroupRatioInfo{GroupRatio: 1},
+		},
+		TieredBillingSnapshot: &billingexpr.BillingSnapshot{
+			BillingMode:  "tiered_expr",
+			ExprString:   exprStr,
+			ExprHash:     billingexpr.ExprHashString(exprStr),
+			GroupRatio:   1,
+			QuotaPerUnit: common.QuotaPerUnit,
+		},
+		StartTime: time.Now(),
+	}
+	usage := &dto.Usage{PromptTokens: 100, TotalTokens: 100}
+
+	summary := calculateTextQuotaSummary(ctx, relayInfo, usage)
+	ok, tieredQuota, tieredResult := TryTieredSettle(
+		relayInfo,
+		BuildTieredTokenParams(usage, false, billingexpr.UsedVars(exprStr)),
+	)
+	require.True(t, ok)
+	require.Positive(t, tieredQuota)
+
+	summary.Quota = composeTieredTextQuota(relayInfo, summary, tieredQuota, tieredResult)
+
+	require.Equal(t, tieredQuota, summary.Quota)
 }
 
 func TestCalculateTextQuotaSummaryUsesAnthropicUsageSemanticFromUpstreamUsage(t *testing.T) {
@@ -160,6 +297,172 @@ func TestCalculateTextQuotaSummaryUsesAnthropicUsageSemanticFromUpstreamUsage(t 
 	require.True(t, summary.IsClaudeUsageSemantic)
 	require.Equal(t, "anthropic", summary.UsageSemantic)
 	require.Equal(t, 1488, summary.Quota)
+}
+
+func TestCalculateTextQuotaSummaryUsesClaudeBillingUsageBeforeTopLevelUsage(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(w)
+
+	relayInfo := &relaycommon.RelayInfo{
+		RelayFormat:     types.RelayFormatOpenAI,
+		OriginModelName: "claude-3-7-sonnet",
+		PriceData: types.PriceData{
+			ModelRatio:           1,
+			CompletionRatio:      2,
+			CacheRatio:           0.1,
+			CacheCreationRatio:   1.25,
+			CacheCreation5mRatio: 1.25,
+			CacheCreation1hRatio: 2,
+			GroupRatioInfo:       types.GroupRatioInfo{GroupRatio: 1},
+		},
+		StartTime: time.Now(),
+	}
+
+	usage := &dto.Usage{
+		PromptTokens:     999,
+		CompletionTokens: 999,
+		TotalTokens:      1998,
+		BillingUsage: dto.NewClaudeMessagesBillingUsage(&dto.ClaudeUsage{
+			InputTokens:              70,
+			CacheReadInputTokens:     30,
+			CacheCreationInputTokens: 20,
+			OutputTokens:             7,
+			CacheCreation: &dto.ClaudeCacheCreationUsage{
+				Ephemeral5mInputTokens: 12,
+				Ephemeral1hInputTokens: 8,
+			},
+		}),
+	}
+
+	summary := calculateTextQuotaSummary(ctx, relayInfo, effectiveBillingUsage(usage))
+
+	require.True(t, summary.IsClaudeUsageSemantic)
+	require.Equal(t, dto.BillingUsageSemanticAnthropic, summary.UsageSemantic)
+	require.Equal(t, 70, summary.PromptTokens)
+	require.Equal(t, 7, summary.CompletionTokens)
+	require.Equal(t, 30, summary.CacheTokens)
+	require.Equal(t, 20, summary.CacheCreationTokens)
+	require.Equal(t, 12, summary.CacheCreationTokens5m)
+	require.Equal(t, 8, summary.CacheCreationTokens1h)
+	require.Equal(t, 118, summary.Quota)
+}
+
+func TestCalculateTextQuotaSummaryUsesGeminiBillingUsageBeforeTopLevelUsage(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(w)
+
+	relayInfo := &relaycommon.RelayInfo{
+		RelayFormat:     types.RelayFormatOpenAI,
+		OriginModelName: "gemini-2.5-flash",
+		PriceData: types.PriceData{
+			ModelRatio:      1,
+			CompletionRatio: 2,
+			CacheRatio:      0.1,
+			GroupRatioInfo:  types.GroupRatioInfo{GroupRatio: 1},
+		},
+		StartTime: time.Now(),
+	}
+
+	usage := &dto.Usage{
+		PromptTokens:     999,
+		CompletionTokens: 999,
+		TotalTokens:      1998,
+		BillingUsage: dto.NewGeminiChatBillingUsage(&dto.GeminiUsageMetadata{
+			PromptTokenCount:        100,
+			ToolUsePromptTokenCount: 5,
+			CandidatesTokenCount:    20,
+			ThoughtsTokenCount:      3,
+			TotalTokenCount:         128,
+			CachedContentTokenCount: 7,
+		}),
+	}
+
+	summary := calculateTextQuotaSummary(ctx, relayInfo, effectiveBillingUsage(usage))
+
+	require.False(t, summary.IsClaudeUsageSemantic)
+	require.Equal(t, dto.BillingUsageSemanticGemini, summary.UsageSemantic)
+	require.Equal(t, 105, summary.PromptTokens)
+	require.Equal(t, 23, summary.CompletionTokens)
+	require.Equal(t, 7, summary.CacheTokens)
+	require.Equal(t, 128, summary.TotalTokens)
+	require.Equal(t, 145, summary.Quota)
+}
+
+func TestCalculateTextQuotaSummaryUsesOpenAIBillingUsageBeforeTopLevelUsage(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(w)
+
+	relayInfo := &relaycommon.RelayInfo{
+		RelayFormat:     types.RelayFormatClaude,
+		OriginModelName: "gpt-4o",
+		PriceData: types.PriceData{
+			ModelRatio:      1,
+			CompletionRatio: 2,
+			GroupRatioInfo:  types.GroupRatioInfo{GroupRatio: 1},
+		},
+		StartTime: time.Now(),
+	}
+
+	usage := &dto.Usage{
+		PromptTokens:     999,
+		CompletionTokens: 999,
+		TotalTokens:      1998,
+		BillingUsage: dto.NewOpenAIChatBillingUsage(&dto.Usage{
+			PromptTokens:     80,
+			CompletionTokens: 9,
+			TotalTokens:      89,
+		}),
+	}
+
+	summary := calculateTextQuotaSummary(ctx, relayInfo, effectiveBillingUsage(usage))
+
+	require.False(t, summary.IsClaudeUsageSemantic)
+	require.Equal(t, dto.BillingUsageSemanticOpenAI, summary.UsageSemantic)
+	require.Equal(t, 80, summary.PromptTokens)
+	require.Equal(t, 9, summary.CompletionTokens)
+	require.Equal(t, 89, summary.TotalTokens)
+	require.Equal(t, 98, summary.Quota)
+}
+
+func TestUsageBillingPathForLog(t *testing.T) {
+	require.Equal(t, usageBillingPathLocal, usageBillingPathForLog(true, &dto.Usage{
+		BillingUsage: dto.NewClaudeMessagesBillingUsage(&dto.ClaudeUsage{InputTokens: 1}),
+	}))
+	require.Equal(t, usageBillingPathUpstream, usageBillingPathForLog(false, &dto.Usage{}))
+	require.Equal(t, usageBillingPathOpenAI, usageBillingPathForLog(false, &dto.Usage{
+		BillingUsage: dto.NewOpenAIChatBillingUsage(&dto.Usage{PromptTokens: 1}),
+	}))
+	require.Equal(t, usageBillingPathAnthropic, usageBillingPathForLog(false, &dto.Usage{
+		BillingUsage: dto.NewClaudeMessagesBillingUsage(&dto.ClaudeUsage{InputTokens: 1}),
+	}))
+	require.Equal(t, usageBillingPathGemini, usageBillingPathForLog(false, &dto.Usage{
+		BillingUsage: dto.NewGeminiChatBillingUsage(&dto.GeminiUsageMetadata{PromptTokenCount: 1}),
+	}))
+	require.Equal(t, usageBillingPathGeminiEstimated, usageBillingPathForLog(false, &dto.Usage{
+		BillingUsage: dto.NewEstimatedGeminiChatBillingUsage(&dto.Usage{PromptTokens: 1}),
+	}))
+}
+
+func TestAppendUsageBillingPathForLogWritesAdminInfo(t *testing.T) {
+	other := map[string]interface{}{
+		"admin_info": map[string]interface{}{},
+	}
+	appendUsageBillingPathForLog(other, false, &dto.Usage{
+		BillingUsage: dto.NewClaudeMessagesBillingUsage(&dto.ClaudeUsage{InputTokens: 1}),
+	})
+
+	adminInfo, ok := other["admin_info"].(map[string]interface{})
+	require.True(t, ok)
+	require.Equal(t, usageBillingPathAnthropic, adminInfo["usage_billing_path"])
+
+	other = map[string]interface{}{}
+	appendUsageBillingPathForLog(other, true, nil)
+	adminInfo, ok = other["admin_info"].(map[string]interface{})
+	require.True(t, ok)
+	require.Equal(t, usageBillingPathLocal, adminInfo["usage_billing_path"])
 }
 
 func TestCacheWriteTokensTotal(t *testing.T) {
@@ -219,6 +522,62 @@ func TestCalculateTextQuotaSummaryHandlesLegacyClaudeDerivedOpenAIUsage(t *testi
 
 	// 62 + 3544*0.1 + 586*1.25 + 95*5 = 1624.9 => 1624
 	require.Equal(t, 1624, summary.Quota)
+}
+
+func TestCalculateTextQuotaSummaryBillsOpenAICacheWriteTokens(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(w)
+
+	relayInfo := &relaycommon.RelayInfo{
+		RelayFormat:     types.RelayFormatOpenAI,
+		OriginModelName: "gpt-5.1",
+		PriceData: types.PriceData{
+			ModelRatio:         1,
+			CompletionRatio:    2,
+			CacheRatio:         0.1,
+			CacheCreationRatio: 1.25,
+			GroupRatioInfo:     types.GroupRatioInfo{GroupRatio: 1},
+		},
+		StartTime: time.Now(),
+	}
+
+	t.Run("uncached remainder stays positive", func(t *testing.T) {
+		usage := &dto.Usage{
+			PromptTokens:     1473,
+			CompletionTokens: 19,
+			PromptTokensDetails: dto.InputTokenDetails{
+				CacheWriteTokens: 1470,
+			},
+		}
+
+		summary := calculateTextQuotaSummary(ctx, relayInfo, usage)
+
+		require.Equal(t, 1470, summary.CacheCreationTokens)
+		// (1473-0-1470) + 1470*1.25 + 19*2 = 3 + 1837.5 + 38 = 1878.5 => 1879
+		require.Equal(t, 1879, summary.Quota)
+	})
+
+	t.Run("uncached remainder clamps to zero", func(t *testing.T) {
+		// Real OpenAI payload shape: cached_tokens + cache_write_tokens exceeds
+		// prompt_tokens because both are unadjusted prefix counts. The negative
+		// remainder must clamp to zero, never turn into a negative base charge.
+		usage := &dto.Usage{
+			PromptTokens:     3619,
+			CompletionTokens: 36,
+			PromptTokensDetails: dto.InputTokenDetails{
+				CachedTokens:     2921,
+				CacheWriteTokens: 3616,
+			},
+		}
+
+		summary := calculateTextQuotaSummary(ctx, relayInfo, usage)
+
+		require.Equal(t, 3619, summary.PromptTokens)
+		require.Equal(t, 3616, summary.CacheCreationTokens)
+		// max(3619-2921-3616, 0) + 2921*0.1 + 3616*1.25 + 36*2 = 4884.1 => 4884
+		require.Equal(t, 4884, summary.Quota)
+	})
 }
 
 func TestCalculateTextQuotaSummarySeparatesOpenRouterCacheReadFromPromptBilling(t *testing.T) {
@@ -330,6 +689,121 @@ func TestCalculateTextQuotaSummaryKeepsPrePRClaudeOpenRouterBilling(t *testing.T
 	require.True(t, summary.IsClaudeUsageSemantic)
 	require.Equal(t, 172, summary.PromptTokens)
 	require.Equal(t, 798, summary.Quota)
+}
+
+func TestCalculateTextQuotaSummarySeparatesDeepSeekClaudeCacheReadFromPromptBilling(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(w)
+
+	relayInfo := &relaycommon.RelayInfo{
+		FinalRequestRelayFormat: types.RelayFormatClaude,
+		OriginModelName:         "deepseek-chat",
+		ChannelMeta: &relaycommon.ChannelMeta{
+			ChannelType: constant.ChannelTypeDeepSeek,
+		},
+		PriceData: types.PriceData{
+			ModelRatio:      1,
+			CompletionRatio: 1,
+			CacheRatio:      0.25,
+			GroupRatioInfo:  types.GroupRatioInfo{GroupRatio: 1},
+		},
+		StartTime: time.Now(),
+	}
+
+	usage := &dto.Usage{
+		PromptTokens:     13417,
+		CompletionTokens: 84,
+		PromptTokensDetails: dto.InputTokenDetails{
+			CachedTokens: 13312,
+		},
+	}
+
+	summary := calculateTextQuotaSummary(ctx, relayInfo, usage)
+
+	require.True(t, summary.IsClaudeUsageSemantic)
+	require.True(t, summary.ClaudeInputIncludesCache)
+	require.Equal(t, 105, summary.PromptTokens)
+	require.Equal(t, 13312, summary.CacheTokens)
+	// (13417 - 13312) + 13312*0.25 + 84 = 3517
+	require.Equal(t, 3517, summary.Quota)
+
+	params := BuildTieredTokenParams(usage, summary.IsClaudeUsageSemantic && !summary.ClaudeInputIncludesCache, billingexpr.UsedVars(`tier("base", p + c + cr * 0.25)`))
+	require.Equal(t, 105.0, params.P)
+	require.Equal(t, 13417.0, params.Len)
+}
+
+func TestCalculateTextQuotaSummarySeparatesDeepSeekClaudeBillingUsageCacheRead(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(w)
+
+	relayInfo := &relaycommon.RelayInfo{
+		FinalRequestRelayFormat: types.RelayFormatClaude,
+		OriginModelName:         "deepseek-chat",
+		ChannelMeta:             &relaycommon.ChannelMeta{ChannelType: constant.ChannelTypeDeepSeek},
+		PriceData: types.PriceData{
+			ModelRatio:      1,
+			CompletionRatio: 1,
+			CacheRatio:      0.25,
+			GroupRatioInfo:  types.GroupRatioInfo{GroupRatio: 1},
+		},
+		StartTime: time.Now(),
+	}
+
+	usage := &dto.Usage{
+		PromptTokens:     13417,
+		CompletionTokens: 84,
+		BillingUsage: dto.NewClaudeMessagesBillingUsage(&dto.ClaudeUsage{
+			InputTokens:          105,
+			CacheReadInputTokens: 13312,
+			OutputTokens:         84,
+		}),
+	}
+
+	summary := calculateTextQuotaSummary(ctx, relayInfo, effectiveBillingUsage(usage))
+
+	require.True(t, summary.IsClaudeUsageSemantic)
+	require.False(t, summary.ClaudeInputIncludesCache)
+	require.Equal(t, 105, summary.PromptTokens)
+	require.Equal(t, 13312, summary.CacheTokens)
+	require.Equal(t, 3517, summary.Quota)
+
+	params := BuildTieredTokenParams(effectiveBillingUsage(usage), summary.IsClaudeUsageSemantic && !summary.ClaudeInputIncludesCache, billingexpr.UsedVars(`tier("base", p + c + cr * 0.25)`))
+	require.Equal(t, 105.0, params.P)
+	require.Equal(t, 13417.0, params.Len)
+}
+
+func TestCalculateTextQuotaSummaryClampsDeepSeekClaudePromptAfterCacheSubtraction(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(w)
+
+	relayInfo := &relaycommon.RelayInfo{
+		FinalRequestRelayFormat: types.RelayFormatClaude,
+		OriginModelName:         "deepseek-chat",
+		ChannelMeta:             &relaycommon.ChannelMeta{ChannelType: constant.ChannelTypeDeepSeek},
+		PriceData: types.PriceData{
+			ModelRatio:         1,
+			CompletionRatio:    1,
+			CacheRatio:         0.25,
+			CacheCreationRatio: 1.25,
+			GroupRatioInfo:     types.GroupRatioInfo{GroupRatio: 1},
+		},
+		StartTime: time.Now(),
+	}
+
+	summary := calculateTextQuotaSummary(ctx, relayInfo, &dto.Usage{
+		PromptTokens:     10,
+		CompletionTokens: 1,
+		PromptTokensDetails: dto.InputTokenDetails{
+			CachedTokens:         20,
+			CachedCreationTokens: 5,
+		},
+	})
+
+	require.Equal(t, 0, summary.PromptTokens)
+	require.Equal(t, 12, summary.Quota)
 }
 
 func TestComposeTieredTextQuotaKeepsToolCallSurcharges(t *testing.T) {
@@ -452,4 +926,81 @@ func TestComposeTieredTextQuotaErrorFallbackUsesPreConsumedQuota(t *testing.T) {
 
 	require.Equal(t, int64(12500), summary.ToolCallSurchargeQuota.Round(0).IntPart())
 	require.Equal(t, 14500, quota)
+}
+
+// TestTryTieredSettleRecordsClampOnOverflow guards that an oversized tiered
+// settlement both saturates the quota and records the clamp on RelayInfo, so
+// every consume path (text, audio, WSS) can surface it under admin_info.
+func TestTryTieredSettleRecordsClampOnOverflow(t *testing.T) {
+	// exprOutput = p * 1e9; quotaBeforeGroup = p*1e9 / 1e6 * 5e5 far exceeds
+	// MaxInt32 and must saturate.
+	exprStr := `tier("base", p * 1000000000)`
+	relayInfo := &relaycommon.RelayInfo{
+		OriginModelName: "overflow-model",
+		TieredBillingSnapshot: &billingexpr.BillingSnapshot{
+			BillingMode:  "tiered_expr",
+			ExprString:   exprStr,
+			ExprHash:     billingexpr.ExprHashString(exprStr),
+			GroupRatio:   1,
+			QuotaPerUnit: 500_000,
+		},
+	}
+
+	ok, quota, result := TryTieredSettle(relayInfo, billingexpr.TokenParams{P: 1_000_000_000})
+
+	require.True(t, ok)
+	require.NotNil(t, result)
+	require.Equal(t, math.MaxInt32, quota, "oversized settlement must clamp, never wrap negative")
+	require.NotNil(t, relayInfo.QuotaClamp, "clamp must be recorded on RelayInfo for admin auditing")
+	require.Equal(t, common.QuotaClampOverflow, relayInfo.QuotaClamp.Kind)
+}
+
+// TestTryTieredSettleNoClampInRange confirms an in-range settlement leaves
+// RelayInfo.QuotaClamp nil.
+func TestTryTieredSettleNoClampInRange(t *testing.T) {
+	exprStr := `tier("base", p * 2 + c * 10)`
+	relayInfo := &relaycommon.RelayInfo{
+		OriginModelName: "in-range-model",
+		TieredBillingSnapshot: &billingexpr.BillingSnapshot{
+			BillingMode:  "tiered_expr",
+			ExprString:   exprStr,
+			ExprHash:     billingexpr.ExprHashString(exprStr),
+			GroupRatio:   1,
+			QuotaPerUnit: 500_000,
+		},
+	}
+
+	ok, _, result := TryTieredSettle(relayInfo, billingexpr.TokenParams{P: 1000, C: 500})
+
+	require.True(t, ok)
+	require.NotNil(t, result)
+	require.Nil(t, relayInfo.QuotaClamp, "in-range settlement must not record a clamp")
+}
+
+func TestCalculateTextQuotaSummaryFixedPriceAppliesImageCountOnceAndAllowsOverride(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	priceData := types.PriceData{
+		ModelPrice: 0.12,
+		UsePrice:   true,
+		GroupRatioInfo: types.GroupRatioInfo{
+			GroupRatio: 1,
+		},
+	}
+	priceData.AddOtherRatio("n", 3)
+	relayInfo := &relaycommon.RelayInfo{
+		OriginModelName: "dall-e-3",
+		PriceData:       priceData,
+		StartTime:       time.Now(),
+	}
+	usage := &dto.Usage{PromptTokens: 1, CompletionTokens: 1, TotalTokens: 2}
+
+	summary := calculateTextQuotaSummary(ctx, relayInfo, usage)
+	require.Equal(t, 180000, summary.Quota)
+
+	// An adaptor-reported actual count replaces the requested count rather
+	// than multiplying it a second time.
+	relayInfo.PriceData.AddOtherRatio("n", 2)
+	summary = calculateTextQuotaSummary(ctx, relayInfo, usage)
+	require.Equal(t, 120000, summary.Quota)
 }

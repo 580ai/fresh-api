@@ -456,7 +456,7 @@ func (user *User) TransferAffQuotaToQuota(quota int) error {
 	defer tx.Rollback() // 确保在函数退出时事务能回滚
 
 	// 加锁查询用户以确保数据一致性
-	err := tx.Set("gorm:query_option", "FOR UPDATE").First(&user, user.Id).Error
+	err := lockForUpdate(tx).First(&user, user.Id).Error
 	if err != nil {
 		return err
 	}
@@ -1102,6 +1102,58 @@ func decreaseUserQuota(id int, quota int) (err error) {
 		return err
 	}
 	return err
+}
+
+// ConsumeUserQuota atomically reserves wallet quota and always writes directly
+// to the database so a successful reservation is immediately visible.
+func ConsumeUserQuota(id int, quota int) error {
+	if quota < 0 {
+		return errors.New("quota 不能为负数！")
+	}
+	if quota == 0 {
+		return nil
+	}
+
+	result := DB.Model(&User{}).
+		Where("id = ? AND quota >= ?", id, quota).
+		Update("quota", gorm.Expr("quota - ?", quota))
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return ErrInsufficientUserQuota
+	}
+
+	if err := invalidateUserCache(id); err != nil {
+		common.SysLog("failed to invalidate user cache after atomic consume: " + err.Error())
+	}
+	return nil
+}
+
+// RestoreUserQuota synchronously reverses a reservation without using the
+// batch updater, allowing a subsequent reservation to observe the refund.
+func RestoreUserQuota(id int, quota int) error {
+	if quota < 0 {
+		return errors.New("quota 不能为负数！")
+	}
+	if quota == 0 {
+		return nil
+	}
+
+	result := DB.Model(&User{}).
+		Where("id = ?", id).
+		Update("quota", gorm.Expr("quota + ?", quota))
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+
+	if err := invalidateUserCache(id); err != nil {
+		common.SysLog("failed to invalidate user cache after atomic restore: " + err.Error())
+	}
+	return nil
 }
 
 func DeltaUpdateUserQuota(id int, delta int) (err error) {

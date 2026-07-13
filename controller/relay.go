@@ -15,6 +15,7 @@ import (
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	perfmetrics "github.com/QuantumNous/new-api/pkg/perf_metrics"
 	"github.com/QuantumNous/new-api/relay"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
@@ -370,6 +371,25 @@ func getChannel(c *gin.Context, info *relaycommon.RelayInfo, retryParam *service
 		return channel, rateLimitErr
 	}
 
+	if info.Billing != nil && info.TieredBillingSnapshot != nil {
+		targetQuota, err := billingexpr.QuotaRoundStrict(
+			info.TieredBillingSnapshot.EstimatedQuotaBeforeGroup * info.PriceData.GroupRatioInfo.GroupRatio,
+		)
+		if err != nil {
+			return nil, types.NewErrorWithStatusCode(
+				err,
+				types.ErrorCodeModelPriceError,
+				http.StatusBadRequest,
+				types.ErrOptionWithSkipRetry(),
+			)
+		}
+		if err := info.Billing.Reserve(targetQuota); err != nil {
+			return nil, types.NewError(err, types.ErrorCodeUpdateDataError, types.ErrOptionWithSkipRetry())
+		}
+		info.TieredBillingSnapshot.EstimatedQuotaAfterGroup = targetQuota
+		info.PriceData.QuotaToPreConsume = targetQuota
+	}
+
 	newAPIError := middleware.SetupContextForSelectedChannel(c, channel, info.OriginModelName)
 	if newAPIError != nil {
 		return nil, newAPIError
@@ -657,7 +677,7 @@ func RelayTask(c *gin.Context) {
 			ModelPrice:      relayInfo.PriceData.ModelPrice,
 			GroupRatio:      relayInfo.PriceData.GroupRatioInfo.GroupRatio,
 			ModelRatio:      relayInfo.PriceData.ModelRatio,
-			OtherRatios:     relayInfo.PriceData.OtherRatios,
+			OtherRatios:     relayInfo.PriceData.OtherRatios(),
 			OriginModelName: relayInfo.OriginModelName,
 			PerCallBilling:  common.StringsContains(constant.TaskPricePatches, relayInfo.OriginModelName) || relayInfo.PriceData.UsePrice,
 		}
