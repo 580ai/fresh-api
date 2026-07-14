@@ -16,7 +16,7 @@ version: '3.4' # For compatibility with older Docker versions
 
 services:
   new-api:
-    image: alanhgh/fresh-api:v2026-07-07
+    image: alanhgh/fresh-api:v2026-07-13
     container_name: new-api
     restart: always
     command: --log-dir /app/logs
