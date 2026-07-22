@@ -224,7 +224,7 @@ const ChannelsActions = ({
                       });
                     }}
                   >
-                    {t('核对上游已用额度')}
+                    {t('核对已启用上游已用额度')}
                   </Button>
                 </Dropdown.Item>
                 <Dropdown.Item>

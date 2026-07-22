@@ -223,7 +223,7 @@ export function ChannelsPrimaryButtons() {
                 handleUpdateAllUpstreamUsed(queryClient)
               }}
             >
-              {t('Reconcile Upstream Used')}
+              {t('Reconcile Enabled Upstream Used')}
               <DropdownMenuShortcut>
                 <Scale className='h-4 w-4' />
               </DropdownMenuShortcut>
