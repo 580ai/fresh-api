@@ -922,6 +922,17 @@ export const useChannelsData = () => {
     }
   };
 
+  // 触发批量核对所有启用渠道的上游已用额度（后台异步执行）
+  const updateAllChannelsUpstreamUsed = async () => {
+    const res = await API.get(`/api/channel/update_upstream_used`);
+    const { success, message } = res.data;
+    if (success) {
+      showInfo(message || t('已开始后台核对上游已用额度，稍后刷新查看'));
+    } else {
+      showError(message);
+    }
+  };
+
   const updateChannelBalance = async (record) => {
     if (record?.type === 57) {
       openCodexUsageModal({
@@ -1407,6 +1418,7 @@ export const useChannelsData = () => {
     deleteAllDisabledChannels,
     refreshSelectedChannelsStats,
     updateAllChannelsBalance,
+    updateAllChannelsUpstreamUsed,
     updateChannelBalance,
     fixChannelsAbilities,
     checkOllamaVersion,

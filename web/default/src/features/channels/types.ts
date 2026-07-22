@@ -53,6 +53,7 @@ export const channelSchema = z.object({
   models: z.string().default(''),
   group: z.string().default('default'),
   used_quota: z.number().default(0),
+  upstream_used_quota: z.number().default(0), // 上游原始已用额度（核对用，独立表 channel_upstream_usages）
   model_mapping: z.string().nullish(),
   status_code_mapping: z.string().nullish(),
   priority: z.number().nullish(),

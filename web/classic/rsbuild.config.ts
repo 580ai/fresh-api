@@ -60,6 +60,9 @@ export default defineConfig(({ envMode }) => {
     },
     server: {
       host: '0.0.0.0',
+      // 独立的前端 dev 端口，避免和后端 3000（服务打包好的 dist）冲突。
+      // 与 web/default(5173) 也错开，方便两套前端同时跑。API 经下方 proxy 转发到后端。
+      port: Number(process.env.PORT) || 5174,
       strictPort: false,
       proxy: devProxy,
     },

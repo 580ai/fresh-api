@@ -52,6 +52,58 @@ import {
 } from '@douyinfe/semi-icons';
 import { FaRandom } from 'react-icons/fa';
 
+// ============================================================================
+// 上游已用对账辅助
+// 命名规范：类型-上游名称-倍率[-S/G]（末尾解析，上游名称本身可含 '-'）
+//   末段∈{S,G} → 结算标志；倍率=倒数第2段。否则倍率=末段、无结算标志。
+// ============================================================================
+const parseChannelReconMeta = (name) => {
+  const result = { ratio: null, settlement: null };
+  if (!name) return result;
+  const parts = String(name).split('-');
+  let ratioIdx = parts.length - 1;
+  const last = (parts[parts.length - 1] || '').trim().toUpperCase();
+  if (last === 'S' || last === 'G') {
+    result.settlement = last;
+    ratioIdx = parts.length - 2;
+  }
+  if (ratioIdx >= 0) {
+    const r = Number((parts[ratioIdx] || '').trim());
+    if (Number.isFinite(r) && r > 0) result.ratio = r;
+  }
+  return result;
+};
+
+// 计算对账各项（单位均为额度 quota）：误差=U/r−L，利润=L−U/r，金额=L×r
+const computeRecon = (record) => {
+  const local = record.used_quota || 0;
+  const upstreamRaw = record.upstream_used_quota || 0;
+  const { ratio, settlement } = parseChannelReconMeta(record.name);
+  const r = ratio || 1;
+  const upstreamAdjusted = upstreamRaw / r;
+  const error = upstreamAdjusted - local;
+  const profit = local - upstreamAdjusted;
+  const amount = local * r;
+  return {
+    local,
+    upstreamRaw,
+    ratio,
+    upstreamAdjusted,
+    error,
+    profit,
+    profitRate: local > 0 ? profit / local : null,
+    amount,
+    settlement,
+    hasUpstream: upstreamRaw > 0,
+  };
+};
+
+const reconSignPrefix = (v) => {
+  if (v > 0) return '+';
+  if (v < 0) return '-';
+  return '';
+};
+
 // Render functions
 const renderType = (type, channelInfo = undefined, t) => {
   let type2label = new Map();
@@ -555,44 +607,32 @@ export const getChannelsColumns = ({
     },
     {
       key: COLUMN_KEYS.BALANCE,
-      title: t('已用/剩余'),
+      title: (
+        <Tooltip
+          content={
+            <div
+              style={{
+                maxWidth: 280,
+                fontSize: 12,
+                lineHeight: 1.7,
+                whiteSpace: 'pre-line',
+              }}
+            >
+              {t(
+                '已用：本站消耗（1倍率）。\n误差：上游已用÷倍率 − 本站已用。>0 亏钱→红，≤0 赚钱→黑。\n金额：本站已用×倍率（折成上游结算额）。对私→红，对公/未标注→黑。\n命名规范：类型-上游名称-倍率-S/G（S对私 G对公，可省略）。\n悬停单元格可见上游原始已用、利润与利润率。数据来自定时/批量核对。',
+              )}
+            </div>
+          }
+        >
+          <span style={{ cursor: 'help', borderBottom: '1px dashed #bbb' }}>
+            {t('已用/误差/金额')}
+          </span>
+        </Tooltip>
+      ),
       dataIndex: 'expired_time',
       render: (text, record, index) => {
-        if (record.children === undefined) {
-          return (
-            <div>
-              <Space spacing={1}>
-                <Tooltip content={t('已用额度')}>
-                  <Tag color='white' type='ghost' shape='circle'>
-                    {renderQuota(record.used_quota)}
-                  </Tag>
-                </Tooltip>
-                <Tooltip
-                  content={
-                    record.type === 57
-                      ? t('查看 Codex 帐号信息与用量')
-                      : t('剩余额度') +
-                        ': ' +
-                        renderQuotaWithAmount(record.balance) +
-                        t('，点击更新')
-                  }
-                >
-                  <Tag
-                    color={record.type === 57 ? 'light-blue' : 'white'}
-                    type={record.type === 57 ? 'light' : 'ghost'}
-                    shape='circle'
-                    className={record.type === 57 ? 'cursor-pointer' : ''}
-                    onClick={() => updateChannelBalance(record)}
-                  >
-                    {record.type === 57
-                      ? t('帐号信息')
-                      : renderQuotaWithAmount(record.balance)}
-                  </Tag>
-                </Tooltip>
-              </Space>
-            </div>
-          );
-        } else {
+        // 标签聚合行：只显示已用
+        if (record.children !== undefined) {
           return (
             <Tooltip content={t('已用额度')}>
               <Tag color='white' type='ghost' shape='circle'>
@@ -601,6 +641,127 @@ export const getChannelsColumns = ({
             </Tooltip>
           );
         }
+        // 类型 57(Codex)：保留「帐号信息」入口
+        if (record.type === 57) {
+          return (
+            <div>
+              <Space spacing={1}>
+                <Tooltip content={t('已用额度')}>
+                  <Tag color='white' type='ghost' shape='circle'>
+                    {renderQuota(record.used_quota)}
+                  </Tag>
+                </Tooltip>
+                <Tooltip content={t('查看 Codex 帐号信息与用量')}>
+                  <Tag
+                    color='light-blue'
+                    type='light'
+                    shape='circle'
+                    className='cursor-pointer'
+                    onClick={() => updateChannelBalance(record)}
+                  >
+                    {t('帐号信息')}
+                  </Tag>
+                </Tooltip>
+              </Space>
+            </div>
+          );
+        }
+        // 普通渠道：已用 / 误差 / 金额
+        const recon = computeRecon(record);
+        const errText = recon.hasUpstream
+          ? `${reconSignPrefix(recon.error)}${renderQuota(Math.abs(recon.error))}`
+          : '-';
+        const errIsLoss = recon.hasUpstream && recon.error > 0;
+        const errColor = errIsLoss ? 'red' : 'white';
+        const amtIsPrivate = recon.settlement === 'S';
+        const amtColor = amtIsPrivate ? 'red' : 'white';
+        let errTone = t('持平');
+        if (recon.error > 0) {
+          errTone = t('亏');
+        } else if (recon.error < 0) {
+          errTone = t('赚');
+        }
+        let settleLabel = t('未标注');
+        if (recon.settlement === 'S') {
+          settleLabel = t('对私');
+        } else if (recon.settlement === 'G') {
+          settleLabel = t('对公');
+        }
+        const ratioText =
+          recon.ratio === null ? t('未识别(按1)') : `÷${recon.ratio}`;
+        const rateText =
+          recon.profitRate === null
+            ? ''
+            : ` (${(recon.profitRate * 100).toFixed(1)}%)`;
+        const reconDetail = (
+          <div style={{ fontSize: 12, lineHeight: 1.8, minWidth: 190 }}>
+            <div>
+              {t('本站已用')}：{renderQuota(recon.local)}
+            </div>
+            {recon.hasUpstream ? (
+              <>
+                <div>
+                  {t('上游已用(原始)')}：{renderQuota(recon.upstreamRaw)}
+                </div>
+                <div>
+                  {t('上游折算')}({ratioText})：
+                  {renderQuota(recon.upstreamAdjusted)}
+                </div>
+                <div
+                  style={{
+                    borderTop: '1px solid rgba(0,0,0,.12)',
+                    marginTop: 4,
+                    paddingTop: 4,
+                  }}
+                >
+                  {t('误差')}：{renderQuota(recon.upstreamAdjusted)} −{' '}
+                  {renderQuota(recon.local)} = <b>{errText}</b> {errTone}
+                </div>
+                <div>
+                  {t('利润')}：{reconSignPrefix(recon.profit)}
+                  {renderQuota(Math.abs(recon.profit))}
+                  {rateText}
+                </div>
+              </>
+            ) : (
+              <div>{t('暂无上游数据')}</div>
+            )}
+            <div>
+              {t('结算金额')}({settleLabel})：{renderQuota(recon.local)} ×{' '}
+              {recon.ratio || 1} = {renderQuota(recon.amount)}
+            </div>
+          </div>
+        );
+        return (
+          <Tooltip content={reconDetail} position='top'>
+            <span
+              style={{
+                display: 'inline-flex',
+                gap: 4,
+                alignItems: 'center',
+                cursor: 'help',
+              }}
+            >
+              <Tag color='white' type='ghost' shape='circle'>
+                {renderQuota(recon.local)}
+              </Tag>
+              <Tag
+                color={errColor}
+                type={errIsLoss ? 'light' : 'ghost'}
+                shape='circle'
+              >
+                {errText}
+              </Tag>
+              <Tag
+                color={amtColor}
+                type={amtIsPrivate ? 'light' : 'ghost'}
+                shape='circle'
+              >
+                {renderQuota(recon.amount)}
+              </Tag>
+            </span>
+          </Tooltip>
+        );
       },
     },
     {

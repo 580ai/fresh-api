@@ -578,6 +578,35 @@ export async function updateAllChannelsBalance(): Promise<{
 }
 
 /**
+ * 触发批量核对所有启用渠道的上游已用额度（后台异步执行）
+ */
+export async function updateAllChannelsUpstreamUsed(): Promise<{
+  success: boolean
+  message?: string
+}> {
+  const res = await api.get(
+    '/api/channel/update_upstream_used',
+    channelActionConfig()
+  )
+  return res.data
+}
+
+/**
+ * 核对单个渠道的上游已用额度
+ */
+export async function updateChannelUpstreamUsed(id: number): Promise<{
+  success: boolean
+  message?: string
+  upstream_used_quota?: number
+}> {
+  const res = await api.get(
+    `/api/channel/update_upstream_used/${id}`,
+    channelActionConfig()
+  )
+  return res.data
+}
+
+/**
  * Get all available models
  */
 export async function getAllModels(): Promise<{

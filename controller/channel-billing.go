@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -501,5 +502,112 @@ func AutomaticallyUpdateChannels(frequency int) {
 		common.SysLog("updating all channels")
 		_ = updateAllChannelsBalance()
 		common.SysLog("channels update done")
+	}
+}
+
+// ============================================================================
+// 上游已用额度核对
+// 渠道名规范：类型-上游名称-倍率[-S/G]（从末尾解析，上游名称本身可含 '-'）
+//   末段若为 S/G  = 结算类型标志（对私/对公，仅前端染色用），倍率=倒数第二段
+//   末段若不是 S/G = 倍率=末段
+// 调用上游：GET {base_url}/v1/dashboard/billing/usage?start_date=...&end_date=...
+//   Header Authorization: Bearer {渠道key}
+//   返回 {"total_usage": 美分}，换算成 quota 落库：total_usage/100 * QuotaPerUnit
+// ============================================================================
+
+// updateChannelUpstreamUsed 拉取单个渠道的上游已用额度并落库，返回换算后的 quota
+func updateChannelUpstreamUsed(channel *model.Channel) (int64, error) {
+	if channel.ChannelInfo.IsMultiKey {
+		return 0, errors.New("多密钥渠道不支持上游已用核对")
+	}
+	baseURL := channel.GetBaseURL()
+	if baseURL == "" {
+		return 0, errors.New("渠道未配置 base_url，无法查询上游")
+	}
+	// 上游 GetUsage 不按日期过滤，返回的是总已用，故不带 start_date/end_date
+	url := fmt.Sprintf("%s/v1/dashboard/billing/usage", strings.TrimRight(baseURL, "/"))
+
+	// 复用现有 GetAuthHeader（Authorization: Bearer {key}）
+	body, err := GetResponseBody("GET", url, channel, GetAuthHeader(channel.Key))
+	if err != nil {
+		return 0, err
+	}
+	usage := OpenAIUsageResponse{}
+	if err := json.Unmarshal(body, &usage); err != nil {
+		return 0, err
+	}
+	// total_usage 单位为 0.01 美元（美分）；换算回 quota 与本站已用同量纲
+	upstreamUsed := int64(usage.TotalUsage / 100 * common.QuotaPerUnit)
+	if err := model.SetChannelUpstreamUsage(channel.Id, upstreamUsed); err != nil {
+		return 0, err
+	}
+	return upstreamUsed, nil
+}
+
+// UpdateChannelUpstreamUsed 拉取单个渠道上游已用额度（GET /api/channel/update_upstream_used/:id）
+func UpdateChannelUpstreamUsed(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	channel, err := model.CacheGetChannel(id)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	used, err := updateChannelUpstreamUsed(channel)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"success":             true,
+		"message":             "",
+		"upstream_used_quota": used,
+	})
+}
+
+// updateAllChannelsUpstreamUsed 批量拉取所有启用渠道的上游已用额度（跳过多密钥和名称不规范的渠道）
+func updateAllChannelsUpstreamUsed() error {
+	channels, err := model.GetAllChannels(0, 0, true, false)
+	if err != nil {
+		return err
+	}
+	for _, channel := range channels {
+		if channel.Status != common.ChannelStatusEnabled {
+			continue
+		}
+		if channel.ChannelInfo.IsMultiKey {
+			continue
+		}
+		if _, err := updateChannelUpstreamUsed(channel); err != nil {
+			common.SysLog(fmt.Sprintf("拉取渠道 #%d(%s) 上游已用额度失败: %s", channel.Id, channel.Name, err.Error()))
+		}
+		time.Sleep(common.RequestInterval)
+	}
+	return nil
+}
+
+// UpdateAllChannelsUpstreamUsed 批量核对上游已用额度（GET /api/channel/update_upstream_used）
+func UpdateAllChannelsUpstreamUsed(c *gin.Context) {
+	go func() {
+		if err := updateAllChannelsUpstreamUsed(); err != nil {
+			common.SysLog("批量核对上游已用额度失败: " + err.Error())
+		}
+	}()
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "已开始后台核对上游已用额度",
+	})
+}
+
+// AutomaticallyUpdateChannelsUpstreamUsed 定时批量拉取上游已用额度
+func AutomaticallyUpdateChannelsUpstreamUsed(frequency int) {
+	for {
+		time.Sleep(time.Duration(frequency) * time.Minute)
+		common.SysLog("updating channels upstream used quota")
+		_ = updateAllChannelsUpstreamUsed()
+		common.SysLog("channels upstream used quota update done")
 	}
 }

@@ -38,6 +38,7 @@ const ChannelsActions = ({
   testAllChannels,
   fixChannelsAbilities,
   updateAllChannelsBalance,
+  updateAllChannelsUpstreamUsed,
   deleteAllDisabledChannels,
   refreshSelectedChannelsStats,
   applyAllUpstreamUpdates,
@@ -204,6 +205,26 @@ const ChannelsActions = ({
                     }}
                   >
                     {t('更新所有已启用通道余额')}
+                  </Button>
+                </Dropdown.Item>
+                <Dropdown.Item>
+                  <Button
+                    size='small'
+                    type='secondary'
+                    className='w-full'
+                    onClick={() => {
+                      Modal.confirm({
+                        title: t('确定？'),
+                        content: t(
+                          '确定要核对所有已启用渠道的上游已用额度吗？（后台异步执行，稍后刷新查看）',
+                        ),
+                        onOk: () => updateAllChannelsUpstreamUsed(),
+                        size: 'sm',
+                        centered: true,
+                      });
+                    }}
+                  >
+                    {t('核对上游已用额度')}
                   </Button>
                 </Dropdown.Item>
                 <Dropdown.Item>

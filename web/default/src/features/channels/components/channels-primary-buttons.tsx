@@ -24,7 +24,7 @@ import {
   Trash2,
   Tags,
   TestTube,
-  DollarSign,
+  Scale,
   ListChecks,
   SortAsc,
   RefreshCw,
@@ -62,7 +62,7 @@ import {
   handleDeleteAllDisabled,
   handleFixAbilities,
   handleTestAllChannels,
-  handleUpdateAllBalances,
+  handleUpdateAllUpstreamUsed,
 } from '../lib'
 import { useChannels } from './channels-provider'
 
@@ -220,12 +220,12 @@ export function ChannelsPrimaryButtons() {
 
             <DropdownMenuItem
               onClick={() => {
-                handleUpdateAllBalances(queryClient)
+                handleUpdateAllUpstreamUsed(queryClient)
               }}
             >
-              {t('Update All Balances')}
+              {t('Reconcile Upstream Used')}
               <DropdownMenuShortcut>
-                <DollarSign className='h-4 w-4' />
+                <Scale className='h-4 w-4' />
               </DropdownMenuShortcut>
             </DropdownMenuItem>
 

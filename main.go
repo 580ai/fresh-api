@@ -127,6 +127,15 @@ func main() {
 		go controller.AutomaticallyUpdateChannels(frequency)
 	}
 
+	// 定时核对上游已用额度（渠道名规范：类型-上游名称-倍率-NewApiUser）
+	if os.Getenv("UPSTREAM_USED_UPDATE_FREQUENCY") != "" {
+		frequency, err := strconv.Atoi(os.Getenv("UPSTREAM_USED_UPDATE_FREQUENCY"))
+		if err != nil {
+			common.FatalLog("failed to parse UPSTREAM_USED_UPDATE_FREQUENCY: " + err.Error())
+		}
+		go controller.AutomaticallyUpdateChannelsUpstreamUsed(frequency)
+	}
+
 	// AWS model auto-ban task
 	go service.StartAwsModelBanTask()
 

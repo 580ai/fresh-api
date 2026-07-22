@@ -38,6 +38,7 @@ import {
   editTagChannels,
   testAllChannels,
   updateAllChannelsBalance,
+  updateAllChannelsUpstreamUsed,
   updateChannelBalance,
 } from '../api'
 import { CHANNEL_STATUS, ERROR_MESSAGES, SUCCESS_MESSAGES } from '../constants'
@@ -710,5 +711,33 @@ export async function handleUpdateAllBalances(
     }
   } catch {
     toast.error(i18next.t('Failed to update all balances'))
+  }
+}
+
+/**
+ * 触发批量核对所有启用渠道的上游已用额度（后台异步执行）
+ */
+export async function handleUpdateAllUpstreamUsed(
+  queryClient?: QueryClient,
+  onSuccess?: () => void
+): Promise<void> {
+  try {
+    const response = await updateAllChannelsUpstreamUsed()
+    if (response.success) {
+      toast.success(
+        response.message ||
+          i18next.t(
+            'Reconciling upstream used quota in background. Please refresh to see results.'
+          )
+      )
+      queryClient?.invalidateQueries({ queryKey: channelsQueryKeys.lists() })
+      onSuccess?.()
+    } else {
+      toast.error(
+        response.message || i18next.t('Failed to reconcile upstream used quota')
+      )
+    }
+  } catch {
+    toast.error(i18next.t('Failed to reconcile upstream used quota'))
   }
 }

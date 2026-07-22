@@ -72,6 +72,33 @@ func clearChannelInfo(channel *model.Channel) {
 	}
 }
 
+// attachUpstreamUsed 批量把独立表 channel_upstream_usages 里的上游已用额度填充到透传字段
+// （倍率换算在前端展示时做，这里只回填原始值）
+func attachUpstreamUsed(channels []*model.Channel) {
+	if len(channels) == 0 {
+		return
+	}
+	ids := make([]int, 0, len(channels))
+	for _, ch := range channels {
+		if ch != nil {
+			ids = append(ids, ch.Id)
+		}
+	}
+	usageMap, err := model.BatchGetChannelUpstreamUsage(ids)
+	if err != nil {
+		common.SysError("failed to batch get channel upstream usage: " + err.Error())
+		return
+	}
+	for _, ch := range channels {
+		if ch == nil {
+			continue
+		}
+		if used, ok := usageMap[ch.Id]; ok {
+			ch.UpstreamUsedQuota = used
+		}
+	}
+}
+
 // sanitizeChannelForLog 清理渠道敏感信息用于日志记录
 func sanitizeChannelForLog(channel *model.Channel) map[string]any {
 	if channel == nil {
@@ -189,6 +216,7 @@ func GetAllChannels(c *gin.Context) {
 	for _, datum := range channelData {
 		clearChannelInfo(datum)
 	}
+	attachUpstreamUsed(channelData)
 
 	countQuery := buildChannelListQuery(groupFilter, statusFilter, -1)
 	var results []struct {
@@ -395,6 +423,7 @@ func SearchChannels(c *gin.Context) {
 	for _, datum := range pagedData {
 		clearChannelInfo(datum)
 	}
+	attachUpstreamUsed(pagedData)
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,

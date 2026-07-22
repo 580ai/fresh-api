@@ -230,6 +230,97 @@ export function parseModelsList(models: string): string[] {
 }
 
 /**
+ * 结算类型：S=对私，G=对公。
+ */
+export type SettlementType = 'S' | 'G'
+
+/**
+ * 拆解渠道名末尾各段。
+ * 命名规范：类型-上游名称-倍率[-S/G]（末尾解析，上游名称本身可含 '-'）
+ *   末段若 ∈ {S,G} → 结算标志；此时倍率=倒数第2段
+ *   否则           → 倍率=末段、无结算标志
+ */
+function parseChannelNameTail(name: string): {
+  ratio: number | null
+  settlement: SettlementType | null
+} {
+  const result = { ratio: null as number | null, settlement: null as SettlementType | null }
+  if (!name) {
+    return result
+  }
+  const parts = name.split('-')
+  let ratioIdx = parts.length - 1
+  const lastSeg = (parts.at(-1) ?? '').trim().toUpperCase()
+  if (lastSeg === 'S' || lastSeg === 'G') {
+    result.settlement = lastSeg
+    ratioIdx = parts.length - 2
+  }
+  if (ratioIdx >= 0) {
+    const ratio = Number((parts[ratioIdx] ?? '').trim())
+    if (Number.isFinite(ratio) && ratio > 0) {
+      result.ratio = ratio
+    }
+  }
+  return result
+}
+
+/**
+ * 从渠道名解析上游分组倍率，解析不出合法（>0）倍率时返回 null（不做换算）。
+ */
+export function parseUpstreamRatio(name: string): number | null {
+  return parseChannelNameTail(name).ratio
+}
+
+/**
+ * 从渠道名解析结算类型（S=对私/G=对公），无则返回 null。
+ */
+export function parseSettlementType(name: string): SettlementType | null {
+  return parseChannelNameTail(name).settlement
+}
+
+/**
+ * 渠道上游对账各项计算结果（单位均为额度 quota，展示时由 formatQuotaWithCurrency 转成金额）。
+ *   L = 本站已用；U = 上游已用原始；r = 倍率（无则按 1）
+ *   误差 = U/r − L（>0 亏，<0 赚）；利润 = L − U/r = −误差
+ *   金额 = L × r（本站消耗折成上游结算额）
+ */
+export interface UpstreamRecon {
+  local: number // L
+  upstreamRaw: number // U
+  ratio: number | null // r（未解析出为 null）
+  upstreamAdjusted: number // U/r（无倍率则 = U）
+  error: number // U/r − L
+  profit: number // L − U/r
+  profitRate: number | null // profit / L（L<=0 时为 null）
+  amount: number // L × r（无倍率则 = L）
+  settlement: SettlementType | null
+  hasUpstream: boolean // 是否已拉到上游数据
+}
+
+export function computeUpstreamRecon(channel: Channel): UpstreamRecon {
+  const local = channel.used_quota || 0
+  const upstreamRaw = channel.upstream_used_quota || 0
+  const { ratio, settlement } = parseChannelNameTail(channel.name)
+  const effectiveRatio = ratio ?? 1
+  const upstreamAdjusted = upstreamRaw / effectiveRatio
+  const error = upstreamAdjusted - local
+  const profit = local - upstreamAdjusted
+  const amount = local * effectiveRatio
+  return {
+    local,
+    upstreamRaw,
+    ratio,
+    upstreamAdjusted,
+    error,
+    profit,
+    profitRate: local > 0 ? profit / local : null,
+    amount,
+    settlement,
+    hasUpstream: upstreamRaw > 0,
+  }
+}
+
+/**
  * Parse comma-separated groups list.
  * Sorts with 'default' group first, then locale-sorted alphabetically.
  */

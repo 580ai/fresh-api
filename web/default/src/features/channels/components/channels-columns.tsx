@@ -23,6 +23,7 @@ import {
   AlertTriangle,
   ChevronDown,
   ChevronRight,
+  Info,
   ListOrdered,
   Shuffle,
   SlidersHorizontal,
@@ -35,7 +36,7 @@ import { ConfirmDialog } from '@/components/confirm-dialog'
 import { BadgeListCell } from '@/components/data-table'
 import { GroupBadge } from '@/components/group-badge'
 import { ProviderBadge } from '@/components/provider-badge'
-import { StatusBadge, type StatusBadgeProps } from '@/components/status-badge'
+import { StatusBadge } from '@/components/status-badge'
 import { TableId } from '@/components/table-id'
 import { TruncatedText } from '@/components/truncated-text'
 import { Button } from '@/components/ui/button'
@@ -47,7 +48,6 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import {
-  formatCurrencyFromUSD,
   formatQuotaWithCurrency,
   getCurrencyLabel,
 } from '@/lib/currency'
@@ -60,7 +60,6 @@ import { CHANNEL_STATUS_CONFIG, MODEL_FETCHABLE_TYPES } from '../constants'
 import {
   formatRelativeTime,
   formatResponseTime,
-  getBalanceVariant,
   getChannelTypeIcon,
   getChannelTypeLabel,
   getResponseTimeConfig,
@@ -70,7 +69,7 @@ import {
   parseChannelSettings,
   handleUpdateChannelField,
   handleUpdateTagField,
-  handleUpdateChannelBalance,
+  computeUpstreamRecon,
   isTagAggregateRow,
   type TagRow,
 } from '../lib'
@@ -291,17 +290,30 @@ function WeightCell({ channel }: { channel: Channel }) {
 const MAX_INLINE_BALANCE_CHARS = 8
 const SENSITIVE_MASK = '••••'
 
+/** 数值符号前缀（避免嵌套三元） */
+function signPrefix(value: number): string {
+  if (value > 0) {
+    return '+'
+  }
+  if (value < 0) {
+    return '-'
+  }
+  return ''
+}
+
 /**
- * Balance cell component with click to update
+ * 对账单元格：已用 / 误差 / 金额。
+ *   已用 = 本站已用 L；误差 = 上游已用÷倍率 − L（>0 亏→红，≤0 赚→黑）；
+ *   金额 = L×倍率（对私→红，对公/未标注→黑）。
+ *   悬停展开：上游已用(原始)、折1倍率、误差、利润(含利润率)、结算金额。
+ *   类型 57(Codex) 保留原「账户信息」弹窗（与对账无关，独立分支）。
  */
 function BalanceCell({ channel }: { channel: Channel }) {
   const { t, i18n } = useTranslation()
-  const queryClient = useQueryClient()
   const layout = useContext(ChannelRowActionsLayoutContext)
   const { sensitiveVisible } = useChannels()
   const isTagRow = isTagAggregateRow(channel)
-  const balance = channel.balance || 0
-  const usedQuota = channel.used_quota || 0
+  const recon = computeUpstreamRecon(channel)
   const [isUpdating, setIsUpdating] = useState(false)
   const [codexUsageOpen, setCodexUsageOpen] = useState(false)
   const [codexUsageResponse, setCodexUsageResponse] =
@@ -310,50 +322,49 @@ function BalanceCell({ channel }: { channel: Channel }) {
   const tokenSuffix = currencyLabel === 'Tokens' ? ' Tokens' : ''
   const withSuffix = (value: string) =>
     tokenSuffix && value !== '-' ? `${value}${tokenSuffix}` : value
-
   const locale = toIntlLocale(i18n.resolvedLanguage || i18n.language)
-  const balanceFormatOptions = {
-    digitsLarge: 2,
-    digitsSmall: 4,
-    abbreviate: false,
-    showSymbol: layout !== 'card',
-  } as const
-  // Precise values are kept for the tooltip; long values are shown compactly inline.
-  const usedFull = withSuffix(
-    formatQuotaWithCurrency(usedQuota, {
-      digitsLarge: 2,
-      digitsSmall: 4,
-      abbreviate: true,
-      showSymbol: layout !== 'card',
-    })
-  )
-  const remainingFull = withSuffix(
-    formatCurrencyFromUSD(balance, balanceFormatOptions)
-  )
-  const usedDisplay =
-    usedFull.length > MAX_INLINE_BALANCE_CHARS
-      ? withSuffix(
-          formatQuotaWithCurrency(usedQuota, {
-            compact: true,
-            locale,
-            showSymbol: layout !== 'card',
-          })
-        )
-      : usedFull
-  const remainingDisplay =
-    remainingFull.length > MAX_INLINE_BALANCE_CHARS
-      ? withSuffix(
-          formatCurrencyFromUSD(balance, {
-            compact: true,
-            locale,
-            showSymbol: layout !== 'card',
-          })
-        )
-      : remainingFull
+
+  // 精简展示（超长转紧凑记法）
+  const inlineFmt = (value: number) => {
+    const full = withSuffix(
+      formatQuotaWithCurrency(value, {
+        digitsLarge: 2,
+        digitsSmall: 4,
+        abbreviate: true,
+        showSymbol: layout !== 'card',
+      })
+    )
+    if (full.length <= MAX_INLINE_BALANCE_CHARS) {
+      return full
+    }
+    return withSuffix(
+      formatQuotaWithCurrency(value, {
+        compact: true,
+        locale,
+        showSymbol: layout !== 'card',
+      })
+    )
+  }
+  // 精确展示（tooltip 用）
+  const fullFmt = (value: number) =>
+    withSuffix(
+      formatQuotaWithCurrency(value, {
+        digitsLarge: 2,
+        digitsSmall: 4,
+        abbreviate: false,
+        showSymbol: layout !== 'card',
+      })
+    )
+  const signedInline = (value: number) =>
+    `${signPrefix(value)}${inlineFmt(Math.abs(value))}`
+  const signedFull = (value: number) =>
+    `${signPrefix(value)}${fullFmt(Math.abs(value))}`
+  const mask = (s: string) => (sensitiveVisible ? s : SENSITIVE_MASK)
+
+  const usedInline = inlineFmt(recon.local)
+  const usedFull = fullFmt(recon.local)
   const usedLabel = `${t('Used:')} ${usedFull}`
-  const remainingLabel = `${t('Remaining:')} ${remainingFull}`
   const maskedUsedLabel = `${t('Used:')} ${SENSITIVE_MASK}`
-  const maskedRemainingLabel = `${t('Remaining:')} ${SENSITIVE_MASK}`
 
   // Tag row: only show cumulative used quota
   if (isTagRow) {
@@ -365,7 +376,7 @@ function BalanceCell({ channel }: { channel: Channel }) {
               <StatusBadge
                 label={
                   sensitiveVisible
-                    ? `${t('Used:')} ${usedDisplay}`
+                    ? `${t('Used:')} ${usedInline}`
                     : maskedUsedLabel
                 }
                 variant='neutral'
@@ -384,16 +395,13 @@ function BalanceCell({ channel }: { channel: Channel }) {
     )
   }
 
-  // Regular channel row: show used and remaining with click to update
-  const variant = getBalanceVariant(balance)
-
-  const handleClickUpdate = async () => {
-    if (isUpdating) {
-      return
-    }
-
-    setIsUpdating(true)
-    if (channel.type === 57) {
+  // 类型 57(Codex)：保留「账户信息」弹窗
+  if (channel.type === 57) {
+    const handleCodexClick = async () => {
+      if (isUpdating) {
+        return
+      }
+      setIsUpdating(true)
       try {
         const res = await getCodexUsage(channel.id)
         if (!res.success) {
@@ -408,103 +416,168 @@ function BalanceCell({ channel }: { channel: Channel }) {
       } finally {
         setIsUpdating(false)
       }
-      return
     }
+    let codexLabel = SENSITIVE_MASK
+    if (sensitiveVisible) {
+      codexLabel = isUpdating ? t('Updating...') : t('Account Info')
+    }
+    return (
+      <TooltipProvider>
+        <div className='-ml-1.5 flex items-center gap-1'>
+          <StatusBadge
+            label={sensitiveVisible ? usedInline : SENSITIVE_MASK}
+            variant='neutral'
+            size='sm'
+            copyable={false}
+            showDot={false}
+          />
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <StatusBadge
+                  label={codexLabel}
+                  variant='info'
+                  size='sm'
+                  copyable={false}
+                  showDot={false}
+                  className='cursor-pointer'
+                  onClick={handleCodexClick}
+                />
+              }
+            />
+            <TooltipContent>
+              <p>{t('Click to view Codex usage')}</p>
+            </TooltipContent>
+          </Tooltip>
+        </div>
+        <CodexUsageDialog
+          open={codexUsageOpen}
+          onOpenChange={setCodexUsageOpen}
+          channelName={channel.name}
+          channelId={channel.id}
+          channelDisplayName={sensitiveVisible ? undefined : SENSITIVE_MASK}
+          channelDisplayId={sensitiveVisible ? undefined : SENSITIVE_MASK}
+          response={codexUsageResponse}
+          onRefresh={async () => {
+            if (isUpdating) {
+              return
+            }
+            setIsUpdating(true)
+            try {
+              const res = await getCodexUsage(channel.id)
+              if (!res.success) {
+                throw new Error(res.message || t('Failed to fetch usage'))
+              }
+              setCodexUsageResponse(res)
+            } catch (error) {
+              toast.error(
+                error instanceof Error
+                  ? error.message
+                  : t('Failed to fetch usage')
+              )
+            } finally {
+              setIsUpdating(false)
+            }
+          }}
+          isRefreshing={isUpdating}
+        />
+      </TooltipProvider>
+    )
+  }
 
-    await handleUpdateChannelBalance(channel.id, queryClient)
-    setIsUpdating(false)
+  // 普通渠道：已用 / 误差 / 金额
+  const errorVariant =
+    recon.hasUpstream && recon.error > 0 ? 'danger' : 'neutral'
+  const amountVariant = recon.settlement === 'S' ? 'danger' : 'neutral'
+  const errorBadgeVariant = sensitiveVisible ? errorVariant : 'neutral'
+  const amountBadgeVariant = sensitiveVisible ? amountVariant : 'neutral'
+
+  let errorTone = t('break-even')
+  if (recon.error > 0) {
+    errorTone = t('loss')
+  } else if (recon.error < 0) {
+    errorTone = t('profit')
   }
-  let remainingBadgeLabel = sensitiveVisible ? remainingDisplay : SENSITIVE_MASK
-  if (sensitiveVisible && isUpdating) {
-    remainingBadgeLabel = t('Updating...')
-  } else if (sensitiveVisible && channel.type === 57) {
-    remainingBadgeLabel = t('Account Info')
+  let settlementLabel = t('unmarked')
+  if (recon.settlement === 'S') {
+    settlementLabel = t('private (S)')
+  } else if (recon.settlement === 'G') {
+    settlementLabel = t('public (G)')
   }
-  let remainingTooltipLabel = remainingLabel
-  if (!sensitiveVisible) {
-    remainingTooltipLabel = maskedRemainingLabel
-  } else if (channel.type === 57) {
-    remainingTooltipLabel = t('Click to view Codex usage')
-  }
-  let remainingBadgeVariant: StatusBadgeProps['variant'] = variant
-  if (channel.type === 57) {
-    remainingBadgeVariant = 'info'
-  } else if (isUpdating) {
-    remainingBadgeVariant = 'neutral'
-  }
+  const ratioLabel =
+    recon.ratio === null ? t('unrecognized (÷1)') : `÷${recon.ratio}`
+  const ratePart =
+    recon.profitRate === null
+      ? ''
+      : ` (${(recon.profitRate * 100).toFixed(1)}%)`
+
+  const detailRow = (label: string, value: string) => (
+    <div className='flex justify-between gap-4'>
+      <span className='text-muted-foreground'>{label}</span>
+      <span className='font-medium tabular-nums'>{value}</span>
+    </div>
+  )
 
   return (
     <TooltipProvider>
-      <div className='-ml-1.5 flex items-center gap-1'>
-        <Tooltip>
-          <TooltipTrigger
-            render={
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <div className='-ml-1.5 flex flex-wrap items-center gap-1 cursor-help'>
               <StatusBadge
-                label={sensitiveVisible ? usedDisplay : SENSITIVE_MASK}
+                label={mask(usedInline)}
                 variant='neutral'
                 size='sm'
                 copyable={false}
                 showDot={false}
-                className='cursor-help'
               />
-            }
-          />
-          <TooltipContent>
-            <p>{sensitiveVisible ? usedLabel : maskedUsedLabel}</p>
-          </TooltipContent>
-        </Tooltip>
-        <Tooltip>
-          <TooltipTrigger
-            render={
               <StatusBadge
-                label={remainingBadgeLabel}
-                variant={remainingBadgeVariant}
+                label={recon.hasUpstream ? mask(signedInline(recon.error)) : '-'}
+                variant={errorBadgeVariant}
                 size='sm'
                 copyable={false}
                 showDot={false}
-                className='cursor-pointer'
-                onClick={handleClickUpdate}
               />
-            }
-          />
-          <TooltipContent>
-            <p>{remainingTooltipLabel}</p>
-            {channel.type !== 57 && <p>{t('Click to update balance')}</p>}
-          </TooltipContent>
-        </Tooltip>
-      </div>
-
-      <CodexUsageDialog
-        open={codexUsageOpen}
-        onOpenChange={setCodexUsageOpen}
-        channelName={channel.name}
-        channelId={channel.id}
-        channelDisplayName={sensitiveVisible ? undefined : SENSITIVE_MASK}
-        channelDisplayId={sensitiveVisible ? undefined : SENSITIVE_MASK}
-        response={codexUsageResponse}
-        onRefresh={async () => {
-          if (isUpdating) {
-            return
+              <StatusBadge
+                label={mask(inlineFmt(recon.amount))}
+                variant={amountBadgeVariant}
+                size='sm'
+                copyable={false}
+                showDot={false}
+              />
+            </div>
           }
-          setIsUpdating(true)
-          try {
-            const res = await getCodexUsage(channel.id)
-            if (!res.success) {
-              throw new Error(res.message || t('Failed to fetch usage'))
-            }
-            setCodexUsageResponse(res)
-          } catch (error) {
-            toast.error(
-              error instanceof Error
-                ? error.message
-                : t('Failed to fetch usage')
-            )
-          } finally {
-            setIsUpdating(false)
-          }
-        }}
-        isRefreshing={isUpdating}
-      />
+        />
+        <TooltipContent className='max-w-xs'>
+          {sensitiveVisible ? (
+            <div className='space-y-0.5 text-xs'>
+              {detailRow(t('Local used'), usedFull)}
+              {recon.hasUpstream ? (
+                <>
+                  {detailRow(t('Upstream used (raw)'), fullFmt(recon.upstreamRaw))}
+                  {detailRow(
+                    `${t('Upstream ÷ratio')} (${ratioLabel})`,
+                    fullFmt(recon.upstreamAdjusted)
+                  )}
+                  {detailRow(
+                    t('Diff (upstream−local)'),
+                    `${fullFmt(recon.upstreamAdjusted)} − ${fullFmt(recon.local)} = ${signedFull(recon.error)} ${errorTone}`
+                  )}
+                  {detailRow(t('Profit'), `${signedFull(recon.profit)}${ratePart}`)}
+                </>
+              ) : (
+                <p className='text-muted-foreground'>{t('No upstream data yet')}</p>
+              )}
+              {detailRow(
+                `${t('Settlement amount')} (${settlementLabel})`,
+                `${fullFmt(recon.local)} × ${recon.ratio ?? 1} = ${fullFmt(recon.amount)}`
+              )}
+            </div>
+          ) : (
+            <p>{SENSITIVE_MASK}</p>
+          )}
+        </TooltipContent>
+      </Tooltip>
     </TooltipProvider>
   )
 }
@@ -1057,12 +1130,32 @@ export function useChannelsColumns(
         enableSorting: false,
       },
 
-      // Balance column (Used/Remaining)
+      // 已用 / 误差 / 金额（对账列）
       {
         accessorKey: 'balance',
-        header: t('Used / Remaining'),
+        header: () => (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <span className='inline-flex cursor-help items-center gap-1'>
+                    {t('Used / Diff / Amount')}
+                    <Info className='h-3 w-3 opacity-60' />
+                  </span>
+                }
+              />
+              <TooltipContent className='max-w-xs'>
+                <p className='whitespace-pre-line text-xs leading-relaxed'>
+                  {t(
+                    '已用：本站消耗（1倍率）。\n误差：上游已用÷倍率 − 本站已用。>0 亏钱→红，≤0 赚钱→黑。\n金额：本站已用×倍率（折成上游结算额）。对私→红，对公/未标注→黑。\n倍率取渠道名倒数段，命名规范：类型-上游名称-倍率-S/G（S对私 G对公，可省略）。\n悬停单元格可见上游原始已用、利润与利润率。数据来自定时/批量核对。'
+                  )}
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        ),
         cell: ({ row }) => <BalanceCell channel={row.original} />,
-        size: 180,
+        size: 200,
       },
 
       // Response Time column

@@ -50,6 +50,8 @@ var channelPermissionRoutes = []permissionRoute{
 	{method: http.MethodGet, path: "/test/:id", permission: authz.ChannelOperate, handler: controller.TestChannel},
 	{method: http.MethodGet, path: "/update_balance", permission: authz.ChannelOperate, handler: controller.UpdateAllChannelsBalance},
 	{method: http.MethodGet, path: "/update_balance/:id", permission: authz.ChannelOperate, handler: controller.UpdateChannelBalance},
+	{method: http.MethodGet, path: "/update_upstream_used", permission: authz.ChannelOperate, handler: controller.UpdateAllChannelsUpstreamUsed},
+	{method: http.MethodGet, path: "/update_upstream_used/:id", permission: authz.ChannelOperate, handler: controller.UpdateChannelUpstreamUsed},
 	{method: http.MethodPost, path: "/priority_monitor", permission: authz.ChannelOperate, handler: controller.RunChannelPriorityMonitorAPI},
 	{method: http.MethodPost, path: "/", permission: authz.ChannelSensitiveWrite, handler: controller.AddChannel},
 	{method: http.MethodPut, path: "/", permission: authz.ChannelWrite, handler: controller.UpdateChannel},

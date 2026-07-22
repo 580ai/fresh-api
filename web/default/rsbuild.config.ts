@@ -67,6 +67,9 @@ export default defineConfig(({ envMode }) => {
     },
     server: {
       host: '0.0.0.0',
+      // 独立的前端 dev 端口，避免和后端 3000（服务打包好的 dist）冲突。
+      // 通过下面的 proxy 把 /api、/mj、/pg 转发到后端，因此本端口只跑带 HMR 的前端。
+      port: Number(process.env.PORT) || 5173,
       strictPort: false,
       proxy: devProxy,
     },

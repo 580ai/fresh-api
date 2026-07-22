@@ -55,6 +55,10 @@ type Channel struct {
 
 	OtherSettings string `json:"settings" gorm:"column:settings"` // 其他设置，存储azure版本等不需要检索的信息，详见dto.ChannelOtherSettings
 
+	// UpstreamUsedQuota 上游已用额度（原始值，来自独立表 channel_upstream_usages，不落 channel 表）
+	// 仅用于列表接口返回给前端做核对展示，gorm:"-" 保证不参与建表/读写。
+	UpstreamUsedQuota int64 `json:"upstream_used_quota" gorm:"-"`
+
 	// cache info
 	Keys []string `json:"-" gorm:"-"`
 }
