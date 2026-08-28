@@ -122,6 +122,22 @@ type OpenRouterCreditResponse struct {
 	} `json:"data"`
 }
 
+// NewAPITokenUsageResponse 上游 newapi 的 GET /api/usage/token 返回结构
+// total_used 直接就是本令牌已用额度（quota 量纲），与上游 DisplayTokenStat 开关无关
+type NewAPITokenUsageResponse struct {
+	Code    bool   `json:"code"`
+	Message string `json:"message"`
+	Data    struct {
+		Object         string `json:"object"`
+		Name           string `json:"name"`
+		TotalGranted   int64  `json:"total_granted"`
+		TotalUsed      int64  `json:"total_used"`
+		TotalAvailable int64  `json:"total_available"`
+		UnlimitedQuota bool   `json:"unlimited_quota"`
+		ExpiresAt      int64  `json:"expires_at"`
+	} `json:"data"`
+}
+
 // GetAuthHeader get auth header
 func GetAuthHeader(token string) http.Header {
 	h := http.Header{}
@@ -510,12 +526,13 @@ func AutomaticallyUpdateChannels(frequency int) {
 // 渠道名规范：类型-上游名称-倍率[-S/G]（从末尾解析，上游名称本身可含 '-'）
 //   末段若为 S/G  = 结算类型标志（对私/对公，仅前端染色用），倍率=倒数第二段
 //   末段若不是 S/G = 倍率=末段
-// 调用上游：GET {base_url}/v1/dashboard/billing/usage?start_date=...&end_date=...
+// 调用上游：GET {base_url}/api/usage/token
 //   Header Authorization: Bearer {渠道key}
-//   返回 {"total_usage": 美分}，换算成 quota 落库：total_usage/100 * QuotaPerUnit
+//   返回 {"data":{"total_used": quota}}，直接就是「本令牌」已用额度（quota 量纲），
+//   与上游 DisplayTokenStat 开关无关，无需换算。这样每月换新令牌后已用从 0 重新累计。
 // ============================================================================
 
-// updateChannelUpstreamUsed 拉取单个渠道的上游已用额度并落库，返回换算后的 quota
+// updateChannelUpstreamUsed 拉取单个渠道的上游「本令牌」已用额度并落库，返回 quota
 func updateChannelUpstreamUsed(channel *model.Channel) (int64, error) {
 	if channel.ChannelInfo.IsMultiKey {
 		return 0, errors.New("多密钥渠道不支持上游已用核对")
@@ -524,20 +541,23 @@ func updateChannelUpstreamUsed(channel *model.Channel) (int64, error) {
 	if baseURL == "" {
 		return 0, errors.New("渠道未配置 base_url，无法查询上游")
 	}
-	// 上游 GetUsage 不按日期过滤，返回的是总已用，故不带 start_date/end_date
-	url := fmt.Sprintf("%s/v1/dashboard/billing/usage", strings.TrimRight(baseURL, "/"))
+	// 上游 newapi 的按令牌用量接口，返回的是当前这把 key 自己的已用额度
+	url := fmt.Sprintf("%s/api/usage/token/", strings.TrimRight(baseURL, "/"))
 
 	// 复用现有 GetAuthHeader（Authorization: Bearer {key}）
 	body, err := GetResponseBody("GET", url, channel, GetAuthHeader(channel.Key))
 	if err != nil {
 		return 0, err
 	}
-	usage := OpenAIUsageResponse{}
-	if err := json.Unmarshal(body, &usage); err != nil {
+	resp := NewAPITokenUsageResponse{}
+	if err := json.Unmarshal(body, &resp); err != nil {
 		return 0, err
 	}
-	// total_usage 单位为 0.01 美元（美分）；换算回 quota 与本站已用同量纲
-	upstreamUsed := int64(usage.TotalUsage / 100 * common.QuotaPerUnit)
+	if !resp.Code {
+		return 0, fmt.Errorf("上游返回失败: %s", resp.Message)
+	}
+	// total_used 本身就是 quota 量纲，与本站已用同量纲，无需 /100*QuotaPerUnit
+	upstreamUsed := resp.Data.TotalUsed
 	if err := model.SetChannelUpstreamUsage(channel.Id, upstreamUsed); err != nil {
 		return 0, err
 	}
