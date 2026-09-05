@@ -13,7 +13,6 @@ import (
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	perfmetrics "github.com/QuantumNous/new-api/pkg/perf_metrics"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
-	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/QuantumNous/new-api/types"
 
@@ -152,32 +151,13 @@ func noteQuotaClamp(relayInfo *relaycommon.RelayInfo, clamp *common.QuotaClamp) 
 	}
 }
 
-func shouldWaiveEmptyGenerationOutput(relayInfo *relaycommon.RelayInfo, summary textQuotaSummary) bool {
-	if relayInfo == nil || summary.CompletionTokens != 0 {
-		return false
-	}
-
-	switch relayInfo.RelayFormat {
-	case types.RelayFormatClaude, types.RelayFormatOpenAIResponses, types.RelayFormatOpenAIResponsesCompaction:
-		return true
-	case types.RelayFormatGemini:
-		_, isGeneration := relayInfo.Request.(*dto.GeminiChatRequest)
-		return isGeneration
-	}
-
-	switch relayInfo.RelayMode {
-	case relayconstant.RelayModeChatCompletions,
-		relayconstant.RelayModeCompletions,
-		relayconstant.RelayModeResponses,
-		relayconstant.RelayModeResponsesCompact:
-		return true
-	default:
-		return false
-	}
+// hasBillableUsage 对齐官方上游:有 token 或有 tool-call 附加费即可计费
+func (s textQuotaSummary) hasBillableUsage() bool {
+	return s.TotalTokens > 0 || !s.ToolCallSurchargeQuota.IsZero()
 }
 
 func composeTieredTextQuota(relayInfo *relaycommon.RelayInfo, summary textQuotaSummary, tieredQuota int, tieredResult *billingexpr.TieredResult) int {
-	if summary.TotalTokens == 0 || shouldWaiveEmptyGenerationOutput(relayInfo, summary) {
+	if !summary.hasBillableUsage() {
 		return 0
 	}
 	if summary.ToolCallSurchargeQuota.IsZero() {
@@ -365,10 +345,7 @@ func calculateTextQuotaSummary(ctx *gin.Context, relayInfo *relaycommon.RelayInf
 	}
 
 	// 如果总 tokens 为 0，不扣费
-	if summary.TotalTokens == 0 {
-		summary.Quota = 0
-	} else if shouldWaiveEmptyGenerationOutput(relayInfo, summary) {
-		// 如果输出 tokens 为 0（输出为空或异常），不扣费
+	if !summary.hasBillableUsage() {
 		summary.Quota = 0
 	} else if !ratio.IsZero() && summary.Quota == 0 {
 		summary.Quota = 1
@@ -432,12 +409,9 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 		extraContent = append(extraContent, fmt.Sprintf("Image Generation Call 花费 %s", decimal.NewFromFloat(summary.ImageGenerationCallPrice).Mul(decimal.NewFromFloat(summary.GroupRatio)).Mul(decimal.NewFromFloat(common.QuotaPerUnit)).String()))
 	}
 
-	if summary.TotalTokens == 0 {
+	if !summary.hasBillableUsage() {
 		extraContent = append(extraContent, "上游没有返回计费信息，无法扣费（可能是上游超时）")
 		logger.LogError(ctx, fmt.Sprintf("total tokens is 0, cannot consume quota, userId %d, channelId %d, tokenId %d, model %s， pre-consumed quota %d", relayInfo.UserId, relayInfo.ChannelId, relayInfo.TokenId, summary.ModelName, relayInfo.FinalPreConsumedQuota))
-	} else if shouldWaiveEmptyGenerationOutput(relayInfo, summary) {
-		extraContent = append(extraContent, "输出为空或异常，不扣费")
-		logger.LogError(ctx, fmt.Sprintf("completion tokens is 0 (empty output), cannot consume quota, userId %d, channelId %d, tokenId %d, model %s, prompt tokens %d, pre-consumed quota %d", relayInfo.UserId, relayInfo.ChannelId, relayInfo.TokenId, summary.ModelName, summary.PromptTokens, relayInfo.FinalPreConsumedQuota))
 	} else {
 		model.UpdateUserUsedQuotaAndRequestCount(relayInfo.UserId, summary.Quota)
 		model.UpdateChannelUsedQuota(relayInfo.ChannelId, summary.Quota)
