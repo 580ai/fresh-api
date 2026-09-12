@@ -40,6 +40,7 @@ import {
   showInfo,
   toBoolean,
 } from '../../../helpers';
+import { convertUSDToCurrency } from '../../../helpers/render';
 import {
   CHANNEL_OPTIONS,
   MODEL_FETCHABLE_CHANNEL_TYPES,
@@ -59,7 +60,7 @@ import { FaRandom } from 'react-icons/fa';
 //   2) 此时末段∈{S,G}     → 结算标志；否则无结算标志
 //   3) 此时末段若为数字    → 倍率；否则倍率为 null
 // 单位必须带 U 前缀，与「纯数字倍率」彻底区分，现有渠道名无需改。
-// 本站恒为 50w（QuotaPerUnit=500000），单位折算系数 f = 单位/50
+// 单位=上游自己的 quota 单价（万）；换算时各站各用各的单价，见 computeRecon
 // ============================================================================
 const DEFAULT_UPSTREAM_UNIT_WAN = 50;
 const parseChannelReconMeta = (name) => {
@@ -90,24 +91,29 @@ const parseChannelReconMeta = (name) => {
   return result;
 };
 
-// 计算对账各项（单位均为额度 quota）：误差=U×f/r−L，利润=L−U×f/r，金额=L×r
+// 计算对账各项（本站 quota 量纲）：上游额度按「本站单价/上游单价」换算后再除倍率
+// 上游「额度→美元」用上游自己的单价，不能拿上游额度直接套本站的 $ 展示
 const computeRecon = (record) => {
   const local = record.used_quota || 0;
   const upstreamRaw = record.upstream_used_quota || 0;
   const { ratio, settlement, unit } = parseChannelReconMeta(record.name);
   const r = ratio || 1;
-  const unitFactor = unit / DEFAULT_UPSTREAM_UNIT_WAN;
-  const scaledUpstream = upstreamRaw * unitFactor;
-  const upstreamAdjusted = scaledUpstream / r;
+  const u = unit > 0 ? unit : DEFAULT_UPSTREAM_UNIT_WAN;
+  // 上游额度 → 本站 quota：× 本站单价 / 上游单价 = × 50 / unit
+  const upstreamLocal = (upstreamRaw * DEFAULT_UPSTREAM_UNIT_WAN) / u;
+  // 上游额度 → 美元（用上游自己的单价）
+  const upstreamUsd = upstreamRaw / (u * 10000);
+  const upstreamAdjusted = upstreamLocal / r;
   const error = upstreamAdjusted - local;
   const profit = local - upstreamAdjusted;
   const amount = local * r;
   return {
     local,
     upstreamRaw,
+    upstreamUsd,
+    upstreamLocal,
     ratio,
     unit,
-    unitFactor,
     upstreamAdjusted,
     error,
     profit,
@@ -721,14 +727,8 @@ export const getChannelsColumns = ({
             {recon.hasUpstream ? (
               <>
                 <div>
-                  {t('上游已用(原始)')}：{renderQuota(recon.upstreamRaw)}
+                  {t('上游已用(原始)')}：{convertUSDToCurrency(recon.upstreamUsd)}
                 </div>
-                {recon.unitFactor !== 1 && (
-                  <div>
-                    {t('单位折算')}({recon.unit}w ×{recon.unitFactor})：
-                    {renderQuota(recon.upstreamRaw * recon.unitFactor)}
-                  </div>
-                )}
                 <div>
                   {t('上游折算')}({ratioText})：
                   {renderQuota(recon.upstreamAdjusted)}

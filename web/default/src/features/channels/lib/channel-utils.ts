@@ -314,22 +314,30 @@ export function parseUpstreamUnit(name: string): number {
 }
 
 /**
- * 渠道上游对账各项计算结果（单位均为额度 quota，展示时由 formatQuotaWithCurrency 转成金额）。
- *   L = 本站已用；U = 上游已用原始；r = 倍率（无则按 1）；f = 单位折算系数
- *   上下游 quota 单价不一致时需按系数折算：f = 上游单位(万)×10000 / 本地QuotaPerUnit
- *   本站恒为 50w（QuotaPerUnit=500000），故 f = 单位 / 50（单位 50→1，100→2）
- *   折算后上游 = U × f；误差 = U×f/r − L（>0 亏，<0 赚）；利润 = L − U×f/r = −误差
- *   金额 = L × r（本站消耗折成上游结算额，与单位无关）
+ * 渠道上游对账各项计算结果（单位：本站额度 quota，展示时由 formatQuotaWithCurrency 转美元）。
+ *
+ * 两个站点的 quota 单价各自独立，不能拿一方的额度直接套另一方的单价：
+ *   上游「额度 → 美元」用上游自己的单价（单位万 × 10000）
+ *   本站「额度 → 美元」用本站自己的单价（恒为 50w = 500000）
+ * 换算到可比较的量纲（本站 quota）：
+ *   上游折算额度 = U_raw / (上游单价×10000) × 本站单价
+ *                = U_raw × 本站单价 / 上游单价
+ *   本站恒 50w，上游单位记 unit（万）：upstreamLocal = U_raw × 50 / unit
+ *     （unit=50 → ×1；unit=100 → ×0.5，即上游额度数字更大、需缩小才对得上）
+ *   L = 本站已用；r = 倍率（无则按 1）
+ *   上游折算 = upstreamLocal / r；误差 = 上游折算 − L（>0 亏，<0 赚）
+ *   利润 = L − 上游折算；金额 = L × r（本站消耗折成上游结算额）
  */
 export interface UpstreamRecon {
-  local: number // L
-  upstreamRaw: number // U
+  local: number // L：本站已用（本站 quota）
+  upstreamRaw: number // U：上游已用（上游原始额度，未换算）
+  upstreamUsd: number // 上游已用（美元）= U_raw / (unit×10000)，供「原始」行直接展示
   ratio: number | null // r（未解析出为 null）
   unit: number // 上游 quota 单价（万），默认 50
-  unitFactor: number // f = unit / 50
-  upstreamAdjusted: number // U×f / r（无倍率则 = U×f）
-  error: number // U×f/r − L
-  profit: number // L − U×f/r
+  upstreamLocal: number // 上游已用换算到本站 quota 量纲 = U_raw × 50 / unit
+  upstreamAdjusted: number // 上游折算（本站 quota）= upstreamLocal / r
+  error: number // 上游折算 − L
+  profit: number // L − 上游折算
   profitRate: number | null // profit / L（L<=0 时为 null）
   amount: number // L × r（无倍率则 = L）
   settlement: SettlementType | null
@@ -341,19 +349,22 @@ export function computeUpstreamRecon(channel: Channel): UpstreamRecon {
   const upstreamRaw = channel.upstream_used_quota || 0
   const { ratio, settlement, unit } = parseChannelNameTail(channel.name)
   const effectiveRatio = ratio ?? 1
-  // 本站恒为 50w，上游单位折算系数：单位(万)×10000 / 500000 = 单位 / 50
-  const unitFactor = unit / DEFAULT_UPSTREAM_UNIT_WAN
-  const scaledUpstream = upstreamRaw * unitFactor
-  const upstreamAdjusted = scaledUpstream / effectiveRatio
+  // 上游额度换算到本站 quota 量纲：× 本站单价 / 上游单价 = × 50 / unit
+  const upstreamLocal =
+    (upstreamRaw * DEFAULT_UPSTREAM_UNIT_WAN) / (unit > 0 ? unit : DEFAULT_UPSTREAM_UNIT_WAN)
+  // 上游额度换算成美元（用上游自己的单价），供「上游已用(原始)」行直接以 $ 展示
+  const upstreamUsd = upstreamRaw / (unit * 10000)
+  const upstreamAdjusted = upstreamLocal / effectiveRatio
   const error = upstreamAdjusted - local
   const profit = local - upstreamAdjusted
   const amount = local * effectiveRatio
   return {
     local,
     upstreamRaw,
+    upstreamUsd,
     ratio,
     unit,
-    unitFactor,
+    upstreamLocal,
     upstreamAdjusted,
     error,
     profit,

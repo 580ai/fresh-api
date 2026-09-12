@@ -48,6 +48,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import {
+  formatCurrencyFromUSD,
   formatQuotaWithCurrency,
   getCurrencyLabel,
 } from '@/lib/currency'
@@ -355,6 +356,16 @@ function BalanceCell({ channel }: { channel: Channel }) {
         showSymbol: layout !== 'card',
       })
     )
+  // 从「美元」直接展示（上游原始额度已按上游单价换算成美元时用）
+  const usdFmt = (valueUSD: number) =>
+    withSuffix(
+      formatCurrencyFromUSD(valueUSD, {
+        digitsLarge: 2,
+        digitsSmall: 4,
+        abbreviate: false,
+        showSymbol: layout !== 'card',
+      })
+    )
   const signedInline = (value: number) =>
     `${signPrefix(value)}${inlineFmt(Math.abs(value))}`
   const signedFull = (value: number) =>
@@ -554,12 +565,10 @@ function BalanceCell({ channel }: { channel: Channel }) {
               {detailRow(t('Local used'), usedFull)}
               {recon.hasUpstream ? (
                 <>
-                  {detailRow(t('Upstream used (raw)'), fullFmt(recon.upstreamRaw))}
-                  {recon.unitFactor !== 1 &&
-                    detailRow(
-                      `${t('Unit conversion')} (${recon.unit}w ×${recon.unitFactor})`,
-                      fullFmt(recon.upstreamRaw * recon.unitFactor)
-                    )}
+                  {detailRow(
+                    t('Upstream used (raw)'),
+                    usdFmt(recon.upstreamUsd)
+                  )}
                   {detailRow(
                     `${t('Upstream ÷ratio')} (${ratioLabel})`,
                     fullFmt(recon.upstreamAdjusted)
