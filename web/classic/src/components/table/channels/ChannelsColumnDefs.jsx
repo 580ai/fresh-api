@@ -54,33 +54,51 @@ import { FaRandom } from 'react-icons/fa';
 
 // ============================================================================
 // 上游已用对账辅助
-// 命名规范：类型-上游名称-倍率[-S/G]（末尾解析，上游名称本身可含 '-'）
-//   末段∈{S,G} → 结算标志；倍率=倒数第2段。否则倍率=末段、无结算标志。
+// 命名规范：类型-上游名称-倍率[-S/G][-单位]（末尾解析，上游名称本身可含 '-'）
+//   1) 末段若匹配 U<数字> → 上游 quota 单价（万）；否则单位=默认 50
+//   2) 此时末段∈{S,G}     → 结算标志；否则无结算标志
+//   3) 此时末段若为数字    → 倍率；否则倍率为 null
+// 单位必须带 U 前缀，与「纯数字倍率」彻底区分，现有渠道名无需改。
+// 本站恒为 50w（QuotaPerUnit=500000），单位折算系数 f = 单位/50
 // ============================================================================
+const DEFAULT_UPSTREAM_UNIT_WAN = 50;
 const parseChannelReconMeta = (name) => {
-  const result = { ratio: null, settlement: null };
+  const result = { ratio: null, settlement: null, unit: DEFAULT_UPSTREAM_UNIT_WAN };
   if (!name) return result;
   const parts = String(name).split('-');
-  let ratioIdx = parts.length - 1;
-  const last = (parts[parts.length - 1] || '').trim().toUpperCase();
+  let idx = parts.length - 1;
+  // 1) 末尾单位 U<数字>
+  const unitMatch = /^[Uu](\d+(?:\.\d+)?)$/.exec((parts[idx] || '').trim());
+  if (unitMatch) {
+    const unit = Number(unitMatch[1]);
+    if (Number.isFinite(unit) && unit > 0) {
+      result.unit = unit;
+      idx -= 1;
+    }
+  }
+  // 2) 结算标志
+  const last = (parts[idx] || '').trim().toUpperCase();
   if (last === 'S' || last === 'G') {
     result.settlement = last;
-    ratioIdx = parts.length - 2;
+    idx -= 1;
   }
-  if (ratioIdx >= 0) {
-    const r = Number((parts[ratioIdx] || '').trim());
+  // 3) 倍率
+  if (idx >= 0) {
+    const r = Number((parts[idx] || '').trim());
     if (Number.isFinite(r) && r > 0) result.ratio = r;
   }
   return result;
 };
 
-// 计算对账各项（单位均为额度 quota）：误差=U/r−L，利润=L−U/r，金额=L×r
+// 计算对账各项（单位均为额度 quota）：误差=U×f/r−L，利润=L−U×f/r，金额=L×r
 const computeRecon = (record) => {
   const local = record.used_quota || 0;
   const upstreamRaw = record.upstream_used_quota || 0;
-  const { ratio, settlement } = parseChannelReconMeta(record.name);
+  const { ratio, settlement, unit } = parseChannelReconMeta(record.name);
   const r = ratio || 1;
-  const upstreamAdjusted = upstreamRaw / r;
+  const unitFactor = unit / DEFAULT_UPSTREAM_UNIT_WAN;
+  const scaledUpstream = upstreamRaw * unitFactor;
+  const upstreamAdjusted = scaledUpstream / r;
   const error = upstreamAdjusted - local;
   const profit = local - upstreamAdjusted;
   const amount = local * r;
@@ -88,6 +106,8 @@ const computeRecon = (record) => {
     local,
     upstreamRaw,
     ratio,
+    unit,
+    unitFactor,
     upstreamAdjusted,
     error,
     profit,
@@ -619,7 +639,7 @@ export const getChannelsColumns = ({
               }}
             >
               {t(
-                '已用：本站消耗（1倍率）。\n误差：上游已用÷倍率 − 本站已用。>0 亏钱→红，≤0 赚钱→黑。\n金额：本站已用×倍率（折成上游结算额）。对私→红，对公/未标注→黑。\n命名规范：类型-上游名称-倍率-S/G（S对私 G对公，可省略）。\n悬停单元格可见上游原始已用、利润与利润率。数据来自定时/批量核对。',
+                '已用：本站消耗（1倍率）。\n误差：上游已用×单位折算÷倍率 − 本站已用。>0 亏钱→红，≤0 赚钱→黑。\n金额：本站已用×倍率（折成上游结算额）。对私→红，对公/未标注→黑。\n命名规范：类型-上游名称-倍率[-S/G][-U单位]。S对私 G对公（可省略）；单位写成 U<数值>（上游 quota 单价，万），省略默认 U50（本站恒为 50w，即不折算），如 -U100 表示 100w。\n悬停单元格可见上游原始已用、单位折算、利润与利润率。数据来自定时/批量核对。',
               )}
             </div>
           }
@@ -703,6 +723,12 @@ export const getChannelsColumns = ({
                 <div>
                   {t('上游已用(原始)')}：{renderQuota(recon.upstreamRaw)}
                 </div>
+                {recon.unitFactor !== 1 && (
+                  <div>
+                    {t('单位折算')}({recon.unit}w ×{recon.unitFactor})：
+                    {renderQuota(recon.upstreamRaw * recon.unitFactor)}
+                  </div>
+                )}
                 <div>
                   {t('上游折算')}({ratioText})：
                   {renderQuota(recon.upstreamAdjusted)}

@@ -555,12 +555,17 @@ function BalanceCell({ channel }: { channel: Channel }) {
               {recon.hasUpstream ? (
                 <>
                   {detailRow(t('Upstream used (raw)'), fullFmt(recon.upstreamRaw))}
+                  {recon.unitFactor !== 1 &&
+                    detailRow(
+                      `${t('Unit conversion')} (${recon.unit}w ×${recon.unitFactor})`,
+                      fullFmt(recon.upstreamRaw * recon.unitFactor)
+                    )}
                   {detailRow(
                     `${t('Upstream ÷ratio')} (${ratioLabel})`,
                     fullFmt(recon.upstreamAdjusted)
                   )}
                   {detailRow(
-                    t('Diff (upstream−local)'),
+                    `${t('Diff (upstream−local)')}`,
                     `${fullFmt(recon.upstreamAdjusted)} − ${fullFmt(recon.local)} = ${signedFull(recon.error)} ${errorTone}`
                   )}
                   {detailRow(t('Profit'), `${signedFull(recon.profit)}${ratePart}`)}
@@ -1147,7 +1152,7 @@ export function useChannelsColumns(
               <TooltipContent className='max-w-xs'>
                 <p className='whitespace-pre-line text-xs leading-relaxed'>
                   {t(
-                    '已用：本站消耗（1倍率）。\n误差：上游已用÷倍率 − 本站已用。>0 亏钱→红，≤0 赚钱→黑。\n金额：本站已用×倍率（折成上游结算额）。对私→红，对公/未标注→黑。\n倍率取渠道名倒数段，命名规范：类型-上游名称-倍率-S/G（S对私 G对公，可省略）。\n悬停单元格可见上游原始已用、利润与利润率。数据来自定时/批量核对。'
+                    '已用：本站消耗（1倍率）。\n误差：上游已用×单位折算÷倍率 − 本站已用。>0 亏钱→红，≤0 赚钱→黑。\n金额：本站已用×倍率（折成上游结算额）。对私→红，对公/未标注→黑。\n倍率取渠道名倒数段，命名规范：类型-上游名称-倍率[-S/G][-U单位]。S对私 G对公（可省略）；单位写成 U<数值>（上游 quota 单价，万），省略默认 U50（本站恒为 50w，即不折算），如 -U100 表示 100w。\n悬停单元格可见上游原始已用、单位折算、利润与利润率。数据来自定时/批量核对。'
                   )}
                 </p>
               </TooltipContent>

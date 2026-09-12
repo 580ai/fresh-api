@@ -235,28 +235,56 @@ export function parseModelsList(models: string): string[] {
 export type SettlementType = 'S' | 'G'
 
 /**
+ * 默认上游 quota 单价（万）。本站恒为 50w（QuotaPerUnit=500000）。
+ * 渠道名末尾不带单位后缀时，视为上游也是 50w，即不做缩放。
+ */
+export const DEFAULT_UPSTREAM_UNIT_WAN = 50
+
+/**
  * 拆解渠道名末尾各段。
- * 命名规范：类型-上游名称-倍率[-S/G]（末尾解析，上游名称本身可含 '-'）
- *   末段若 ∈ {S,G} → 结算标志；此时倍率=倒数第2段
- *   否则           → 倍率=末段、无结算标志
+ * 命名规范：类型-上游名称-倍率[-S/G][-U单位]（末尾解析，上游名称本身可含 '-'）
+ *   1) 末段若匹配 U<数字> → 上游 quota 单价（万）；否则单位=默认 50
+ *   2) 此时末段∈{S,G}     → 结算标志；否则无结算标志
+ *   3) 此时末段若为数字    → 倍率；否则倍率为 null
+ * 单位必须带 U 前缀，与「纯数字倍率」彻底区分，现有渠道名无需改。
+ * 例：官转-某某API-0.8-S-U100 → ratio=0.8 settlement=S unit=100
+ *     官转-某某API-0.8-U100   → ratio=0.8 settlement=null unit=100
+ *     官转-某某API-0.8-S      → ratio=0.8 settlement=S unit=50
+ *     官转-某某API-0.8        → ratio=0.8 settlement=null unit=50
  */
 function parseChannelNameTail(name: string): {
   ratio: number | null
   settlement: SettlementType | null
+  unit: number
 } {
-  const result = { ratio: null as number | null, settlement: null as SettlementType | null }
+  const result = {
+    ratio: null as number | null,
+    settlement: null as SettlementType | null,
+    unit: DEFAULT_UPSTREAM_UNIT_WAN,
+  }
   if (!name) {
     return result
   }
   const parts = name.split('-')
-  let ratioIdx = parts.length - 1
-  const lastSeg = (parts.at(-1) ?? '').trim().toUpperCase()
+  let idx = parts.length - 1
+  // 1) 末尾单位 U<数字>
+  const unitMatch = /^[Uu](\d+(?:\.\d+)?)$/.exec((parts[idx] ?? '').trim())
+  if (unitMatch) {
+    const unit = Number(unitMatch[1])
+    if (Number.isFinite(unit) && unit > 0) {
+      result.unit = unit
+      idx -= 1
+    }
+  }
+  // 2) 结算标志
+  const lastSeg = (parts[idx] ?? '').trim().toUpperCase()
   if (lastSeg === 'S' || lastSeg === 'G') {
     result.settlement = lastSeg
-    ratioIdx = parts.length - 2
+    idx -= 1
   }
-  if (ratioIdx >= 0) {
-    const ratio = Number((parts[ratioIdx] ?? '').trim())
+  // 3) 倍率
+  if (idx >= 0) {
+    const ratio = Number((parts[idx] ?? '').trim())
     if (Number.isFinite(ratio) && ratio > 0) {
       result.ratio = ratio
     }
@@ -279,18 +307,29 @@ export function parseSettlementType(name: string): SettlementType | null {
 }
 
 /**
+ * 从渠道名解析上游 quota 单价（万），无后缀时返回默认值 50。
+ */
+export function parseUpstreamUnit(name: string): number {
+  return parseChannelNameTail(name).unit
+}
+
+/**
  * 渠道上游对账各项计算结果（单位均为额度 quota，展示时由 formatQuotaWithCurrency 转成金额）。
- *   L = 本站已用；U = 上游已用原始；r = 倍率（无则按 1）
- *   误差 = U/r − L（>0 亏，<0 赚）；利润 = L − U/r = −误差
- *   金额 = L × r（本站消耗折成上游结算额）
+ *   L = 本站已用；U = 上游已用原始；r = 倍率（无则按 1）；f = 单位折算系数
+ *   上下游 quota 单价不一致时需按系数折算：f = 上游单位(万)×10000 / 本地QuotaPerUnit
+ *   本站恒为 50w（QuotaPerUnit=500000），故 f = 单位 / 50（单位 50→1，100→2）
+ *   折算后上游 = U × f；误差 = U×f/r − L（>0 亏，<0 赚）；利润 = L − U×f/r = −误差
+ *   金额 = L × r（本站消耗折成上游结算额，与单位无关）
  */
 export interface UpstreamRecon {
   local: number // L
   upstreamRaw: number // U
   ratio: number | null // r（未解析出为 null）
-  upstreamAdjusted: number // U/r（无倍率则 = U）
-  error: number // U/r − L
-  profit: number // L − U/r
+  unit: number // 上游 quota 单价（万），默认 50
+  unitFactor: number // f = unit / 50
+  upstreamAdjusted: number // U×f / r（无倍率则 = U×f）
+  error: number // U×f/r − L
+  profit: number // L − U×f/r
   profitRate: number | null // profit / L（L<=0 时为 null）
   amount: number // L × r（无倍率则 = L）
   settlement: SettlementType | null
@@ -300,9 +339,12 @@ export interface UpstreamRecon {
 export function computeUpstreamRecon(channel: Channel): UpstreamRecon {
   const local = channel.used_quota || 0
   const upstreamRaw = channel.upstream_used_quota || 0
-  const { ratio, settlement } = parseChannelNameTail(channel.name)
+  const { ratio, settlement, unit } = parseChannelNameTail(channel.name)
   const effectiveRatio = ratio ?? 1
-  const upstreamAdjusted = upstreamRaw / effectiveRatio
+  // 本站恒为 50w，上游单位折算系数：单位(万)×10000 / 500000 = 单位 / 50
+  const unitFactor = unit / DEFAULT_UPSTREAM_UNIT_WAN
+  const scaledUpstream = upstreamRaw * unitFactor
+  const upstreamAdjusted = scaledUpstream / effectiveRatio
   const error = upstreamAdjusted - local
   const profit = local - upstreamAdjusted
   const amount = local * effectiveRatio
@@ -310,6 +352,8 @@ export function computeUpstreamRecon(channel: Channel): UpstreamRecon {
     local,
     upstreamRaw,
     ratio,
+    unit,
+    unitFactor,
     upstreamAdjusted,
     error,
     profit,
