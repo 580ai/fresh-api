@@ -55,38 +55,44 @@ import { FaRandom } from 'react-icons/fa';
 
 // ============================================================================
 // 上游已用对账辅助
-// 命名规范：类型-上游名称-倍率[-S/G][-单位]（末尾解析，上游名称本身可含 '-'）
-//   1) 末段若匹配 U<数字> → 上游 quota 单价（万）；否则单位=默认 50
-//   2) 此时末段∈{S,G}     → 结算标志；否则无结算标志
-//   3) 此时末段若为数字    → 倍率；否则倍率为 null
-// 单位必须带 U 前缀，与「纯数字倍率」彻底区分，现有渠道名无需改。
+// 命名规范（固定位置，只读前 5 段，第 6 段起一律忽略）：
+//   类型-上游名称-倍率[-S/G]-[单位] 后接任意备注（如日期 -s9/21）
+//   1) 类型      = 第 1 段（不参与对账）
+//   2) 上游名称  = 第 2 段（不参与对账，本身不可含 '-'）
+//   3) 倍率      = 第 3 段，须为 >0 的数字，否则倍率=null（不折算）
+//   4) S/G       = 第 4 段，S=对私 / G=对公；空段或其它内容 → 未标注
+//   5) 单位      = 第 5 段，须写成 U<数字>（上游 quota 单价，万）；
+//                  空段或其它内容 → 默认 U50（本站单价，不缩放）
+//   6) 第 6 段起 = 备注，忽略（可放日期等任何内容）
+// 位置固定：省略某段时用空段占位（如 类型-名字-2.5--U100-9/21），后面的段不前移。
 // 单位=上游自己的 quota 单价（万）；换算时各站各用各的单价，见 computeRecon
 // ============================================================================
 const DEFAULT_UPSTREAM_UNIT_WAN = 50;
+/** S/G 所在段（第 4 段，索引 3） */
+const SETTLEMENT_INDEX = 3;
+/** 本单位所在段（第 5 段，索引 4） */
+const UNIT_INDEX = 4;
 const parseChannelReconMeta = (name) => {
-  const result = { ratio: null, settlement: null, unit: DEFAULT_UPSTREAM_UNIT_WAN };
+  const result = {
+    ratio: null,
+    settlement: null,
+    unit: DEFAULT_UPSTREAM_UNIT_WAN,
+  };
   if (!name) return result;
   const parts = String(name).split('-');
-  let idx = parts.length - 1;
-  // 1) 末尾单位 U<数字>
-  const unitMatch = /^[Uu](\d+(?:\.\d+)?)$/.exec((parts[idx] || '').trim());
+  // 第 3 段：倍率
+  const ratio = Number((parts[2] || '').trim());
+  if (Number.isFinite(ratio) && ratio > 0) result.ratio = ratio;
+  // 第 4 段：结算标志（空段/其它内容 → 未标注）
+  const settleSeg = (parts[SETTLEMENT_INDEX] || '').trim().toUpperCase();
+  if (settleSeg === 'S' || settleSeg === 'G') result.settlement = settleSeg;
+  // 第 5 段：单位 U<数字>（空段/其它内容 → 默认 U50）
+  const unitMatch = /^[Uu](\d+(?:\.\d+)?)$/.exec(
+    (parts[UNIT_INDEX] || '').trim()
+  );
   if (unitMatch) {
     const unit = Number(unitMatch[1]);
-    if (Number.isFinite(unit) && unit > 0) {
-      result.unit = unit;
-      idx -= 1;
-    }
-  }
-  // 2) 结算标志
-  const last = (parts[idx] || '').trim().toUpperCase();
-  if (last === 'S' || last === 'G') {
-    result.settlement = last;
-    idx -= 1;
-  }
-  // 3) 倍率
-  if (idx >= 0) {
-    const r = Number((parts[idx] || '').trim());
-    if (Number.isFinite(r) && r > 0) result.ratio = r;
+    if (Number.isFinite(unit) && unit > 0) result.unit = unit;
   }
   return result;
 };
@@ -645,7 +651,7 @@ export const getChannelsColumns = ({
               }}
             >
               {t(
-                '已用：本站消耗（1倍率）。\n误差：上游已用×单位折算÷倍率 − 本站已用。>0 亏钱→红，≤0 赚钱→黑。\n金额：本站已用×倍率（折成上游结算额）。对私→红，对公/未标注→黑。\n命名规范：类型-上游名称-倍率[-S/G][-U单位]。S对私 G对公（可省略）；单位写成 U<数值>（上游 quota 单价，万），省略默认 U50（本站恒为 50w，即不折算），如 -U100 表示 100w。\n悬停单元格可见上游原始已用、单位折算、利润与利润率。数据来自定时/批量核对。',
+                '已用：本站消耗（1倍率）。\n误差：上游已用×单位折算÷倍率 − 本站已用。>0 亏钱→红，≤0 赚钱→黑。\n金额：本站已用×倍率（折成上游结算额）。对私→红，对公/未标注→黑。\n命名规范（位置固定）：类型-上游名称-倍率-S/G-单位，之后再接任意备注（如日期）。\n第3段倍率；第4段 S=对私 / G=对公；第5段单位写成 U<数值>（上游 quota 单价，万），省略默认 U50（本站恒为 50w，即不折算），如 U100 表示 100w；第6段起忽略。\n省略某段时留空段占位，如 oaiaz-自家-2.5--U100-9/21，后面的段不会前移。\n悬停单元格可见上游原始已用、单位折算、利润与利润率。数据来自定时/批量核对。'
               )}
             </div>
           }

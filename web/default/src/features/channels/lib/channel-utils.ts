@@ -240,17 +240,27 @@ export type SettlementType = 'S' | 'G'
  */
 export const DEFAULT_UPSTREAM_UNIT_WAN = 50
 
+/** S/G 所在段（第 4 段，索引 3） */
+const SETTLEMENT_INDEX = 3
+/** 本单位所在段（第 5 段，索引 4） */
+const UNIT_INDEX = 4
+
 /**
- * 拆解渠道名末尾各段。
- * 命名规范：类型-上游名称-倍率[-S/G][-U单位]（末尾解析，上游名称本身可含 '-'）
- *   1) 末段若匹配 U<数字> → 上游 quota 单价（万）；否则单位=默认 50
- *   2) 此时末段∈{S,G}     → 结算标志；否则无结算标志
- *   3) 此时末段若为数字    → 倍率；否则倍率为 null
- * 单位必须带 U 前缀，与「纯数字倍率」彻底区分，现有渠道名无需改。
- * 例：官转-某某API-0.8-S-U100 → ratio=0.8 settlement=S unit=100
- *     官转-某某API-0.8-U100   → ratio=0.8 settlement=null unit=100
- *     官转-某某API-0.8-S      → ratio=0.8 settlement=S unit=50
- *     官转-某某API-0.8        → ratio=0.8 settlement=null unit=50
+ * 拆解渠道名各段（固定位置，只读前 5 段，第 6 段起一律忽略）。
+ * 命名规范：类型-上游名称-倍率[-S/G]-[单位] 后接任意备注（如日期 -s9/21）
+ *   1) 类型      = 第 1 段（不参与对账）
+ *   2) 上游名称  = 第 2 段（不参与对账，本身不可含 '-'）
+ *   3) 倍率      = 第 3 段，须为 >0 的数字，否则倍率=null（不折算）
+ *   4) S/G       = 第 4 段，S=对私 / G=对公；留空段或写入其它内容 → 未标注
+ *   5) 单位      = 第 5 段，须写成 U<数字>（上游 quota 单价，万）；
+ *                  留空段或写入其它内容 → 默认 U50（本站单价，不缩放）
+ *   6) 第 6 段起 = 备注，忽略（可放日期等任何内容）
+ * 位置固定：某段要省略时用空段占位（如 类型-名字-2.5--U100-9/21），
+ * 后面的段不会因此前移；多写或少写段数都不会让位置发生偏移。
+ * 例：oaiaz-自家-2.5-S-U100-9/21 → ratio=2.5 settlement=S unit=100
+ *     oaiaz-自家-2.5--U100-9/21  → ratio=2.5 settlement=null unit=100
+ *     oaiaz-自家-2.5-S           → ratio=2.5 settlement=S unit=U50
+ *     oaiaz-自家-2.5             → ratio=2.5 settlement=null unit=U50
  */
 function parseChannelNameTail(name: string): {
   ratio: number | null
@@ -266,27 +276,24 @@ function parseChannelNameTail(name: string): {
     return result
   }
   const parts = name.split('-')
-  let idx = parts.length - 1
-  // 1) 末尾单位 U<数字>
-  const unitMatch = /^[Uu](\d+(?:\.\d+)?)$/.exec((parts[idx] ?? '').trim())
+  // 第 3 段：倍率
+  const ratio = Number((parts[2] ?? '').trim())
+  if (Number.isFinite(ratio) && ratio > 0) {
+    result.ratio = ratio
+  }
+  // 第 4 段：结算标志（空段/其它内容 → 未标注）
+  const settleSeg = (parts[SETTLEMENT_INDEX] ?? '').trim().toUpperCase()
+  if (settleSeg === 'S' || settleSeg === 'G') {
+    result.settlement = settleSeg
+  }
+  // 第 5 段：单位 U<数字>（空段/其它内容 → 默认 U50）
+  const unitMatch = /^[Uu](\d+(?:\.\d+)?)$/.exec(
+    (parts[UNIT_INDEX] ?? '').trim()
+  )
   if (unitMatch) {
     const unit = Number(unitMatch[1])
     if (Number.isFinite(unit) && unit > 0) {
       result.unit = unit
-      idx -= 1
-    }
-  }
-  // 2) 结算标志
-  const lastSeg = (parts[idx] ?? '').trim().toUpperCase()
-  if (lastSeg === 'S' || lastSeg === 'G') {
-    result.settlement = lastSeg
-    idx -= 1
-  }
-  // 3) 倍率
-  if (idx >= 0) {
-    const ratio = Number((parts[idx] ?? '').trim())
-    if (Number.isFinite(ratio) && ratio > 0) {
-      result.ratio = ratio
     }
   }
   return result
@@ -307,7 +314,7 @@ export function parseSettlementType(name: string): SettlementType | null {
 }
 
 /**
- * 从渠道名解析上游 quota 单价（万），无后缀时返回默认值 50。
+ * 从渠道名解析上游 quota 单价（万）（第 5 段 U<数字>），无后缀时返回默认值 U50。
  */
 export function parseUpstreamUnit(name: string): number {
   return parseChannelNameTail(name).unit
@@ -315,6 +322,7 @@ export function parseUpstreamUnit(name: string): number {
 
 /**
  * 渠道上游对账各项计算结果（单位：本站额度 quota，展示时由 formatQuotaWithCurrency 转美元）。
+ * 渠道名按固定位置解析：类型-上游名称-倍率-S/G-单位，第 6 段起为备注、不参与解析。
  *
  * 两个站点的 quota 单价各自独立，不能拿一方的额度直接套另一方的单价：
  *   上游「额度 → 美元」用上游自己的单价（单位万 × 10000）
@@ -333,7 +341,7 @@ export interface UpstreamRecon {
   upstreamRaw: number // U：上游已用（上游原始额度，未换算）
   upstreamUsd: number // 上游已用（美元）= U_raw / (unit×10000)，供「原始」行直接展示
   ratio: number | null // r（未解析出为 null）
-  unit: number // 上游 quota 单价（万），默认 50
+  unit: number // 上游 quota 单价（万），默认 U50
   upstreamLocal: number // 上游已用换算到本站 quota 量纲 = U_raw × 50 / unit
   upstreamAdjusted: number // 上游折算（本站 quota）= upstreamLocal / r
   error: number // 上游折算 − L
