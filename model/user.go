@@ -28,6 +28,9 @@ type User struct {
 	DisplayName      string                     `json:"display_name" gorm:"index" validate:"max=20"`
 	Role             int                        `json:"role" gorm:"type:int;default:1"`   // admin, common
 	Status           int                        `json:"status" gorm:"type:int;default:1"` // enabled, disabled
+	// AuthVersion 会话版本号。登录时写入 session，校验时与库中值比对；
+	// 改密码、禁用、降权等需要让既有会话立即失效的操作会将其 +1。
+	AuthVersion      int                        `json:"-" gorm:"type:int;not null;default:0;column:auth_version"`
 	Email            string                     `json:"email" gorm:"index" validate:"max=50"`
 	GitHubId         string                     `json:"github_id" gorm:"column:github_id;index"`
 	DiscordId        string                     `json:"discord_id" gorm:"column:discord_id;index"`
@@ -917,8 +920,16 @@ func ResetUserPasswordByEmail(email string, password string) error {
 	if err != nil {
 		return err
 	}
-	err = DB.Model(&User{}).Where("id = ?", user.Id).Update("password", hashedPassword).Error
-	return err
+	err = DB.Model(&User{}).Where("id = ?", user.Id).Updates(map[string]interface{}{
+		"password":     hashedPassword,
+		"auth_version": gorm.Expr("auth_version + 1"),
+	}).Error
+	if err != nil {
+		return err
+	}
+	// 重置密码后既有会话全部失效
+	InvalidateUserAuthState(user.Id)
+	return nil
 }
 
 func IsAdmin(userId int) bool {

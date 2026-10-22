@@ -129,6 +129,50 @@ func authHelper(c *gin.Context, minRole int) {
 		c.Abort()
 		return
 	}
+	// session 中的角色/状态可能已过期（例如被降权或禁用），
+	// 以数据库为准做一次短 TTL 回查；同时校验会话版本号，
+	// 改密码后 auth_version 递增，旧会话在此处立刻失效。
+	if !useAccessToken {
+		authState, stateErr := model.GetUserAuthState(id.(int))
+		if stateErr != nil {
+			if errors.Is(stateErr, gorm.ErrRecordNotFound) {
+				c.JSON(http.StatusUnauthorized, gin.H{
+					"success": false,
+					"message": common.TranslateMessage(c, i18n.MsgAuthSessionExpired),
+				})
+			} else {
+				common.SysLog("GetUserAuthState error: " + stateErr.Error())
+				c.JSON(http.StatusInternalServerError, gin.H{
+					"success": false,
+					"message": common.TranslateMessage(c, i18n.MsgDatabaseError),
+				})
+			}
+			c.Abort()
+			return
+		}
+		sessionAuthVersion, hasAuthVersion := session.Get("auth_version").(int)
+		if authState.Status == common.UserStatusDisabled {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": common.TranslateMessage(c, i18n.MsgAuthUserBanned),
+			})
+			c.Abort()
+			return
+		}
+		if !hasAuthVersion || authState.AuthVersion != sessionAuthVersion {
+			// 上线前签发的 session 没有版本号，一律要求重新登录；
+			// 版本号不一致同样作废（改密码、管理员重置密码等）。
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"success": false,
+				"message": common.TranslateMessage(c, i18n.MsgAuthSessionExpired),
+			})
+			c.Abort()
+			return
+		}
+		// 以数据库中的角色为准，降权/提权立即生效
+		role = authState.Role
+		status = authState.Status
+	}
 	if role.(int) < minRole {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,

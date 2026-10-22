@@ -134,17 +134,33 @@ func recordLoginAudit(user *model.User, c *gin.Context) {
 	}, extra)
 }
 
-// setup session & cookies and then return user info
-func setupLogin(user *model.User, c *gin.Context) {
-	model.UpdateUserLastLoginAt(user.Id)
+// writeLoginSession 把用户身份写入当前会话并下发 cookie。
+// 登录与「改密码后保留当前设备」两处共用，保证写入的字段始终一致。
+func writeLoginSession(user *model.User, c *gin.Context) error {
+	// 重新读取会话版本号，避免调用方传入的是查询较早、可能已过期的快照
+	authVersion := user.AuthVersion
+	if authState, err := model.GetUserAuthState(user.Id); err == nil {
+		authVersion = authState.AuthVersion
+	} else {
+		common.SysLog(fmt.Sprintf("writeLoginSession: failed to load auth state for user %d: %v", user.Id, err))
+	}
 	session := sessions.Default(c)
 	session.Set("id", user.Id)
 	session.Set("username", user.Username)
 	session.Set("role", user.Role)
 	session.Set("status", user.Status)
 	session.Set("group", user.Group)
-	err := session.Save()
-	if err != nil {
+	session.Set("auth_version", authVersion)
+	// 登录流程可能残留 2FA 的 pending 标记，这里一并清掉
+	session.Delete("pending_username")
+	session.Delete("pending_user_id")
+	return session.Save()
+}
+
+// setup session & cookies and then return user info
+func setupLogin(user *model.User, c *gin.Context) {
+	model.UpdateUserLastLoginAt(user.Id)
+	if err := writeLoginSession(user, c); err != nil {
 		common.ApiErrorI18n(c, i18n.MsgUserSessionSaveFailed)
 		return
 	}
@@ -721,6 +737,13 @@ func UpdateUser(c *gin.Context) {
 	if originUser.Quota != updatedUser.Quota {
 		model.RecordLog(originUser.Id, model.LogTypeManage, fmt.Sprintf("管理员将用户额度从 %s修改为 %s", logger.LogQuota(originUser.Quota), logger.LogQuota(updatedUser.Quota)))
 	}
+	if updatePassword || originUser.Role != updatedUser.Role {
+		// 管理员改密码或调整角色后，该用户既有会话立即失效
+		if err := model.BumpUserAuthVersion(updatedUser.Id); err != nil {
+			common.SysLog(fmt.Sprintf("failed to bump auth version for user %d: %s", updatedUser.Id, err.Error()))
+		}
+	}
+	model.InvalidateUserAuthState(updatedUser.Id)
 
 	// 记录操作日志
 	model.RecordOperationLog(c, c.GetInt("id"), model.ModuleUser, model.ActionUpdate,
@@ -893,6 +916,26 @@ func UpdateSelf(c *gin.Context) {
 	if err := cleanUser.Update(updatePassword); err != nil {
 		common.ApiError(c, err)
 		return
+	}
+	if updatePassword {
+		// 版本号 +1 让其他设备的会话立即失效；
+		// 随后给当前设备重新签发一份带新版本号的 session，使其保持登录。
+		if err := model.BumpUserAuthVersion(cleanUser.Id); err != nil {
+			common.SysLog(fmt.Sprintf("failed to bump auth version for user %d: %s", cleanUser.Id, err.Error()))
+		}
+		refreshedUser, err := model.GetUserById(cleanUser.Id, false)
+		if err != nil {
+			// 读不到最新用户时保守处理：清空会话，要求重新登录
+			common.SysLog(fmt.Sprintf("failed to reload user %d after password change: %s", cleanUser.Id, err.Error()))
+			session := sessions.Default(c)
+			session.Clear()
+			_ = session.Save()
+		} else if err := writeLoginSession(refreshedUser, c); err != nil {
+			common.SysLog(fmt.Sprintf("failed to refresh session after password change for user %d: %s", cleanUser.Id, err.Error()))
+			session := sessions.Default(c)
+			session.Clear()
+			_ = session.Save()
+		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -1248,6 +1291,8 @@ func ManageUser(c *gin.Context) {
 			common.SysLog(fmt.Sprintf("failed to invalidate tokens cache for user %d: %s", user.Id, err.Error()))
 		}
 	}
+	// 状态/角色变化立即反映到鉴权链路（禁用、降权后既有会话下次请求即失效）
+	model.InvalidateUserAuthState(user.Id)
 
 	// 记录操作日志
 	var actionType string
