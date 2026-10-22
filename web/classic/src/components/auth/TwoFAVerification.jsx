@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { API, showError, showSuccess } from '../../helpers';
+import { API, showError, showSuccess, updateAPI } from '../../helpers';
 import {
   Button,
   Card,
@@ -58,6 +58,8 @@ const TwoFAVerification = ({ onSuccess, onBack, isModal = false }) => {
         showSuccess('登录成功');
         // 保存用户信息到本地存储
         localStorage.setItem('user', JSON.stringify(res.data.data));
+        // 重建 axios 实例，让后续请求带上正确的 New-Api-User
+        updateAPI();
         if (onSuccess) {
           onSuccess(res.data.data);
         }

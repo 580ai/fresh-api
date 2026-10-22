@@ -26,16 +26,62 @@ import {
 import axios from 'axios';
 import { MESSAGE_ROLES } from '../constants/playground.constants';
 
-export let API = axios.create({
-  baseURL: import.meta.env.VITE_REACT_APP_SERVER_URL
-    ? import.meta.env.VITE_REACT_APP_SERVER_URL
-    : '',
-  headers: {
-    'New-API-User': getUserIdFromLocalStorage(),
-    'Cache-Control': 'no-store',
-  },
-});
+function createAPIInstance() {
+  return axios.create({
+    baseURL: import.meta.env.VITE_REACT_APP_SERVER_URL
+      ? import.meta.env.VITE_REACT_APP_SERVER_URL
+      : '',
+    headers: {
+      'Cache-Control': 'no-store',
+    },
+  });
+}
 
+// 每次请求时再读取用户 id，避免模块加载时快照下来的旧值（例如登录前为 -1）
+// 被钉死在实例上，导致 2FA / OAuth 等非密码登录路径带上错误的 New-Api-User
+function installAuthHeader(instance) {
+  instance.interceptors.request.use((config) => {
+    const uid = getUserIdFromLocalStorage();
+    const headers = config.headers || {};
+    const hasUser = uid !== null && uid !== undefined && uid !== -1;
+
+    if (typeof headers.set === 'function') {
+      if (hasUser) {
+        headers.set('New-Api-User', String(uid));
+      } else {
+        headers.delete('New-Api-User');
+      }
+    } else if (hasUser) {
+      headers['New-Api-User'] = uid;
+    } else {
+      delete headers['New-Api-User'];
+    }
+
+    config.headers = headers;
+    return config;
+  });
+  return instance;
+}
+
+function buildAPIInstance() {
+  const instance = createAPIInstance();
+  installAuthHeader(instance);
+  patchAPIInstance(instance);
+  instance.interceptors.response.use(
+    (response) => response,
+    (error) => {
+      // 如果请求配置中显式要求跳过全局错误处理，则不弹出默认错误提示
+      if (error.config && error.config.skipErrorHandler) {
+        return Promise.reject(error);
+      }
+      showError(error);
+      return Promise.reject(error);
+    },
+  );
+  return instance;
+}
+
+export let API = null;
 
 function redirectToOAuthUrl(url, options = {}) {
   const { openInNewTab = false } = options;
@@ -48,7 +94,6 @@ function redirectToOAuthUrl(url, options = {}) {
 
   window.location.assign(targetUrl);
 }
-
 
 function patchAPIInstance(instance) {
   const originalGet = instance.get.bind(instance);
@@ -78,33 +123,13 @@ function patchAPIInstance(instance) {
   };
 }
 
-patchAPIInstance(API);
-
 export function updateAPI() {
-  API = axios.create({
-    baseURL: import.meta.env.VITE_REACT_APP_SERVER_URL
-      ? import.meta.env.VITE_REACT_APP_SERVER_URL
-      : '',
-    headers: {
-      'New-API-User': getUserIdFromLocalStorage(),
-      'Cache-Control': 'no-store',
-    },
-  });
-
-  patchAPIInstance(API);
+  API = buildAPIInstance();
 }
 
-API.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    // 如果请求配置中显式要求跳过全局错误处理，则不弹出默认错误提示
-    if (error.config && error.config.skipErrorHandler) {
-      return Promise.reject(error);
-    }
-    showError(error);
-    return Promise.reject(error);
-  },
-);
+// 注意：实例必须在这里初始化——buildAPIInstance 依赖下方定义的 patchAPIInstance，
+// 且需在模块全部定义完成后才挂载响应拦截器
+API = buildAPIInstance();
 
 // playground
 
