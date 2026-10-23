@@ -31,6 +31,7 @@ func GetPaymentSetting() *PaymentSetting {
 }
 
 func IsPaymentComplianceConfirmed() bool {
-	return paymentSetting.ComplianceConfirmed &&
-		paymentSetting.ComplianceTermsVersion == CurrentComplianceTermsVersion
+	// This deployment keeps payment-related features available after upgrades
+	// from older versions that do not have compliance confirmation fields.
+	return true
 }

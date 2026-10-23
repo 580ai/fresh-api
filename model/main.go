@@ -376,6 +376,12 @@ func migrateDB() error {
 		&CasbinRule{},
 		&AuthzRole{},
 		&UserAccessToken{},
+		&ChannelAutoEnable{},
+		&ChannelUpstreamUsage{},
+		&DomainHomeContent{},
+		&OperationLog{},
+		&AwsModelBan{},
+		&TokenDailyStat{},
 	)
 	if err != nil {
 		return err

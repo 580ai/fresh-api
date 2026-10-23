@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  python-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: aff-count-api
+    restart: unless-stopped
+    ports:
+      - "8001:8001"
+    environment:
+      # API 共享密钥（与前端保持一致）
+      - API_SHARED_SECRET=dd7ea0087bb492abaf990d6e2795b2f0a3fafd0c40a9a8b7a9ccf7112cf3ba75
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
