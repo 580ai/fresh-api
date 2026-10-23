@@ -437,6 +437,70 @@ func decreaseTokenQuota(id int, quota int) (err error) {
 	return err
 }
 
+// ConsumeTokenQuota atomically reserves finite token quota. Unlimited tokens
+// bypass the balance predicate but retain reversible quota accounting.
+func ConsumeTokenQuota(id int, key string, quota int) error {
+	if quota < 0 {
+		return errors.New("quota 不能为负数！")
+	}
+	if quota == 0 {
+		return nil
+	}
+
+	result := DB.Model(&Token{}).
+		Where("id = ? AND (unlimited_quota = ? OR remain_quota >= ?)", id, true, quota).
+		Updates(map[string]interface{}{
+			"remain_quota":  gorm.Expr("remain_quota - ?", quota),
+			"used_quota":    gorm.Expr("used_quota + ?", quota),
+			"accessed_time": common.GetTimestamp(),
+		})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return ErrInsufficientTokenQuota
+	}
+
+	if common.RedisEnabled {
+		if err := cacheDeleteToken(key); err != nil {
+			common.SysLog("failed to invalidate token cache after atomic consume: " + err.Error())
+		}
+	}
+	return nil
+}
+
+// RestoreTokenQuota synchronously reverses a reservation without using the
+// batch updater.
+func RestoreTokenQuota(id int, key string, quota int) error {
+	if quota < 0 {
+		return errors.New("quota 不能为负数！")
+	}
+	if quota == 0 {
+		return nil
+	}
+
+	result := DB.Model(&Token{}).
+		Where("id = ?", id).
+		Updates(map[string]interface{}{
+			"remain_quota":  gorm.Expr("remain_quota + ?", quota),
+			"used_quota":    gorm.Expr("used_quota - ?", quota),
+			"accessed_time": common.GetTimestamp(),
+		})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+
+	if common.RedisEnabled {
+		if err := cacheDeleteToken(key); err != nil {
+			common.SysLog("failed to invalidate token cache after atomic restore: " + err.Error())
+		}
+	}
+	return nil
+}
+
 // CountUserTokens returns total number of tokens for the given user, used for pagination
 func CountUserTokens(userId int) (int64, error) {
 	var total int64
@@ -468,6 +532,43 @@ func BatchDeleteTokens(ids []int, userId int) (int, error) {
 
 	if err := tx.Commit().Error; err != nil {
 		return 0, err
+	}
+
+	return len(tokens), nil
+}
+
+// BatchUpdateTokenGroup 批量更新指定用户的令牌分组，返回成功更新数量
+func BatchUpdateTokenGroup(ids []int, userId int, group string, crossGroupRetry bool) (int, error) {
+	if len(ids) == 0 {
+		return 0, errors.New("ids 不能为空！")
+	}
+
+	tx := DB.Begin()
+
+	var tokens []Token
+	if err := tx.Where("user_id = ? AND id IN (?)", userId, ids).Find(&tokens).Error; err != nil {
+		tx.Rollback()
+		return 0, err
+	}
+
+	if err := tx.Model(&Token{}).Where("user_id = ? AND id IN (?)", userId, ids).Updates(map[string]interface{}{
+		"group":             group,
+		"cross_group_retry": crossGroupRetry,
+	}).Error; err != nil {
+		tx.Rollback()
+		return 0, err
+	}
+
+	if err := tx.Commit().Error; err != nil {
+		return 0, err
+	}
+
+	if common.RedisEnabled {
+		gopool.Go(func() {
+			for _, t := range tokens {
+				_ = cacheDeleteToken(t.Key)
+			}
+		})
 	}
 
 	return len(tokens), nil

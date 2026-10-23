@@ -175,6 +175,9 @@ func runMidjourneyTaskUpdateOnce(ctx context.Context, report func(processed, tot
 			task.StartTime = responseItem.StartTime
 			task.FinishTime = responseItem.FinishTime
 			task.ImageUrl = responseItem.ImageUrl
+			if common.GetJsonType(responseItem.ImageUrls) == "array" {
+				task.ImageUrls = string(responseItem.ImageUrls)
+			}
 			task.Status = responseItem.Status
 			task.FailReason = responseItem.FailReason
 			if responseItem.Properties != nil {
@@ -246,6 +249,9 @@ func checkMjTaskNeedUpdate(oldTask *model.Midjourney, newTask dto.MidjourneyDto)
 		return true
 	}
 	if oldTask.ImageUrl != newTask.ImageUrl {
+		return true
+	}
+	if common.GetJsonType(newTask.ImageUrls) == "array" && oldTask.ImageUrls != string(newTask.ImageUrls) {
 		return true
 	}
 	if oldTask.Status != newTask.Status {

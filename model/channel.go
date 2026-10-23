@@ -55,6 +55,10 @@ type Channel struct {
 
 	OtherSettings string `json:"settings" gorm:"column:settings"` // 其他设置，存储azure版本等不需要检索的信息，详见dto.ChannelOtherSettings
 
+	// UpstreamUsedQuota 上游已用额度（原始值，来自独立表 channel_upstream_usages，不落 channel 表）
+	// 仅用于列表接口返回给前端做核对展示，gorm:"-" 保证不参与建表/读写。
+	UpstreamUsedQuota int64 `json:"upstream_used_quota" gorm:"-"`
+
 	// cache info
 	Keys []string `json:"-" gorm:"-"`
 }
@@ -511,6 +515,32 @@ func BatchDeleteChannels(ids []int) (int64, error) {
 	return deletedCount, nil
 }
 
+func BatchUpdateChannelStatus(ids []int, status int) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	return DB.Model(&Channel{}).Where("id in (?)", ids).Update("status", status).Error
+}
+
+func BatchUpdateChannelProxy(ids []int, proxy string) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	for _, id := range ids {
+		channel, err := GetChannelById(id, true)
+		if err != nil {
+			return err
+		}
+		setting := channel.GetSetting()
+		setting.Proxy = proxy
+		channel.SetSetting(setting)
+		if err := channel.Save(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (channel *Channel) GetPriority() int64 {
 	if channel.Priority == nil {
 		return 0
@@ -609,6 +639,14 @@ func (channel *Channel) Update() error {
 	return err
 }
 
+func (channel *Channel) UpdateModels() error {
+	err := DB.Model(channel).Select("models").Updates(map[string]interface{}{"models": channel.Models}).Error
+	if err != nil {
+		return err
+	}
+	return channel.UpdateAbilities(nil)
+}
+
 func (channel *Channel) UpdateResponseTime(responseTime int64) {
 	err := DB.Model(channel).Select("response_time", "test_time").Updates(Channel{
 		TestTime:     common.GetTimestamp(),
@@ -627,6 +665,38 @@ func (channel *Channel) UpdateBalance(balance float64) {
 	if err != nil {
 		common.SysLog(common.LogText("failed to update balance: channel_id=%d, error=%v", channel.Id, err))
 	}
+}
+
+// UpdateChannelPriorityAndWeight 更新渠道的优先级和权重
+func UpdateChannelPriorityAndWeight(channelId int, priority int64, weight uint) error {
+	err := DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&Channel{}).Where("id = ?", channelId).Updates(map[string]interface{}{
+			"priority": priority,
+			"weight":   weight,
+		}).Error; err != nil {
+			return err
+		}
+
+		return tx.Model(&Ability{}).Where("channel_id = ?", channelId).Updates(map[string]interface{}{
+			"priority": priority,
+			"weight":   weight,
+		}).Error
+	})
+	if err != nil {
+		common.SysLog(fmt.Sprintf("failed to update priority and weight: channel_id=%d, error=%v", channelId, err))
+		return err
+	}
+
+	// 更新缓存
+	if common.MemoryCacheEnabled {
+		channelCache, _ := CacheGetChannel(channelId)
+		if channelCache != nil {
+			channelCache.Priority = &priority
+			channelCache.Weight = &weight
+		}
+	}
+
+	return nil
 }
 
 func (channel *Channel) Delete() error {

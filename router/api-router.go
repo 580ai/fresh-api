@@ -133,6 +133,7 @@ func SetApiRouter(router *gin.Engine) {
 				selfRoute.POST("/waffo-pancake/pay", middleware.CriticalRateLimit(), controller.RequestWaffoPancakePay)
 				selfRoute.POST("/aff_transfer", middleware.UserCriticalRateLimit("aff-transfer"), controller.TransferAffQuota)
 				selfRoute.PUT("/setting", controller.UpdateUserSetting)
+				selfRoute.GET("/rate_limit", controller.GetSelfRateLimit)
 
 				// 2FA routes
 				selfRoute.GET("/2fa/status", controller.Get2FAStatus)
@@ -232,6 +233,15 @@ func SetApiRouter(router *gin.Engine) {
 			optionRoute.GET("/waffo-pancake/subscription-product-options", controller.ListWaffoPancakeSubscriptionProductOptions)
 		}
 
+		domainHomeRoute := apiRouter.Group("/domain_home_content")
+		domainHomeRoute.Use(middleware.RootAuth())
+		{
+			domainHomeRoute.GET("/", controller.GetDomainHomeContents)
+			domainHomeRoute.POST("/", controller.CreateDomainHomeContent)
+			domainHomeRoute.PUT("/", controller.UpdateDomainHomeContent)
+			domainHomeRoute.DELETE("/:id", controller.DeleteDomainHomeContent)
+		}
+
 		// Custom OAuth provider management (root only)
 		customOAuthRoute := apiRouter.Group("/custom-oauth-provider")
 		customOAuthRoute.Use(middleware.RootAuth())
@@ -292,6 +302,7 @@ func SetApiRouter(router *gin.Engine) {
 			tokenRoute.PUT("/", controller.UpdateToken)
 			tokenRoute.DELETE("/:id", controller.DeleteToken)
 			tokenRoute.POST("/batch", controller.DeleteTokenBatch)
+			tokenRoute.PUT("/batch/group", controller.UpdateTokenGroupBatch)
 			tokenRoute.POST("/batch/keys", middleware.CriticalRateLimit(), middleware.DisableCache(), controller.GetTokenKeysBatch)
 		}
 
@@ -329,6 +340,20 @@ func SetApiRouter(router *gin.Engine) {
 		logRoute.GET("/export", middleware.AdminAuth(), controller.ExportAllLogs)
 		logRoute.GET("/self/export", middleware.UserAuth(), controller.ExportUserLogs)
 		logRoute.GET("/self/search", middleware.UserAuth(), middleware.SearchRateLimit(), controller.SearchUserLogs)
+		logRoute.GET("/self/token_daily", middleware.UserAuth(), controller.GetTokenDailyConsumption)
+		logRoute.GET("/self/token_daily/export", middleware.UserAuth(), controller.ExportTokenDailyConsumption)
+		logRoute.GET("/self/token_model_daily", middleware.UserAuth(), controller.GetTokenModelDailyConsumption)
+		logRoute.GET("/self/token_model_full", middleware.UserAuth(), controller.GetTokenModelFullConsumption)
+		logRoute.POST("/backfill_token_daily_stat", middleware.AdminAuth(), controller.BackfillTokenDailyStat)
+
+		// 操作日志路由
+		operationLogRoute := apiRouter.Group("/operation_log")
+		operationLogRoute.Use(middleware.AdminAuth())
+		{
+			operationLogRoute.GET("/", controller.GetAllOperationLogs)
+			operationLogRoute.DELETE("/", controller.DeleteHistoryOperationLogs)
+			operationLogRoute.GET("/options", controller.GetOperationLogOptions)
+		}
 
 		systemTaskRoute := apiRouter.Group("/system-task")
 		systemTaskRoute.Use(middleware.RootAuth())
@@ -362,6 +387,15 @@ func SetApiRouter(router *gin.Engine) {
 		groupRoute.Use(middleware.AdminAuth())
 		{
 			groupRoute.GET("/", controller.GetGroups)
+		}
+
+		awsSettingRoute := apiRouter.Group("/aws_setting")
+		awsSettingRoute.Use(middleware.RootAuth())
+		{
+			awsSettingRoute.GET("/", controller.GetAwsSetting)
+			awsSettingRoute.PUT("/", controller.UpdateAwsSetting)
+			awsSettingRoute.GET("/bans", controller.GetAwsModelBans)
+			awsSettingRoute.DELETE("/bans/:id", controller.RestoreAwsModelBan)
 		}
 
 		prefillGroupRoute := apiRouter.Group("/prefill_group")

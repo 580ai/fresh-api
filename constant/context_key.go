@@ -48,6 +48,8 @@ const (
 	ContextKeyAutoGroup           ContextKey = "auto_group"
 	ContextKeyAutoGroupIndex      ContextKey = "auto_group_index"
 	ContextKeyAutoGroupRetryIndex ContextKey = "auto_group_retry_index"
+	ContextKeyMultiGroupIndex     ContextKey = "multi_group_index"
+	ContextKeyMultiGroup          ContextKey = "multi_group" // [CUSTOM] 多分组选中的分组名
 
 	/* user related keys */
 	ContextKeyUserId      ContextKey = "id"

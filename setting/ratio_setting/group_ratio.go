@@ -3,6 +3,8 @@ package ratio_setting
 import (
 	"encoding/json"
 	"errors"
+	"sort"
+	"sync"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/setting/config"
@@ -16,6 +18,10 @@ var defaultGroupRatio = map[string]float64{
 }
 
 var groupRatioMap = types.NewRWMap[string, float64]()
+
+// 分组排序，存储分组名称的有序列表
+var groupOrder = []string{}
+var groupOrderMutex sync.RWMutex
 
 var defaultGroupGroupRatio = map[string]map[string]float64{
 	"vip": {
@@ -117,4 +123,91 @@ func CheckGroupRatio(jsonStr string) error {
 		}
 	}
 	return nil
+}
+
+// GetGroupOrder 获取分组排序列表
+func GetGroupOrder() []string {
+	groupOrderMutex.RLock()
+	defer groupOrderMutex.RUnlock()
+
+	orderCopy := make([]string, len(groupOrder))
+	copy(orderCopy, groupOrder)
+	return orderCopy
+}
+
+// GroupOrder2JSONString 将分组排序转换为JSON字符串
+func GroupOrder2JSONString() string {
+	groupOrderMutex.RLock()
+	defer groupOrderMutex.RUnlock()
+
+	jsonBytes, err := json.Marshal(groupOrder)
+	if err != nil {
+		common.SysLog("error marshalling group order: " + err.Error())
+		return "[]"
+	}
+	return string(jsonBytes)
+}
+
+// UpdateGroupOrderByJSONString 通过JSON字符串更新分组排序
+func UpdateGroupOrderByJSONString(jsonStr string) error {
+	groupOrderMutex.Lock()
+	defer groupOrderMutex.Unlock()
+
+	var newOrder []string
+	if jsonStr == "" {
+		groupOrder = []string{}
+		return nil
+	}
+	err := json.Unmarshal([]byte(jsonStr), &newOrder)
+	if err != nil {
+		return err
+	}
+	groupOrder = newOrder
+	return nil
+}
+
+// GetSortedGroupNames 获取排序后的分组名称列表
+// 如果设置了排序，按排序返回；否则按字母顺序返回
+func GetSortedGroupNames() []string {
+	ratioMap := groupRatioMap.ReadAll()
+	allGroups := make([]string, 0, len(ratioMap))
+	for name := range ratioMap {
+		allGroups = append(allGroups, name)
+	}
+
+	groupOrderMutex.RLock()
+	orderList := make([]string, len(groupOrder))
+	copy(orderList, groupOrder)
+	groupOrderMutex.RUnlock()
+
+	if len(orderList) == 0 {
+		// 没有设置排序，按字母顺序返回
+		sort.Strings(allGroups)
+		return allGroups
+	}
+
+	// 创建排序映射
+	orderMap := make(map[string]int)
+	for i, name := range orderList {
+		orderMap[name] = i
+	}
+
+	// 按排序返回，未在排序列表中的放到最后
+	sort.Slice(allGroups, func(i, j int) bool {
+		orderI, okI := orderMap[allGroups[i]]
+		orderJ, okJ := orderMap[allGroups[j]]
+		if okI && okJ {
+			return orderI < orderJ
+		}
+		if okI {
+			return true
+		}
+		if okJ {
+			return false
+		}
+		// 都不在排序列表中，按字母顺序
+		return allGroups[i] < allGroups[j]
+	})
+
+	return allGroups
 }

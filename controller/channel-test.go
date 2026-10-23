@@ -1164,3 +1164,24 @@ func TestAllChannels(c *gin.Context) {
 		},
 	})
 }
+
+// TestChannelForAutoEnableImpl 供自动启用任务调用的渠道测试函数实现
+func TestChannelForAutoEnableImpl(channel *model.Channel, testModel string) (bool, error) {
+	testUserID, err := resolveChannelTestUserID(nil)
+	if err != nil {
+		return false, err
+	}
+	result := testChannel(context.Background(), channel, testUserID, testModel, "", false)
+	if result.localErr != nil {
+		return false, result.localErr
+	}
+	if result.newAPIError != nil {
+		return false, result.newAPIError
+	}
+	return true, nil
+}
+
+// InitChannelAutoEnableTestFunc 初始化自动启用测试函数
+func InitChannelAutoEnableTestFunc() {
+	service.TestChannelForAutoEnable = TestChannelForAutoEnableImpl
+}

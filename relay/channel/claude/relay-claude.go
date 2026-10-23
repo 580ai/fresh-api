@@ -332,6 +332,7 @@ func HandleStreamFinalResponse(c *gin.Context, info *relaycommon.RelayInfo, clau
 }
 
 func ClaudeStreamHandler(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo) (*dto.Usage, *types.NewAPIError) {
+	statusCodeMappingStr := c.GetString("status_code_mapping")
 	claudeInfo := &ClaudeResponseInfo{
 		ResponseId:   helper.GetResponseID(c),
 		Created:      common.GetTimestamp(),
@@ -348,10 +349,15 @@ func ClaudeStreamHandler(c *gin.Context, resp *http.Response, info *relaycommon.
 	})
 	info.StreamStatus.RequireTerminal()
 	if err != nil {
+		service.ResetStatusCode(err, statusCodeMappingStr)
 		return nil, err
 	}
 
 	HandleStreamFinalResponse(c, info, claudeInfo)
+
+	// 存储响应内容用于日志记录（流式响应拼接后的完整文本）
+	c.Set("log_response_body", claudeInfo.ResponseText.String())
+
 	return claudeInfo.Usage, nil
 }
 
@@ -440,6 +446,7 @@ func HandleClaudeResponseData(c *gin.Context, info *relaycommon.RelayInfo, claud
 
 func ClaudeHandler(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo) (*dto.Usage, *types.NewAPIError) {
 	defer service.CloseResponseBodyGracefully(resp)
+	statusCodeMappingStr := c.GetString("status_code_mapping")
 
 	claudeInfo := &ClaudeResponseInfo{
 		ResponseId:   helper.GetResponseID(c),
@@ -450,12 +457,19 @@ func ClaudeHandler(c *gin.Context, resp *http.Response, info *relaycommon.RelayI
 	}
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, types.NewError(err, types.ErrorCodeBadResponseBody)
+		newErr := types.NewError(err, types.ErrorCodeBadResponseBody)
+		service.ResetStatusCode(newErr, statusCodeMappingStr)
+		return nil, newErr
 	}
 	logger.LogDebug(c, "responseBody: %s", responseBody)
 	handleErr := HandleClaudeResponseData(c, info, claudeInfo, resp, responseBody)
 	if handleErr != nil {
+		service.ResetStatusCode(handleErr, statusCodeMappingStr)
 		return nil, handleErr
 	}
+
+	// 存储响应内容用于日志记录
+	c.Set("log_response_body", string(responseBody))
+
 	return claudeInfo.Usage, nil
 }

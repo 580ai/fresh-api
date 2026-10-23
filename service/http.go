@@ -57,6 +57,10 @@ func IOCopyBytesGracefully(c *gin.Context, src *http.Response, data []byte) {
 			if !ShouldCopyUpstreamHeader(c, k, v) {
 				continue
 			}
+			// avoid overwriting local instance headers with upstream values
+			if k == common.RequestIdKey || k == "X-New-Api-Version" {
+				continue
+			}
 			c.Writer.Header().Set(k, v[0])
 		}
 	}

@@ -71,12 +71,15 @@ func GetStatus(c *gin.Context) {
 		"turnstile_check":             common.TurnstileCheckEnabled,
 		"turnstile_site_key":          common.TurnstileSiteKey,
 		"docs_link":                   operation_setting.GetGeneralSetting().DocsLink,
+		"tutorial_link":               operation_setting.GetGeneralSetting().TutorialLink,
+		"group_status_link":           operation_setting.GetGeneralSetting().GroupStatusLink,
 		"quota_per_unit":              common.QuotaPerUnit,
 		// 兼容旧前端：保留 display_in_currency，同时提供新的 quota_display_type
 		"display_in_currency":           operation_setting.IsCurrencyDisplay(),
 		"quota_display_type":            operation_setting.GetQuotaDisplayType(),
 		"custom_currency_symbol":        operation_setting.GetGeneralSetting().CustomCurrencySymbol,
-		"custom_currency_exchange_rate": operation_setting.GetGeneralSetting().CustomCurrencyExchangeRate,
+		"custom_currency_exchange_rate":    operation_setting.GetGeneralSetting().CustomCurrencyExchangeRate,
+		"channel_base_url_input_enabled":   operation_setting.IsChannelBaseURLInputEnabled(),
 		"enable_batch_update":           common.BatchUpdateEnabled,
 		"enable_drawing":                common.DrawingEnabled,
 		"enable_task":                   common.TaskEnabled,
@@ -210,6 +213,27 @@ func GetMidjourney(c *gin.Context) {
 }
 
 func GetHomePageContent(c *gin.Context) {
+	// 优先从查询参数获取域名，如果没有则使用请求头的 Host
+	host := c.Query("domain")
+	if host == "" {
+		host = c.Request.Host
+	}
+	common.SysLog("GetHomePageContent - Request Host: " + host)
+
+	// 尝试从数据库获取该域名的首页内容
+	domainContent, err := model.GetDomainHomeContent(host)
+	if err == nil && domainContent != nil {
+		common.SysLog("GetHomePageContent - Found domain content for: " + host)
+		c.JSON(http.StatusOK, gin.H{
+			"success": true,
+			"message": "",
+			"data":    domainContent.Content,
+		})
+		return
+	}
+	common.SysLog("GetHomePageContent - No domain content found, using default. Error: " + fmt.Sprint(err))
+
+	// 如果没有找到域名对应的内容，返回默认内容
 	common.OptionMapRWMutex.RLock()
 	homePageContent := common.OptionMap["HomePageContent"]
 	common.OptionMapRWMutex.RUnlock()

@@ -74,6 +74,7 @@ func main() {
 	kitutil.Debug.Store(common.DebugEnabled)
 
 	defer func() {
+		model.CloseLogContentFile()
 		err := model.CloseDB()
 		if err != nil {
 			common.FatalLog(common.LogText("failed to close database: %s", err.Error()))
@@ -121,6 +122,9 @@ func main() {
 	// 数据看板
 	go model.UpdateQuotaData()
 
+	// 令牌每日消耗统计聚合任务
+	go model.RunDailyStatAggregation()
+
 	if os.Getenv("CHANNEL_UPDATE_FREQUENCY") != "" {
 		frequency, err := strconv.Atoi(os.Getenv("CHANNEL_UPDATE_FREQUENCY"))
 		if err != nil {
@@ -129,8 +133,33 @@ func main() {
 		go controller.AutomaticallyUpdateChannels(frequency)
 	}
 
+	// 定时核对上游已用额度（渠道名规范：类型-上游名称-倍率-NewApiUser）
+	if os.Getenv("UPSTREAM_USED_UPDATE_FREQUENCY") != "" {
+		frequency, err := strconv.Atoi(os.Getenv("UPSTREAM_USED_UPDATE_FREQUENCY"))
+		if err != nil {
+			common.FatalLog("failed to parse UPSTREAM_USED_UPDATE_FREQUENCY: " + err.Error())
+		}
+		go controller.AutomaticallyUpdateChannelsUpstreamUsed(frequency)
+	}
+
+	// AWS model auto-ban task
+	go service.StartAwsModelBanTask()
+
+	// 渠道优先级监控定时任务
+	go controller.AutomaticallyRunChannelPriorityMonitor()
+
 	// Codex credential auto-refresh check every 10 minutes, refresh when expires within 1 day
 	service.StartCodexCredentialAutoRefreshTask()
+
+	// 渠道统计定时任务
+	service.StartChannelStatsTask()
+
+	// 渠道自动启用定时任务
+	controller.InitChannelAutoEnableTestFunc()
+	service.StartChannelAutoEnableTask()
+
+	// 渠道优先级自动平衡定时任务（仅 type=ChannelTypeAnthropicBatch）
+	service.StartChannelPriorityBalanceTask()
 
 	// Subscription quota reset task (daily/weekly/monthly/custom)
 	service.StartSubscriptionQuotaResetTask()
