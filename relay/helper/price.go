@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
@@ -35,11 +36,28 @@ func modelPriceNotConfiguredError(c *gin.Context, modelName string, userId int) 
 // https://docs.claude.com/en/docs/build-with-claude/prompt-caching#1-hour-cache-duration
 const claudeCacheCreation1hMultiplier = 6 / 3.75
 
+// defaultTieredPreConsumeMaxTokens is the fallback completion-token estimate
+// used for tiered expression pre-consume when the client omits max_tokens, so
+// the pre-consumed quota still reflects a plausible output cost in paid groups.
+const defaultTieredPreConsumeMaxTokens = 8192
+
+// HandleGroupRatio checks for "auto_group" or "multi_group" in the context and updates the group ratio and relayInfo.UsingGroup if present
+func HandleGroupRatio(ctx *gin.Context, relayInfo *relaycommon.RelayInfo) types.GroupRatioInfo {
+	groupRatioInfo := types.GroupRatioInfo{
 // HandleGroupRatio checks for "auto_group" in the context and updates the group ratio and relayInfo.UsingGroup if present
 func HandleGroupRatio(ctx *gin.Context, relayInfo *relaycommon.RelayInfo) hosttypes.GroupRatioInfo {
 	groupRatioInfo := hosttypes.GroupRatioInfo{
 		GroupRatio:        1.0, // default ratio
 		GroupSpecialRatio: -1,
+	}
+
+	// [CUSTOM] check multi group (comma-separated groups like "A,B")
+	multiGroup, exists := common.GetContextKey(ctx, constant.ContextKeyMultiGroup)
+	if exists {
+		if groupStr, ok := multiGroup.(string); ok && groupStr != "" {
+			logger.LogDebug(ctx, fmt.Sprintf("final group (multi): %s", groupStr))
+			relayInfo.UsingGroup = groupStr
+		}
 	}
 
 	// check auto group
@@ -59,6 +77,11 @@ func HandleGroupRatio(ctx *gin.Context, relayInfo *relaycommon.RelayInfo) hostty
 	} else {
 		// normal group ratio
 		groupRatioInfo.GroupRatio = ratio_setting.GetGroupRatio(relayInfo.UsingGroup)
+	}
+	if snapshot := relayInfo.TieredBillingSnapshot; snapshot != nil {
+		// The expression and request inputs stay frozen, but routing retries can
+		// legitimately change the group that must be billed.
+		snapshot.GroupRatio = groupRatioInfo.GroupRatio
 	}
 
 	return groupRatioInfo

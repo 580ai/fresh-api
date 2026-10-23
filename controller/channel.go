@@ -21,6 +21,7 @@ import (
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/service/authz"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -73,6 +74,51 @@ func clearChannelInfo(channel *model.Channel) {
 	}
 }
 
+// attachUpstreamUsed 批量把独立表 channel_upstream_usages 里的上游已用额度填充到透传字段
+// （倍率换算在前端展示时做，这里只回填原始值）
+func attachUpstreamUsed(channels []*model.Channel) {
+	if len(channels) == 0 {
+		return
+	}
+	ids := make([]int, 0, len(channels))
+	for _, ch := range channels {
+		if ch != nil {
+			ids = append(ids, ch.Id)
+		}
+	}
+	usageMap, err := model.BatchGetChannelUpstreamUsage(ids)
+	if err != nil {
+		common.SysError("failed to batch get channel upstream usage: " + err.Error())
+		return
+	}
+	for _, ch := range channels {
+		if ch == nil {
+			continue
+		}
+		if used, ok := usageMap[ch.Id]; ok {
+			ch.UpstreamUsedQuota = used
+		}
+	}
+}
+
+// sanitizeChannelForLog 清理渠道敏感信息用于日志记录
+func sanitizeChannelForLog(channel *model.Channel) map[string]any {
+	if channel == nil {
+		return nil
+	}
+	return map[string]any{
+		"id":           channel.Id,
+		"name":         channel.Name,
+		"type":         channel.Type,
+		"status":       channel.Status,
+		"groups":       channel.Group,
+		"models":       channel.Models,
+		"priority":     channel.Priority,
+		"weight":       channel.Weight,
+		"tag":          channel.Tag,
+		"base_url":     channel.GetBaseURL(),
+		"is_multi_key": channel.ChannelInfo.IsMultiKey,
+	}
 func channelIDsFromChannels(channels []*model.Channel) []int {
 	ids := make([]int, 0, len(channels))
 	for _, channel := range channels {
@@ -259,6 +305,7 @@ func GetAllChannels(c *gin.Context) {
 	for _, datum := range channelData {
 		clearChannelInfo(datum)
 	}
+	attachUpstreamUsed(channelData)
 
 	countQuery := buildChannelListQuery(groupFilter, statusFilter, -1)
 	var results []struct {
@@ -454,6 +501,7 @@ func SearchChannels(c *gin.Context) {
 	for _, datum := range pagedData {
 		clearChannelInfo(datum)
 	}
+	attachUpstreamUsed(pagedData)
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
@@ -605,6 +653,13 @@ func validateChannel(channel *model.Channel, isAdd bool) error {
 		return fmt.Errorf("SGLang channel base URL cannot be empty")
 	}
 
+	// 如果禁用了自定义 API 地址输入，则不允许提交 BaseURL
+	if !operation_setting.IsChannelBaseURLInputEnabled() {
+		if channel != nil && channel.BaseURL != nil && strings.TrimSpace(*channel.BaseURL) != "" {
+			return fmt.Errorf("管理员已禁用自定义 API 地址，请勿填写 API 地址")
+		}
+	}
+
 	// 如果是添加操作，检查 channel 和 key 是否为空
 	if isAdd {
 		if channel.Key == "" {
@@ -670,6 +725,8 @@ func RefreshCodexChannelCredential(c *gin.Context) {
 
 	oauthKey, ch, err := service.RefreshCodexChannelCredential(ctx, channelId, service.CodexCredentialRefreshOptions{ResetCaches: true})
 	if err != nil {
+		common.SysError("failed to refresh codex channel credential: " + err.Error())
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
 		common.SysError(common.LogText("failed to refresh codex channel credential: %s", err.Error()))
 		common.ApiErrorT(c, "Failed to refresh credentials. Please try again later")
 		return
@@ -760,6 +817,48 @@ func AddChannel(c *gin.Context) {
 
 	addChannelRequest.Channel.CreatedTime = common.GetTimestamp()
 	keys := make([]string, 0)
+
+	if addChannelRequest.Mode == "anthropic_batch" {
+		channels, err := handleAnthropicBatchAdd(&addChannelRequest)
+		if err != nil {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": err.Error(),
+			})
+			return
+		}
+		if err := model.BatchInsertChannels(channels); err != nil {
+			common.ApiError(c, err)
+			return
+		}
+		service.ResetProxyClientCache()
+
+		channelIds := make([]int, 0, len(channels))
+		if len(channels) > 0 {
+			var insertedChannels []model.Channel
+			model.DB.Select("id").Where("created_time = ?", channels[0].CreatedTime).Find(&insertedChannels)
+			for _, ch := range insertedChannels {
+				channelIds = append(channelIds, ch.Id)
+			}
+		}
+
+		userId := c.GetInt("id")
+		for _, ch := range channels {
+			model.RecordOperationLog(c, userId, model.OperationModuleChannel, model.OperationActionCreate,
+				strconv.Itoa(ch.Id), ch.Name, nil, sanitizeChannelForLog(&ch),
+				fmt.Sprintf("创建渠道: %s", ch.Name))
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"success": true,
+			"message": "",
+			"data": gin.H{
+				"ids": channelIds,
+			},
+		})
+		return
+	}
+
 	switch addChannelRequest.Mode {
 	case "multi_to_single":
 		addChannelRequest.Channel.ChannelInfo.IsMultiKey = true
@@ -824,6 +923,34 @@ func AddChannel(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+	service.ResetProxyClientCache()
+
+	// BatchInsertChannels 内部 lo.Chunk 会拷贝元素，GORM 回填的 ID 不会传回 channels。
+	// 通过 created_time 精确查回刚插入的渠道 ID。
+	channelIds := make([]int, 0, len(channels))
+	insertedChannels := channels
+	if len(channels) > 0 {
+		insertedChannels = make([]model.Channel, 0, len(channels))
+		model.DB.Where("created_time = ?", channels[0].CreatedTime).Order("id").Find(&insertedChannels)
+		for _, ch := range insertedChannels {
+			channelIds = append(channelIds, ch.Id)
+		}
+	}
+
+	// 记录操作日志
+	userId := c.GetInt("id")
+	for _, ch := range insertedChannels {
+		model.RecordOperationLog(c, userId, model.OperationModuleChannel, model.OperationActionCreate,
+			strconv.Itoa(ch.Id), ch.Name, nil, sanitizeChannelForLog(&ch),
+			fmt.Sprintf("创建渠道: %s", ch.Name))
+	}
+
+	recordManageAudit(c, "channel.create", map[string]interface{}{
+		"name":  addChannelRequest.Channel.Name,
+		"type":  addChannelRequest.Channel.Type,
+		"count": len(channels),
+	})
+	resp := gin.H{
 	createAudit := map[string]any{
 		"name":  addChannelRequest.Channel.Name,
 		"type":  addChannelRequest.Channel.Type,
@@ -836,13 +963,27 @@ func AddChannel(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-	})
+		"data": gin.H{
+			"ids": channelIds,
+		},
+	}
+	// 兼容前端在单渠道创建场景下读取 data.id 的写法
+	if len(channelIds) == 1 {
+		resp["data"].(gin.H)["id"] = channelIds[0]
+	}
+	c.JSON(http.StatusOK, resp)
 	return
 }
 
 func DeleteChannel(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
+
+	// 先获取渠道信息用于日志记录
+	oldChannel, _ := model.GetChannelById(id, false)
+
 	channelName := ""
+	if oldChannel != nil {
+		channelName = oldChannel.Name
 	channelProxy := ""
 	channelLookupFailed := false
 	if existing, err := model.GetChannelById(id, false); err == nil && existing != nil {
@@ -858,6 +999,14 @@ func DeleteChannel(c *gin.Context) {
 		return
 	}
 	model.InitChannelCache()
+
+	// 记录操作日志
+	userId := c.GetInt("id")
+	model.RecordOperationLog(c, userId, model.OperationModuleChannel, model.OperationActionDelete,
+		strconv.Itoa(id), channelName, sanitizeChannelForLog(oldChannel), nil,
+		fmt.Sprintf("删除渠道: %s (ID: %d)", channelName, id))
+
+	recordManageAudit(c, "channel.delete", map[string]interface{}{
 	if channelLookupFailed {
 		service.ResetProxyClientCache()
 	} else {
@@ -1050,6 +1199,91 @@ func DeleteChannelBatch(c *gin.Context) {
 	return
 }
 
+func BatchEnableChannels(c *gin.Context) {
+	channelBatch := ChannelBatch{}
+	err := c.ShouldBindJSON(&channelBatch)
+	if err != nil || len(channelBatch.Ids) == 0 {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "参数错误",
+		})
+		return
+	}
+	err = model.BatchUpdateChannelStatus(channelBatch.Ids, 1)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	model.InitChannelCache()
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "",
+		"data":    len(channelBatch.Ids),
+	})
+}
+
+func BatchDisableChannels(c *gin.Context) {
+	channelBatch := ChannelBatch{}
+	err := c.ShouldBindJSON(&channelBatch)
+	if err != nil || len(channelBatch.Ids) == 0 {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "参数错误",
+		})
+		return
+	}
+	err = model.BatchUpdateChannelStatus(channelBatch.Ids, 2)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	model.InitChannelCache()
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "",
+		"data":    len(channelBatch.Ids),
+	})
+}
+
+type ChannelBatchEdit struct {
+	Ids    []int   `json:"ids"`
+	MaxRPM *int    `json:"max_rpm"`
+	Proxy  *string `json:"proxy"`
+}
+
+func BatchEditChannels(c *gin.Context) {
+	req := ChannelBatchEdit{}
+	err := c.ShouldBindJSON(&req)
+	if err != nil || len(req.Ids) == 0 {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "参数错误",
+		})
+		return
+	}
+	if req.MaxRPM != nil && *req.MaxRPM != -1 {
+		for _, id := range req.Ids {
+			if err := model.SetChannelMaxRPM(id, *req.MaxRPM); err != nil {
+				common.ApiError(c, err)
+				return
+			}
+		}
+	}
+	if req.Proxy != nil {
+		if err := model.BatchUpdateChannelProxy(req.Ids, *req.Proxy); err != nil {
+			common.ApiError(c, err)
+			return
+		}
+		service.ResetProxyClientCache()
+	}
+	model.InitChannelCache()
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "",
+		"data":    len(req.Ids),
+	})
+}
+
 type PatchChannel struct {
 	model.Channel
 	MultiKeyMode *string `json:"multi_key_mode"`
@@ -1157,7 +1391,7 @@ func UpdateChannel(c *gin.Context) {
 				if strings.HasPrefix(strings.TrimSpace(originChannel.Key), "[") {
 					// JSON数组格式
 					var arr []json.RawMessage
-					if err := json.Unmarshal([]byte(strings.TrimSpace(originChannel.Key)), &arr); err == nil {
+					if err := common.Unmarshal([]byte(strings.TrimSpace(originChannel.Key)), &arr); err == nil {
 						existingKeys = make([]string, len(arr))
 						for i, v := range arr {
 							existingKeys[i] = string(v)
@@ -1227,6 +1461,14 @@ func UpdateChannel(c *gin.Context) {
 		return
 	}
 	model.InitChannelCache()
+	service.ResetProxyClientCache()
+
+	// 记录操作日志
+	userId := c.GetInt("id")
+	model.RecordOperationLog(c, userId, model.OperationModuleChannel, model.OperationActionUpdate,
+		strconv.Itoa(channel.Id), channel.Name, sanitizeChannelForLog(originChannel), sanitizeChannelForLog(&channel.Channel),
+		fmt.Sprintf("更新渠道: %s (ID: %d)", channel.Name, channel.Id))
+
 	if proxyChanged {
 		service.InvalidateProxyClient(originProxy)
 	}
@@ -1264,6 +1506,35 @@ func UpdateChannel(c *gin.Context) {
 		"data":    channel,
 	})
 	return
+}
+
+// PatchChannelModels 仅更新渠道的 models 字段（用于预测试后过滤无效模型）
+func PatchChannelModels(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	var req struct {
+		Models string `json:"models"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	channel, err := model.GetChannelById(id, false)
+	if err != nil || channel == nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "渠道不存在"})
+		return
+	}
+	channel.Models = req.Models
+	if err := channel.UpdateModels(); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	model.InitChannelCache()
+	service.ResetProxyClientCache()
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": ""})
 }
 
 func UpdateChannelStatus(c *gin.Context) {
@@ -1377,6 +1648,12 @@ func buildAdvancedCustomModelPreviewChannel(req fetchModelsRequest) (*model.Chan
 		}
 	}
 
+	baseURL := req.BaseURL
+	if !operation_setting.IsChannelBaseURLInputEnabled() {
+		baseURL = ""
+	}
+	if baseURL == "" {
+		baseURL = constant.ChannelBaseURLs[req.Type]
 	if channel.Type != constant.ChannelTypeAdvancedCustom {
 		return nil, fmt.Errorf("channel type must be advanced custom")
 	}
@@ -2189,7 +2466,7 @@ func OllamaPullModelStream(c *gin.Context) {
 
 	// 创建进度回调函数
 	progressCallback := func(progress ollama.OllamaPullResponse) {
-		data, _ := json.Marshal(progress)
+		data, _ := common.Marshal(progress)
 		fmt.Fprintf(c.Writer, "data: %s\n\n", string(data))
 		c.Writer.Flush()
 	}
@@ -2198,12 +2475,12 @@ func OllamaPullModelStream(c *gin.Context) {
 	err = ollama.PullOllamaModelStream(baseURL, key, req.ModelName, progressCallback)
 
 	if err != nil {
-		errorData, _ := json.Marshal(gin.H{
+		errorData, _ := common.Marshal(gin.H{
 			"error": err.Error(),
 		})
 		fmt.Fprintf(c.Writer, "data: %s\n\n", string(errorData))
 	} else {
-		successData, _ := json.Marshal(gin.H{
+		successData, _ := common.Marshal(gin.H{
 			"message": fmt.Sprintf("Model %s pulled successfully", req.ModelName),
 		})
 		fmt.Fprintf(c.Writer, "data: %s\n\n", string(successData))
@@ -2321,6 +2598,147 @@ func OllamaVersion(c *gin.Context) {
 		"success": true,
 		"data": gin.H{
 			"version": version,
+		},
+	})
+}
+
+// GetChannelStats 获取渠道统计数据（从缓存获取，仅已启用的渠道）
+func GetChannelStats(c *gin.Context) {
+	stats := operation_setting.GetAllChannelStats()
+	updatedAt := operation_setting.GetChannelStatsUpdatedAt()
+
+	// 实时 RPM：合并到缓存快照里（轻量查询，最近 60 秒按 channel_id 分组的 COUNT）
+	if rpmMap, err := model.GetChannelRpmFromLogs(); err == nil {
+		// 对于 RPM 有数据但缓存里没有的渠道（冷启动、非 master 节点、刷新间隔内新增流量等场景），
+		// 现场查一次 24h 统计补齐，避免前端出现“RPM 有数 / 其它三列全 0”。
+		var missing []int
+		for channelId := range rpmMap {
+			if _, ok := stats[channelId]; !ok {
+				missing = append(missing, channelId)
+			}
+		}
+		if len(missing) > 0 {
+			if results, qerr := model.GetChannelStatsFromLogs(); qerr == nil {
+				for _, channelId := range missing {
+					if result, ok := results[channelId]; ok {
+						stats[channelId] = buildChannelStats(channelId, result)
+					}
+				}
+			}
+		}
+		mergeChannelRpm(stats, rpmMap)
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data": gin.H{
+			"stats":      stats,
+			"updated_at": updatedAt,
+		},
+	})
+}
+
+// RefreshChannelStats 手动刷新渠道统计数据（实时查询，包括禁用的渠道）
+func RefreshChannelStats(c *gin.Context) {
+	// 查询所有渠道的统计数据（包括禁用的）
+	results, err := model.GetAllChannelStatsFromLogs()
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": err.Error(),
+		})
+		return
+	}
+
+	// 转换为 ChannelStats 格式
+	stats := make(map[int]*operation_setting.ChannelStats)
+	for channelId, result := range results {
+		stats[channelId] = buildChannelStats(channelId, result)
+	}
+
+	// 合并实时 RPM
+	if rpmMap, err := model.GetChannelRpmFromLogs(); err == nil {
+		mergeChannelRpm(stats, rpmMap)
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data": gin.H{
+			"stats":      stats,
+			"updated_at": time.Now().Unix(),
+		},
+	})
+}
+
+// buildChannelStats 将 24h 聚合结果转换成 ChannelStats
+func buildChannelStats(channelId int, result *model.ChannelStatsResult) *operation_setting.ChannelStats {
+	successRate := float64(0)
+	timeoutRate := float64(0)
+	if result.TotalCount > 0 {
+		successRate = float64(result.SuccessCount) / float64(result.TotalCount) * 100
+		timeoutRate = float64(result.TimeoutCount) / float64(result.TotalCount) * 100
+	}
+	return &operation_setting.ChannelStats{
+		ChannelID:    channelId,
+		TotalCount:   result.TotalCount,
+		SuccessCount: result.SuccessCount,
+		FailCount:    result.FailCount,
+		TimeoutCount: result.TimeoutCount,
+		SuccessRate:  successRate,
+		TimeoutRate:  timeoutRate,
+	}
+}
+
+// mergeChannelRpm 将实时 RPM 合并到渠道统计里；对于只有 RPM 无历史统计的渠道也补齐条目
+func mergeChannelRpm(stats map[int]*operation_setting.ChannelStats, rpmMap map[int]int) {
+	for channelId, rpm := range rpmMap {
+		if s, ok := stats[channelId]; ok {
+			s.Rpm = rpm
+		} else {
+			stats[channelId] = &operation_setting.ChannelStats{
+				ChannelID: channelId,
+				Rpm:       rpm,
+			}
+		}
+	}
+}
+
+// GetBadChannelCount 返回当前启用渠道里失败率 >= 95% 的数量（用于侧边栏 Badge 提示）
+// 失败率定义：(FailCount + TimeoutCount) / TotalCount = 1 - SuccessRate/100
+// 仅统计 TotalCount > 0 的渠道，避免无流量渠道被算成 100% 失败
+const badChannelSuccessRateThreshold = 5.0
+
+func GetBadChannelCount(c *gin.Context) {
+	var enabledIds []int
+	if err := model.DB.Model(&model.Channel{}).
+		Where("status = ?", common.ChannelStatusEnabled).
+		Pluck("id", &enabledIds).Error; err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	enabledSet := make(map[int]struct{}, len(enabledIds))
+	for _, id := range enabledIds {
+		enabledSet[id] = struct{}{}
+	}
+
+	stats := operation_setting.GetAllChannelStats()
+	count := 0
+	for channelId, s := range stats {
+		if _, ok := enabledSet[channelId]; !ok {
+			continue
+		}
+		if s == nil || s.TotalCount <= 0 {
+			continue
+		}
+		if s.SuccessRate <= badChannelSuccessRateThreshold {
+			count++
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data": gin.H{
+			"count": count,
 		},
 	})
 }

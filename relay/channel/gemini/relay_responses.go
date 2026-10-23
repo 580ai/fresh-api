@@ -148,6 +148,45 @@ func GeminiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, r
 		return true
 	}
 
+	usage, _, streamAPIError := geminiStreamHandler(c, info, resp, func(data string, geminiResponse *dto.GeminiChatResponse) bool {
+		response, isStop := streamResponseGeminiChat2OpenAI(geminiResponse)
+		response.Id = responseID
+		response.Created = created
+		response.Model = info.UpstreamModelName
+
+		if response.IsToolCall() {
+			finishReason = constant.FinishReasonToolCalls
+		}
+		for choiceIdx := range response.Choices {
+			choiceKey := response.Choices[choiceIdx].Index
+			for toolIdx := range response.Choices[choiceIdx].Delta.ToolCalls {
+				tool := &response.Choices[choiceIdx].Delta.ToolCalls[toolIdx]
+				if tool.ID == "" {
+					continue
+				}
+				indexByID := toolCallIndexByChoice[choiceKey]
+				if indexByID == nil {
+					indexByID = make(map[string]int)
+					toolCallIndexByChoice[choiceKey] = indexByID
+				}
+				if idx, ok := indexByID[tool.ID]; ok {
+					tool.SetIndex(idx)
+					continue
+				}
+				idx := nextToolCallIndexByChoice[choiceKey]
+				nextToolCallIndexByChoice[choiceKey] = idx + 1
+				indexByID[tool.ID] = idx
+				tool.SetIndex(idx)
+			}
+		}
+
+		if !sendChunk(response) {
+			return false
+		}
+		if isStop {
+			return sendChunk(helper.GenerateStopResponse(responseID, created, info.UpstreamModelName, finishReason))
+		}
+		return true
 	usage, streamAPIError := geminiStreamHandler(c, info, resp, func(_ string, geminiResponse *dto.GeminiChatResponse) bool {
 		hostedBridge.Observe(geminiResponse)
 		return sendChunk(geminiResponse)

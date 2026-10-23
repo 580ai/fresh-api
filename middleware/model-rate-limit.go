@@ -88,11 +88,13 @@ func redisRateLimitHandler(subject string, duration int64, totalMaxCount, succes
 		successKey := fmt.Sprintf("rateLimit:%s:%s", ModelRequestRateLimitSuccessCountMark, subject)
 		allowed, err := checkRedisRateLimit(ctx, rdb, successKey, successMaxCount, duration)
 		if err != nil {
+			fmt.Println("rate limit check failed:", err.Error())
 			fmt.Println(common.LogText("failed to check the successful request limit: %s", err.Error()))
 			abortWithOpenAiMessage(c, http.StatusInternalServerError, "rate_limit_check_failed")
 			return
 		}
 		if !allowed {
+			abortWithOpenAiMessage(c, http.StatusTooManyRequests, fmt.Sprintf("Rate limit exceeded: max %d successful requests per %d minute(s)", successMaxCount, setting.ModelRequestRateLimitDurationMinutes))
 			abortWithOpenAiMessage(c, http.StatusTooManyRequests, i18n.T(c, i18n.MsgRateLimitReached, map[string]any{"Minutes": setting.ModelRequestRateLimitDurationMinutes, "Max": successMaxCount}))
 			return
 		}
@@ -111,12 +113,14 @@ func redisRateLimitHandler(subject string, duration int64, totalMaxCount, succes
 			)
 
 			if err != nil {
+				fmt.Println("rate limit check failed:", err.Error())
 				fmt.Println(common.LogText("failed to check the total request limit: %s", err.Error()))
 				abortWithOpenAiMessage(c, http.StatusInternalServerError, "rate_limit_check_failed")
 				return
 			}
 
 			if !allowed {
+				abortWithOpenAiMessage(c, http.StatusTooManyRequests, fmt.Sprintf("Rate limit exceeded: max %d total requests per %d minute(s), including failed requests", totalMaxCount, setting.ModelRequestRateLimitDurationMinutes))
 				abortWithOpenAiMessage(c, http.StatusTooManyRequests, i18n.T(c, i18n.MsgRateLimitTotalReached, map[string]any{"Minutes": setting.ModelRequestRateLimitDurationMinutes, "Max": totalMaxCount}))
 				return
 			}
@@ -142,6 +146,16 @@ func memoryRateLimitHandler(subject string, duration int64, totalMaxCount, succe
 
 		// 1. 检查总请求数限制（当totalMaxCount为0时跳过）
 		if totalMaxCount > 0 && !inMemoryRateLimiter.Request(totalKey, totalMaxCount, duration) {
+			abortWithOpenAiMessage(c, http.StatusTooManyRequests, fmt.Sprintf("Rate limit exceeded: max %d total requests per %d minute(s), including failed requests", totalMaxCount, setting.ModelRequestRateLimitDurationMinutes))
+			return
+		}
+
+		// 2. 检查成功请求数限制
+		// 使用一个临时key来检查限制，这样可以避免实际记录
+		checkKey := successKey + "_check"
+		if !inMemoryRateLimiter.Request(checkKey, successMaxCount, duration) {
+			abortWithOpenAiMessage(c, http.StatusTooManyRequests, fmt.Sprintf("Rate limit exceeded: max %d successful requests per %d minute(s)", successMaxCount, setting.ModelRequestRateLimitDurationMinutes))
+			return
 			abortWithOpenAiMessage(c, http.StatusTooManyRequests, i18n.T(c, i18n.MsgRateLimitTotalReached, map[string]any{"Minutes": setting.ModelRequestRateLimitDurationMinutes, "Max": totalMaxCount}))
 			return
 		}
@@ -172,23 +186,37 @@ func modelRequestSucceeded(c *gin.Context) bool {
 // ModelRequestRateLimit 模型请求限流中间件
 func ModelRequestRateLimit() func(c *gin.Context) {
 	return func(c *gin.Context) {
-		// 在每个请求时检查是否启用限流
-		if !setting.ModelRequestRateLimitEnabled {
-			c.Next()
-			return
-		}
-
 		// 计算限流参数
 		duration := rateLimitDurationSeconds(setting.ModelRequestRateLimitDurationMinutes)
 		totalMaxCount := setting.ModelRequestRateLimitCount
 		successMaxCount := setting.ModelRequestRateLimitSuccessCount
 
-		// 获取分组
-		group := common.GetContextKeyString(c, constant.ContextKeyTokenGroup)
-		if group == "" {
-			group = common.GetContextKeyString(c, constant.ContextKeyUserGroup)
-		}
+		// 优先级：用户级别 > 分组级别 > 全局级别
+		userId := c.GetInt("id")
+		userTotalCount, userSuccessCount, userFound := setting.GetUserRateLimit(userId)
+		if userFound {
+			// 用户级别限速：无论全局开关是否开启，只要设置了用户级别限速就生效
+			totalMaxCount = userTotalCount
+			successMaxCount = userSuccessCount
+		} else {
+			// 非用户级别限速：需要检查全局开关
+			if !setting.ModelRequestRateLimitEnabled {
+				c.Next()
+				return
+			}
 
+			// 获取分组
+			group := common.GetContextKeyString(c, constant.ContextKeyTokenGroup)
+			if group == "" {
+				group = common.GetContextKeyString(c, constant.ContextKeyUserGroup)
+			}
+
+			//获取分组的限流配置
+			groupTotalCount, groupSuccessCount, found := setting.GetGroupRateLimit(group)
+			if found {
+				totalMaxCount = groupTotalCount
+				successMaxCount = groupSuccessCount
+			}
 		// 获取分组的限流配置。配置了独立限流的分组按用户和分组单独计数，
 		// 其余分组共用该用户的全局计数
 		subject := strconv.Itoa(c.GetInt("id"))

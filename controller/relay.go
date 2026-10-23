@@ -16,6 +16,7 @@ import (
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	pluginruntime "github.com/QuantumNous/new-api/pkg/jsplugin"
 	perfmetrics "github.com/QuantumNous/new-api/pkg/perf_metrics"
 	"github.com/QuantumNous/new-api/relay"
@@ -181,8 +182,22 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		relayInfo.RetryIndex = retryParam.GetRetry()
 		channel, channelErr := getChannel(c, relayInfo, retryParam)
 		if channelErr != nil {
+			// [CUSTOM] 渠道RPM限流 - 限流错误返回 channel 不为 nil，走正常重试流程
+			if channel != nil && types.IsChannelRateLimitedError(channelErr) {
+				addUsedChannel(c, channel.Id)
+				processChannelError(c, *types.NewChannelError(channel.Id, channel.Type, channel.Name, false, "", channel.GetAutoBan()), channelErr)
+				newAPIError = channelErr
+				if !shouldRetry(c, channelErr, common.RetryTimes-retryParam.GetRetry()) {
+					break
+				}
+				continue
+			}
 			logger.LogError(c, channelErr.Error())
-			newAPIError = channelErr
+			// [CUSTOM] 如果之前已有渠道返回的实际错误，保留那个错误而不是"无可用渠道"
+			// 这样用户能看到实际的上游错误而不是误导性的"无可用渠道"信息
+			if newAPIError == nil {
+				newAPIError = channelErr
+			}
 			break
 		}
 		service.AppendUsedChannel(c, channel.Id)
@@ -215,6 +230,11 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		}
 
 		if newAPIError == nil {
+			// [CUSTOM] 渠道RPM限流 - 记录成功的请求
+			channelId := c.GetInt("channel_id")
+			if channelId > 0 {
+				service.RecordChannelRequest(channelId)
+			}
 			service.MarkRequestPolicySuccess(c, relayInfo.StreamStatus)
 			relayInfo.LastError = nil
 			return
@@ -298,11 +318,37 @@ var upgrader = websocket.Upgrader{
 
 func getChannel(c *gin.Context, info *relaycommon.RelayInfo, retryParam *service.RetryParam) (*model.Channel, *types.NewAPIError) {
 	if info.ChannelMeta == nil {
+		// 渠道已被中间件预先选定
+		channelId := c.GetInt("channel_id")
+
 		autoBan := c.GetBool("auto_ban")
 		autoBanInt := 1
 		if !autoBan {
 			autoBanInt = 0
 		}
+
+		// [CUSTOM] 渠道RPM限流检查
+		if channelId > 0 && !service.CheckChannelRateLimit(channelId) {
+			// 渠道被限流，返回限流错误，让外层重试机制处理（和其他错误一样的处理方式）
+			channel := &model.Channel{
+				Id:      channelId,
+				Type:    c.GetInt("channel_type"),
+				Name:    c.GetString("channel_name"),
+				AutoBan: &autoBanInt,
+			}
+			// 设置 ChannelMeta，使重试时走动态选择逻辑（和正常错误处理后的行为一致）
+			info.InitChannelMeta(c)
+			rateLimitErr := types.NewErrorWithStatusCode(
+				fmt.Errorf("The current model is already loaded. Please try again later"),
+				types.ErrorCodeChannelRateLimited,
+				http.StatusTooManyRequests,
+			)
+			return channel, rateLimitErr
+		}
+
+		// 未超限，使用预选渠道
+		return &model.Channel{
+			Id:      channelId,
 		channel := &model.Channel{
 			Id:      c.GetInt("channel_id"),
 			Type:    c.GetInt("channel_type"),
@@ -312,12 +358,47 @@ func getChannel(c *gin.Context, info *relaycommon.RelayInfo, retryParam *service
 		service.RequestPolicy(c).BeginAttempt(channel, info.UsingGroup)
 		return channel, nil
 	}
+
+	// 动态选择渠道
+	channel, selectGroup, err := service.CacheGetRandomSatisfiedChannel(retryParam)
+	info.PriceData.GroupRatioInfo = helper.HandleGroupRatio(c, info)
+
 	channel, selectGroup, err := service.CacheGetRandomSatisfiedChannel(retryParam)
 	if err != nil {
 		return nil, types.NewError(errors.New(i18n.T(c, i18n.MsgRelayRetryGetChannelFailed, map[string]any{"Group": selectGroup, "Model": info.OriginModelName, "Error": err.Error()})), types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
 	}
 	if channel == nil {
 		return nil, types.NewError(errors.New(i18n.T(c, i18n.MsgRelayRetryNoAvailableChannel, map[string]any{"Group": selectGroup, "Model": info.OriginModelName})), types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
+	}
+
+	// [CUSTOM] 渠道RPM限流检查
+	if !service.CheckChannelRateLimit(channel.Id) {
+		// 渠道被限流，返回限流错误，让外层重试机制处理
+		rateLimitErr := types.NewErrorWithStatusCode(
+			fmt.Errorf("The current model is already loaded. Please try again later"),
+			types.ErrorCodeChannelRateLimited,
+			http.StatusTooManyRequests,
+		)
+		return channel, rateLimitErr
+	}
+
+	if info.Billing != nil && info.TieredBillingSnapshot != nil {
+		targetQuota, err := billingexpr.QuotaRoundStrict(
+			info.TieredBillingSnapshot.EstimatedQuotaBeforeGroup * info.PriceData.GroupRatioInfo.GroupRatio,
+		)
+		if err != nil {
+			return nil, types.NewErrorWithStatusCode(
+				err,
+				types.ErrorCodeModelPriceError,
+				http.StatusBadRequest,
+				types.ErrOptionWithSkipRetry(),
+			)
+		}
+		if err := info.Billing.Reserve(targetQuota); err != nil {
+			return nil, types.NewError(err, types.ErrorCodeUpdateDataError, types.ErrOptionWithSkipRetry())
+		}
+		info.TieredBillingSnapshot.EstimatedQuotaAfterGroup = targetQuota
+		info.PriceData.QuotaToPreConsume = targetQuota
 	}
 
 	info.PriceData.GroupRatioInfo = helper.HandleGroupRatio(c, info)
@@ -329,6 +410,87 @@ func getChannel(c *gin.Context, info *relaycommon.RelayInfo, retryParam *service
 	}
 	return channel, nil
 }
+
+func shouldRetry(c *gin.Context, openaiErr *types.NewAPIError, retryTimes int) bool {
+	if openaiErr == nil {
+		return false
+	}
+	if service.ShouldSkipRetryAfterChannelAffinityFailure(c) {
+		return false
+	}
+	if types.IsChannelError(openaiErr) {
+		// [CUSTOM] 渠道RPM限流 - 限流错误仍需遵循重试次数限制
+		if types.IsChannelRateLimitedError(openaiErr) {
+			return retryTimes > 0
+		}
+		return true
+	}
+	if types.IsSkipRetryError(openaiErr) {
+		return false
+	}
+	if retryTimes <= 0 {
+		return false
+	}
+	if _, ok := c.Get("specific_channel_id"); ok {
+		return false
+	}
+	code := openaiErr.StatusCode
+	if code >= 200 && code < 300 {
+		return false
+	}
+	if code < 100 || code > 599 {
+		return true
+	}
+	if operation_setting.IsAlwaysSkipRetryCode(openaiErr.GetErrorCode()) {
+		return false
+	}
+	return operation_setting.ShouldRetryByStatusCode(code)
+}
+
+func processChannelError(c *gin.Context, channelError types.ChannelError, err *types.NewAPIError) {
+	logger.LogError(c, fmt.Sprintf("channel error (channel #%d, status code: %d): %s", channelError.ChannelId, err.StatusCode, common.LocalLogPreview(err.Error())))
+	// 不要使用context获取渠道信息，异步处理时可能会出现渠道信息不一致的情况
+	// do not use context to get channel info, there may be inconsistent channel info when processing asynchronously
+	if service.ShouldDisableChannel(err) && channelError.AutoBan {
+		gopool.Go(func() {
+			service.DisableChannel(channelError, err.ErrorWithStatusCode())
+		})
+	}
+
+	if constant.ErrorLogEnabled && types.IsRecordErrorLog(err) {
+		// 保存错误日志到mysql中
+		userId := c.GetInt("id")
+		tokenName := c.GetString("token_name")
+		modelName := c.GetString("original_model")
+		tokenId := c.GetInt("token_id")
+		userGroup := c.GetString("group")
+		channelId := c.GetInt("channel_id")
+		other := make(map[string]interface{})
+		if c.Request != nil && c.Request.URL != nil {
+			other["request_path"] = c.Request.URL.Path
+		}
+		other["error_type"] = err.GetErrorType()
+		other["error_code"] = err.GetErrorCode()
+		other["status_code"] = err.StatusCode
+		other["channel_id"] = channelId
+		other["channel_name"] = c.GetString("channel_name")
+		other["channel_type"] = c.GetInt("channel_type")
+		adminInfo := make(map[string]interface{})
+		adminInfo["use_channel"] = c.GetStringSlice("use_channel")
+		isMultiKey := common.GetContextKeyBool(c, constant.ContextKeyChannelIsMultiKey)
+		if isMultiKey {
+			adminInfo["is_multi_key"] = true
+			adminInfo["multi_key_index"] = common.GetContextKeyInt(c, constant.ContextKeyChannelMultiKeyIndex)
+		}
+		service.AppendChannelAffinityAdminInfo(c, adminInfo)
+		other["admin_info"] = adminInfo
+		startTime := common.GetContextKeyTime(c, constant.ContextKeyRequestStartTime)
+		if startTime.IsZero() {
+			startTime = time.Now()
+		}
+		useTimeSeconds := int(time.Since(startTime).Seconds())
+		model.RecordErrorLog(c, userId, channelId, modelName, tokenName, err.MaskSensitiveErrorWithStatusCode(), tokenId, useTimeSeconds, common.GetContextKeyBool(c, constant.ContextKeyIsStream), userGroup, other)
+	}
 
 func processChannelError(c *gin.Context, channelError types.ChannelError, err *types.NewAPIError, relayInfo *relaycommon.RelayInfo) {
 	service.ProcessChannelError(c, channelError, err, relayInfo)
@@ -560,6 +722,16 @@ func executeTaskSubmissionWith(
 			var channelErr *types.NewAPIError
 			channel, channelErr = getChannel(c, relayInfo, retryParam)
 			if channelErr != nil {
+				// [CUSTOM] 渠道RPM限流 - 限流错误返回 channel 不为 nil，走正常重试流程
+				if channel != nil && types.IsChannelRateLimitedError(channelErr) {
+					addUsedChannel(c, channel.Id)
+					processChannelError(c, *types.NewChannelError(channel.Id, channel.Type, channel.Name, false, "", channel.GetAutoBan()), channelErr)
+					if shouldRetryTaskRelay(c, channel.Id, &dto.TaskError{StatusCode: http.StatusTooManyRequests, LocalError: true}, common.RetryTimes-retryParam.GetRetry()) {
+						continue
+					}
+					taskErr = service.TaskErrorWrapperLocal(channelErr.Err, "channel_rate_limited", http.StatusTooManyRequests)
+					break
+				}
 				logger.LogError(c, channelErr.Error())
 				taskErr = service.TaskErrorWrapperLocal(channelErr.Err, "get_channel_failed", channelErr.StatusCode)
 				break

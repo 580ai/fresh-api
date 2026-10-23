@@ -8,6 +8,12 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/dto"
+	"github.com/QuantumNous/new-api/relay/channel"
+	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/relay/helper"
+	"github.com/QuantumNous/new-api/service/relayconvert"
 	"github.com/QuantumNous/new-api/relay/channel"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
@@ -34,6 +40,31 @@ func (a *Adaptor) ConvertGeminiRequest(c *gin.Context, info *relaycommon.RelayIn
 }
 
 func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, info *relaycommon.RelayInfo, request *dto.ClaudeRequest) (any, error) {
+	// 模拟用户ID：基于请求内容生成稳定的 metadata.user_id，提高缓存命中率
+	if info.ChannelSetting.SimulateUserId && info.UserId > 0 {
+		var existingMetadata map[string]interface{}
+
+		if len(request.Metadata) > 0 {
+			// 尝试解析现有的 metadata，保留其他字段
+			if err := common.Unmarshal(request.Metadata, &existingMetadata); err != nil {
+				existingMetadata = make(map[string]interface{})
+			}
+		} else {
+			existingMetadata = make(map[string]interface{})
+		}
+
+		// 用户已经传了 user_id 就用用户的，没传才生成
+		if _, hasUserId := existingMetadata["user_id"]; !hasUserId {
+			stableUserId := helper.GenerateStableUserId(request.System, request.Messages)
+			existingMetadata["user_id"] = stableUserId
+		}
+
+		metadataJSON, err := common.Marshal(existingMetadata)
+		if err == nil {
+			request.Metadata = metadataJSON
+		}
+	}
+
 	if request.MaxTokens != nil && *request.MaxTokens == 0 {
 		request.MaxTokens = nil
 	}
