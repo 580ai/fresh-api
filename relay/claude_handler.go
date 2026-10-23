@@ -1,6 +1,8 @@
 package relay
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -15,6 +17,9 @@ import (
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/model_setting"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
+	"github.com/QuantumNous/new-api/setting/reasoning"
+	"github.com/QuantumNous/new-api/types"
 
 	"github.com/gin-gonic/gin"
 )
@@ -22,6 +27,15 @@ import (
 func ClaudeHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types.NewAPIError) {
 
 	info.InitChannelMeta(c)
+
+	// 收集请求体内容用于日志记录
+	if operation_setting.IsLogContentEnabledForUser(info.UserId) {
+		if storage, err := common.GetBodyStorage(c); err == nil {
+			if bodyBytes, bErr := storage.Bytes(); bErr == nil {
+				c.Set("log_request_body", string(bodyBytes))
+			}
+		}
+	}
 
 	claudeReq, ok := info.Request.(*dto.ClaudeRequest)
 
@@ -90,6 +104,48 @@ func ClaudeHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 		storage, err := common.GetBodyStorage(c)
 		if err != nil {
 			return types.NewErrorWithStatusCode(err, types.ErrorCodeReadRequestBodyFailed, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
+		}
+		info.UpstreamRequestBodySize = storage.Size()
+
+		// 透传模式下仍然支持模拟用户ID注入
+		if info.ChannelSetting.SimulateUserId && info.UserId > 0 {
+			bodyBytes, readErr := storage.Bytes()
+			if readErr != nil {
+				return types.NewErrorWithStatusCode(readErr, types.ErrorCodeReadRequestBodyFailed, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
+			}
+
+			var bodyMap map[string]interface{}
+			if unmarshalErr := common.Unmarshal(bodyBytes, &bodyMap); unmarshalErr == nil {
+				// 获取或创建 metadata
+				var metadata map[string]interface{}
+				if existingMeta, ok := bodyMap["metadata"].(map[string]interface{}); ok {
+					metadata = existingMeta
+				} else {
+					metadata = make(map[string]interface{})
+				}
+
+				// 用户已经传了 user_id 就用用户的，没传才生成
+				if _, hasUserId := metadata["user_id"]; !hasUserId {
+					stableUserId := helper.GenerateStableUserIdFromRaw(bodyMap)
+					metadata["user_id"] = stableUserId
+					bodyMap["metadata"] = metadata
+
+					// 调试日志
+					common.SysLog(fmt.Sprintf("[SimulateUserId] Injected user_id=%s for UserId=%d, stream=%v", stableUserId, info.UserId, info.IsStream))
+				}
+
+				// 重新序列化
+				modifiedBody, marshalErr := common.Marshal(bodyMap)
+				if marshalErr == nil {
+					requestBody = bytes.NewBuffer(modifiedBody)
+				} else {
+					requestBody = bytes.NewBuffer(bodyBytes)
+				}
+			} else {
+				requestBody = bytes.NewBuffer(bodyBytes)
+			}
+		} else {
+			requestBody = common.ReaderOnly(storage)
 		}
 		requestBody = common.NewReplayableBodyReader(storage)
 	} else {

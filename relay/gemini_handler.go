@@ -15,6 +15,8 @@ import (
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/model_setting"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
+	"github.com/QuantumNous/new-api/types"
 
 	"github.com/gin-gonic/gin"
 )
@@ -22,9 +24,28 @@ import (
 func GeminiHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types.NewAPIError) {
 	info.InitChannelMeta(c)
 
+	// 收集请求体内容用于日志记录
+	if operation_setting.IsLogContentEnabledForUser(info.UserId) {
+		if storage, err := common.GetBodyStorage(c); err == nil {
+			if bodyBytes, bErr := storage.Bytes(); bErr == nil {
+				c.Set("log_request_body", string(bodyBytes))
+			}
+		}
+	}
+
 	geminiReq, ok := info.Request.(*dto.GeminiChatRequest)
 	if !ok {
 		return types.NewErrorWithStatusCode(fmt.Errorf("invalid request type, expected *dto.GeminiChatRequest, got %T", info.Request), types.ErrorCodeInvalidRequest, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
+	}
+
+	// 从 generationConfig.imageConfig 获取 imageSize 用于特殊模型计费
+	if geminiReq.GenerationConfig.ImageConfig != nil && len(geminiReq.GenerationConfig.ImageConfig) > 0 {
+		var imageConfig struct {
+			ImageSize string `json:"imageSize"`
+		}
+		if err := common.Unmarshal(geminiReq.GenerationConfig.ImageConfig, &imageConfig); err == nil && imageConfig.ImageSize != "" {
+			c.Set("gemini_image_size", imageConfig.ImageSize)
+		}
 	}
 
 	request, err := common.DeepCopy(geminiReq)
