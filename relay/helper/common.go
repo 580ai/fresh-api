@@ -1,6 +1,9 @@
 package helper
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"context"
 	"errors"
 	"fmt"
@@ -14,6 +17,7 @@ import (
 	"github.com/QuantumNous/new-api/relaykit/types"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 )
 
@@ -365,4 +369,169 @@ func GenerateFinalUsageResponse(id string, createAt int64, model string, usage d
 		Choices:           make([]dto.ChatCompletionsStreamResponseChoice, 0),
 		Usage:             &usage,
 	}
+}
+
+// claudeUserIdNamespace 用于 UUID v5 生成的固定命名空间
+var claudeUserIdNamespace = uuid.MustParse("6ba7b810-9dad-11d1-80b4-00c04fd430c8")
+
+// GenerateStableUserId 基于请求内容生成稳定的 user_id，提高前缀缓存命中率。
+// 同一个 system prompt 的请求会分配到同一个缓存池。
+// 格式: user_{64位Hex}_account__session_{UUID}
+func GenerateStableUserId(system any, messages []dto.ClaudeMessage) string {
+	// 提取 system prompt 文本作为缓存指纹的主要依据
+	// 同一个 system prompt 的所有请求共享缓存池，前缀匹配由 API 自动完成
+	systemText := extractSystemText(system)
+
+	// 提取第一条 user message 进一步区分不同会话
+	firstUserMsg := extractFirstUserMessage(messages)
+
+	// 纯靠内容指纹：同一个 Claude Code 会话的 system prompt 包含
+	// 项目路径、CLAUDE.md 等，天然唯一；首条消息进一步区分
+	identifier := fmt.Sprintf("%s|%s", systemText, firstUserMsg)
+
+	// 生成稳定的 64 位 Hex（SHA256）
+	hash := sha256.Sum256([]byte(identifier))
+	hexPart := hex.EncodeToString(hash[:]) // 64 位 hex
+
+	// 生成稳定的 UUID（UUID v5）
+	uuidPart := uuid.NewSHA1(claudeUserIdNamespace, []byte(identifier))
+
+	return fmt.Sprintf("user_%s_account__session_%s", hexPart, uuidPart.String())
+}
+
+// GenerateStableUserIdFromRaw 从原始 JSON body 中提取内容生成稳定的 user_id（透传模式用）
+func GenerateStableUserIdFromRaw(bodyMap map[string]interface{}) string {
+	systemText := ""
+	if sys, ok := bodyMap["system"]; ok && sys != nil {
+		switch v := sys.(type) {
+		case string:
+			systemText = v
+		default:
+			stripped := stripCacheControl(v)
+			if b, err := json.Marshal(stripped); err == nil {
+				systemText = string(b)
+			}
+		}
+	}
+
+	firstUserMsg := ""
+	if msgs, ok := bodyMap["messages"].([]interface{}); ok && len(msgs) > 0 {
+		for _, msg := range msgs {
+			msgMap, ok := msg.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			if msgMap["role"] == "user" {
+				switch v := msgMap["content"].(type) {
+				case string:
+					firstUserMsg = v
+				default:
+					stripped := stripCacheControl(v)
+					if b, err := json.Marshal(stripped); err == nil {
+						firstUserMsg = string(b)
+					}
+				}
+				break
+			}
+		}
+	}
+
+	identifier := fmt.Sprintf("%s|%s", systemText, firstUserMsg)
+
+	hash := sha256.Sum256([]byte(identifier))
+	hexPart := hex.EncodeToString(hash[:])
+
+	uuidPart := uuid.NewSHA1(claudeUserIdNamespace, []byte(identifier))
+
+	return fmt.Sprintf("user_%s_account__session_%s", hexPart, uuidPart.String())
+}
+
+// stripCacheControl 递归移除 JSON 对象中的 cache_control 字段，
+// 避免缓存指令干扰 user_id 生成的稳定性。
+func stripCacheControl(v interface{}) interface{} {
+	switch val := v.(type) {
+	case map[string]interface{}:
+		result := make(map[string]interface{})
+		for k, item := range val {
+			if k == "cache_control" {
+				continue
+			}
+			result[k] = stripCacheControl(item)
+		}
+		return result
+	case []interface{}:
+		result := make([]interface{}, len(val))
+		for i, item := range val {
+			result[i] = stripCacheControl(item)
+		}
+		return result
+	default:
+		return v
+	}
+}
+
+// extractSystemText 从 ClaudeRequest.System 提取文本内容
+func extractSystemText(system any) string {
+	if system == nil {
+		return ""
+	}
+	switch v := system.(type) {
+	case string:
+		return v
+	case []dto.ClaudeMediaMessage:
+		// 转成 interface{} 后去掉 cache_control 再序列化
+		var items []interface{}
+		for _, msg := range v {
+			b, err := json.Marshal(msg)
+			if err != nil {
+				continue
+			}
+			var m interface{}
+			_ = json.Unmarshal(b, &m)
+			items = append(items, stripCacheControl(m))
+		}
+		if b, err := json.Marshal(items); err == nil {
+			return string(b)
+		}
+		return fmt.Sprintf("%v", v)
+	default:
+		// 先转 interface{} 再 strip cache_control
+		if b, err := json.Marshal(v); err == nil {
+			var raw interface{}
+			if err2 := json.Unmarshal(b, &raw); err2 == nil {
+				stripped := stripCacheControl(raw)
+				if b2, err3 := json.Marshal(stripped); err3 == nil {
+					return string(b2)
+				}
+			}
+			return string(b)
+		}
+		return fmt.Sprintf("%v", v)
+	}
+}
+
+// extractFirstUserMessage 从消息列表中提取第一条 user 消息的文本
+func extractFirstUserMessage(messages []dto.ClaudeMessage) string {
+	for _, msg := range messages {
+		if msg.Role != "user" {
+			continue
+		}
+		switch v := msg.Content.(type) {
+		case string:
+			return v
+		default:
+			if b, err := json.Marshal(v); err == nil {
+				var raw interface{}
+				if err2 := json.Unmarshal(b, &raw); err2 == nil {
+					stripped := stripCacheControl(raw)
+					if b2, err3 := json.Marshal(stripped); err3 == nil {
+						return string(b2)
+					}
+				}
+				return string(b)
+			}
+			return fmt.Sprintf("%v", v)
+		}
+	}
+	return ""
 }

@@ -2,6 +2,7 @@ package service
 
 import (
 	"errors"
+	"strings"
 	"fmt"
 	"net/http"
 
@@ -11,6 +12,8 @@ import (
 	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/setting"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/QuantumNous/new-api/pkg/jsplugin"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/gin-gonic/gin"
@@ -79,6 +82,15 @@ func (p *RetryParam) ResetRetryNextTry() {
 // CacheGetRandomSatisfiedChannel tries to get a random channel that satisfies the requirements.
 // 尝试获取一个满足要求的随机渠道。
 //
+// For multiple groups (comma-separated) with cross-group retry enabled:
+// 对于多分组（逗号分隔）且启用了跨分组重试：
+//
+//   - Each group will exhaust all its priorities before moving to the next group.
+//     每个分组会用完所有优先级后才会切换到下一个分组。
+//
+//   - Uses ContextKeyMultiGroupIndex to track current group index.
+//     使用 ContextKeyMultiGroupIndex 跟踪当前分组索引。
+//
 // For "auto" tokenGroup with cross-group Retry enabled:
 // 对于启用了跨分组重试的 "auto" tokenGroup：
 //
@@ -117,6 +129,72 @@ func CacheGetRandomSatisfiedChannel(param *RetryParam) (*model.Channel, string, 
 	selectGroup := param.TokenGroup
 	userGroup := common.GetContextKeyString(param.Ctx, constant.ContextKeyUserGroup)
 	filters := GetChannelConstraints(param.Ctx).Filters
+
+	// Check if tokenGroup contains multiple groups (comma-separated)
+	// 检查 tokenGroup 是否包含多个分组（逗号分隔）
+	if strings.Contains(param.TokenGroup, ",") && param.TokenGroup != "auto" {
+		tokenGroups := strings.Split(param.TokenGroup, ",")
+		// Filter empty groups
+		// 过滤空分组
+		validGroups := make([]string, 0, len(tokenGroups))
+		for _, g := range tokenGroups {
+			g = strings.TrimSpace(g)
+			if g != "" {
+				validGroups = append(validGroups, g)
+			}
+		}
+
+		if len(validGroups) == 0 {
+			return nil, selectGroup, errors.New("no valid groups found")
+		}
+
+		// [CUSTOM] 多分组模式默认跨分组重试，不检查 crossGroupRetry 设置
+		// crossGroupRetry 仅对 "auto" 分组有效
+
+		// Cross-group retry enabled, try each group in order
+		// 启用跨分组重试，按顺序尝试每个分组
+		startGroupIndex := 0
+		if lastGroupIndex, exists := common.GetContextKey(param.Ctx, constant.ContextKeyMultiGroupIndex); exists {
+			if idx, ok := lastGroupIndex.(int); ok {
+				startGroupIndex = idx
+			}
+		}
+
+		for i := startGroupIndex; i < len(validGroups); i++ {
+			currentGroup := validGroups[i]
+			priorityRetry := param.GetRetry()
+			if i > startGroupIndex {
+				priorityRetry = 0
+			}
+			logger.LogDebug(param.Ctx, "Multi-group selecting group: %s, priorityRetry: %d", currentGroup, priorityRetry)
+
+			channel, _ = model.GetRandomSatisfiedChannel(currentGroup, param.ModelName, priorityRetry, param.RequestPath)
+			if channel == nil {
+				logger.LogDebug(param.Ctx, "No available channel in group %s for model %s at priorityRetry %d, trying next group", currentGroup, param.ModelName, priorityRetry)
+				common.SetContextKey(param.Ctx, constant.ContextKeyMultiGroupIndex, i+1)
+				param.SetRetry(0)
+				continue
+			}
+			selectGroup = currentGroup
+			// [CUSTOM] 设置选中的分组到 context，让后续的 HandleGroupRatio 能获取到正确的分组
+			common.SetContextKey(param.Ctx, constant.ContextKeyMultiGroup, currentGroup)
+			logger.LogDebug(param.Ctx, "Multi-group selected group: %s", currentGroup)
+
+			// Use MaxRetryPerGroup config to limit retries per group
+			// 使用 MaxRetryPerGroup 配置限制每个分组的重试次数
+			maxRetryPerGroup := operation_setting.GetMaxRetryPerGroup()
+			if priorityRetry >= maxRetryPerGroup-1 {
+				logger.LogDebug(param.Ctx, "Current group %s retries exhausted (priorityRetry=%d >= MaxRetryPerGroup-1=%d), preparing switch to next group for next retry", currentGroup, priorityRetry, maxRetryPerGroup-1)
+				common.SetContextKey(param.Ctx, constant.ContextKeyMultiGroupIndex, i+1)
+				param.SetRetry(0)
+				param.ResetRetryNextTry()
+			} else {
+				common.SetContextKey(param.Ctx, constant.ContextKeyMultiGroupIndex, i)
+			}
+			break
+		}
+		return channel, selectGroup, nil
+	}
 
 	if param.TokenGroup == "auto" {
 		autoGroups := GetRequestAutoGroups(param.Ctx, userGroup)
@@ -171,12 +249,15 @@ func CacheGetRandomSatisfiedChannel(param *RetryParam) (*model.Channel, string, 
 
 			// Prepare state for next retry
 			// 为下一次重试准备状态
-			if crossGroupRetry && priorityRetry >= common.RetryTimes {
+			// Use MaxRetryPerGroup config to limit retries per group
+			// 使用 MaxRetryPerGroup 配置限制每个分组的重试次数
+			maxRetryPerGroup := operation_setting.GetMaxRetryPerGroup()
+			if crossGroupRetry && priorityRetry >= maxRetryPerGroup-1 {
 				// Current group has exhausted all retries, prepare to switch to next group
 				// This request still uses current group, but next retry will use next group
 				// 当前分组已用完所有重试次数，准备切换到下一个分组
 				// 本次请求仍使用当前分组，但下次重试将使用下一个分组
-				logger.LogDebug(param.Ctx, "Current group %s retries exhausted (priorityRetry=%d >= RetryTimes=%d), preparing switch to next group for next retry", autoGroup, priorityRetry, common.RetryTimes)
+				logger.LogDebug(param.Ctx, "Current group %s retries exhausted (priorityRetry=%d >= MaxRetryPerGroup-1=%d), preparing switch to next group for next retry", autoGroup, priorityRetry, maxRetryPerGroup-1)
 				common.SetContextKey(param.Ctx, constant.ContextKeyAutoGroupIndex, i+1)
 				// Reset retry counter so outer loop can continue for next group
 				// 重置重试计数器，以便外层循环可以为下一个分组继续

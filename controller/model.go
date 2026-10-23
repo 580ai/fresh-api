@@ -95,13 +95,13 @@ func init() {
 		openAIModelsMap[aiModel.Id] = aiModel
 	}
 	channelId2Models = make(map[int][]string)
-	for i := 1; i <= constant.ChannelTypeDummy; i++ {
+	loadModelsForChannelType := func(i int) {
 		apiType, success := common.ChannelType2APIType(i)
 		if !success || apiType == constant.APITypeAIProxyLibrary {
 			if plugin, ok := jsplugin.DefaultRegistry.GetByChannelType(i); ok {
 				channelId2Models[i] = append([]string(nil), plugin.Meta.Models...)
 			}
-			continue
+			return
 		}
 		meta := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{
 			ChannelType: i,
@@ -114,6 +114,12 @@ func init() {
 				channelId2Models[i] = append([]string(nil), plugin.Meta.Models...)
 			}
 		}
+	}
+	for i := 1; i <= constant.ChannelTypeDummy; i++ {
+		loadModelsForChannelType(i)
+	}
+	for _, i := range constant.ChannelTypesExtraRange {
+		loadModelsForChannelType(i)
 	}
 	openAIModels = lo.UniqBy(openAIModels, func(m dto.OpenAIModels) string {
 		return m.Id

@@ -25,29 +25,31 @@ type PricingPluginVariant struct {
 }
 
 type Pricing struct {
-	BillingPluginVariants  []PricingPluginVariant               `json:"billing_plugin_variants,omitempty"`
-	ModelName              string                               `json:"model_name"`
-	Description            string                               `json:"description,omitempty"`
-	Icon                   string                               `json:"icon,omitempty"`
-	Tags                   string                               `json:"tags,omitempty"`
-	VendorID               int                                  `json:"vendor_id,omitempty"`
-	QuotaType              int                                  `json:"quota_type"`
-	ModelRatio             float64                              `json:"model_ratio"`
-	ModelPrice             float64                              `json:"model_price"`
-	OwnerBy                string                               `json:"owner_by"`
-	CompletionRatio        float64                              `json:"completion_ratio"`
-	CacheRatio             *float64                             `json:"cache_ratio,omitempty"`
-	CreateCacheRatio       *float64                             `json:"create_cache_ratio,omitempty"`
-	ImageRatio             *float64                             `json:"image_ratio,omitempty"`
-	AudioRatio             *float64                             `json:"audio_ratio,omitempty"`
-	AudioCompletionRatio   *float64                             `json:"audio_completion_ratio,omitempty"`
-	EnableGroup            []string                             `json:"enable_groups"`
-	SupportedEndpointTypes []constant.EndpointType              `json:"supported_endpoint_types"`
+	ModelName              string                        `json:"model_name"`
+	Description            string                        `json:"description,omitempty"`
+	Icon                   string                        `json:"icon,omitempty"`
+	Tags                   string                        `json:"tags,omitempty"`
+	VendorID               int                           `json:"vendor_id,omitempty"`
+	QuotaType              int                           `json:"quota_type"`
+	ModelRatio             float64                       `json:"model_ratio"`
+	ModelPrice             float64                       `json:"model_price"`
+	OwnerBy                string                        `json:"owner_by"`
+	CompletionRatio        float64                       `json:"completion_ratio"`
+	CacheRatio             *float64                      `json:"cache_ratio,omitempty"`
+	CreateCacheRatio       *float64                      `json:"create_cache_ratio,omitempty"`
+	ImageRatio             *float64                      `json:"image_ratio,omitempty"`
+	AudioRatio             *float64                      `json:"audio_ratio,omitempty"`
+	AudioCompletionRatio   *float64                      `json:"audio_completion_ratio,omitempty"`
+	EnableGroup            []string                      `json:"enable_groups"`
+	SupportedEndpointTypes []constant.EndpointType       `json:"supported_endpoint_types"`
 	BillingMode            string                               `json:"billing_mode,omitempty"`
 	BillingExpr            string                               `json:"billing_expr,omitempty"`
 	BillingUsageSchema     map[string]jsplugin.UsageFieldSchema `json:"billing_usage_schema,omitempty"`
 	BillingUsageExamples   []jsplugin.UsageExample              `json:"billing_usage_examples,omitempty"`
 	PricingVersion         string                               `json:"pricing_version,omitempty"`
+	SpecialPrices          map[string]float64                   `json:"special_prices,omitempty"`
+	TextModelPrice         *ratio_setting.TextModelPrice        `json:"text_model_price,omitempty"`
+	BillingPluginVariants  []PricingPluginVariant               `json:"billing_plugin_variants,omitempty"`
 }
 
 type PricingVendor struct {
@@ -353,6 +355,7 @@ func updatePricing() {
 			pricing.CompletionRatio = ratio_setting.GetCompletionRatio(model)
 			pricing.QuotaType = 0
 		}
+		// Upstream: expose cache/audio ratios in pricing API
 		if cacheRatio, ok := ratio_setting.GetCacheRatio(model); ok {
 			pricing.CacheRatio = &cacheRatio
 		}
@@ -424,6 +427,12 @@ func updatePricing() {
 					BillingUsageSchema: jsplugin.CloneUsageSchema(schema), BillingUsageExamples: jsplugin.CloneUsageExamples(examples),
 				})
 			}
+		}
+		if specialPrices, ok := ratio_setting.GetSpecialModelPrice(model); ok {
+			pricing.SpecialPrices = specialPrices
+		}
+		if textModelPrice, ok := ratio_setting.GetTextModelPrice(model); ok {
+			pricing.TextModelPrice = &textModelPrice
 		}
 		pricingMap = append(pricingMap, pricing)
 	}

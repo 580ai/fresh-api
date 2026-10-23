@@ -65,9 +65,26 @@ const (
 
 )
 
+// 自定义渠道类型 ID 从 9000 起，避免与上游新增类型冲突。
+const (
+	ChannelTypeAnthropicBatch = 9001
+)
+
+// ChannelTypesExtraRange 列出 ID 不在 1..ChannelTypeDummy 连续区间内的自定义渠道类型，
+// 供需要遍历"全部已知渠道类型"的逻辑使用（例如初始化模型列表）。
+var ChannelTypesExtraRange = []int{
+	ChannelTypeAnthropicBatch,
+}
+
+// channelBaseURLs 是按 channel.Type 索引的 base URL 列表。
+// 1..ChannelTypeDummy 连续段在 channelBaseURLContiguous 中维护；
+// ID 不连续的自定义类型（如 ChannelTypeAnthropicBatch=9001）通过
+// channelBaseURLExtras 注入，最终在 init() 中合并成一个稀疏切片，
+// 这样所有现有 `ChannelBaseURLs[channel.Type]` 调用点无需改动。
+//
 // ChannelBaseURLs 保存各渠道类型的内置默认 Base URL。
 // 非空值会通过 /api/channel/default_base_urls 下发到前端，作为渠道表单的 API 地址占位提示。
-var ChannelBaseURLs = []string{
+var channelBaseURLContiguous = []string{
 	"",                                    // 0
 	"https://api.openai.com",              // 1
 	"https://oa.api2d.net",                // 2
@@ -141,6 +158,27 @@ func GetChannelBaseURL(channelType int) string {
 	return ChannelBaseURLs[channelType]
 }
 
+var channelBaseURLExtras = map[int]string{
+	ChannelTypeAnthropicBatch: "https://api.anthropic.com",
+}
+
+var ChannelBaseURLs = buildChannelBaseURLs()
+
+func buildChannelBaseURLs() []string {
+	maxIdx := len(channelBaseURLContiguous) - 1
+	for k := range channelBaseURLExtras {
+		if k > maxIdx {
+			maxIdx = k
+		}
+	}
+	arr := make([]string, maxIdx+1)
+	copy(arr, channelBaseURLContiguous)
+	for k, v := range channelBaseURLExtras {
+		arr[k] = v
+	}
+	return arr
+}
+
 var ChannelTypeNames = map[int]string{
 	ChannelTypeUnknown:        "Unknown",
 	ChannelTypeOpenAI:         "OpenAI",
@@ -197,6 +235,7 @@ var ChannelTypeNames = map[int]string{
 	ChannelTypeReplicate:      "Replicate",
 	ChannelTypeCodex:          "ChatGPT Subscription (Codex)",
 	ChannelTypeAdvancedCustom: "Advanced Custom",
+	ChannelTypeAnthropicBatch: "Anthropic Claude批量",
 	ChannelTypeSub2API:        "Sub2API",
 	ChannelTypeNewAPI:         "New API",
 	ChannelTypeTaskPlugin:     "Task Plugin",

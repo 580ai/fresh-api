@@ -291,6 +291,15 @@ func UpdateOption(c *gin.Context) {
 			common.ApiError(c, err)
 			return
 		}
+	case "GroupOrder":
+		err = ratio_setting.UpdateGroupOrderByJSONString(option.Value.(string))
+		if err != nil {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": "分组排序设置失败: " + err.Error(),
+			})
+			return
+		}
 	case "ImageRatio":
 		err = ratio_setting.UpdateImageRatioByJSONString(option.Value.(string))
 		if err != nil {
@@ -309,6 +318,24 @@ func UpdateOption(c *gin.Context) {
 			common.ApiErrorT(c, "Failed to set the audio completion ratio: {{error}}", map[string]any{"error": err.Error()})
 			return
 		}
+	case "SpecialModelPrice":
+		err = ratio_setting.UpdateSpecialModelPriceByJSONString(option.Value.(string))
+		if err != nil {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": "特殊模型价格设置失败: " + err.Error(),
+			})
+			return
+		}
+	case "TextModelPrice":
+		err = ratio_setting.UpdateTextModelPriceByJSONString(option.Value.(string))
+		if err != nil {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": "文本模型阶梯价格设置失败: " + err.Error(),
+			})
+			return
+		}
 	case "CreateCacheRatio":
 		err = ratio_setting.UpdateCreateCacheRatioByJSONString(option.Value.(string))
 		if err != nil {
@@ -319,6 +346,15 @@ func UpdateOption(c *gin.Context) {
 		err = setting.CheckModelRequestRateLimitGroup(option.Value.(string))
 		if err != nil {
 			common.ApiError(c, err)
+			return
+		}
+	case "UserRequestRateLimitMap":
+		err = setting.CheckUserRequestRateLimitMap(option.Value.(string))
+		if err != nil {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": err.Error(),
+			})
 			return
 		}
 	case "AutomaticDisableStatusCodes":
@@ -416,6 +452,8 @@ func UpdateOption(c *gin.Context) {
 		common.ApiSuccess(c, change)
 		return
 	}
+	// 获取旧值用于日志记录
+	oldValue := model.GetOption(option.Key)
 	err = model.UpdateOption(option.Key, option.Value.(string))
 	if err != nil {
 		if errors.Is(err, system_setting.ErrPasskeyRPIDInvalid) {
@@ -425,6 +463,12 @@ func UpdateOption(c *gin.Context) {
 		}
 		return
 	}
+	// 记录操作日志
+	userId := c.GetInt("id")
+	model.RecordOperationLog(c, userId, model.OperationModuleOption, model.OperationActionUpdate,
+		option.Key, option.Key, oldValue, option.Value.(string),
+		fmt.Sprintf("修改系统参数: %s", option.Key))
+
 	// 出于安全考虑只记录被修改的配置项名称，不记录配置值（可能含密钥等敏感信息）。
 	recordManageAudit(c, "option.update", map[string]any{
 		"key": option.Key,

@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 	"unicode/utf8"
@@ -12,6 +13,20 @@ import (
 
 	"github.com/gin-gonic/gin"
 )
+
+// sanitizeRedemptionForLog 用于清理兑换码数据，移除敏感信息后用于操作日志记录
+func sanitizeRedemptionForLog(r *model.Redemption) map[string]interface{} {
+	return map[string]interface{}{
+		"id":            r.Id,
+		"name":          r.Name,
+		"status":        r.Status,
+		"quota":         r.Quota,
+		"created_time":  r.CreatedTime,
+		"expired_time":  r.ExpiredTime,
+		"redeemed_time": r.RedeemedTime,
+		"user_id":       r.UserId,
+	}
+}
 
 func GetAllRedemptions(c *gin.Context) {
 	pageInfo := common.GetPageQuery(c)
@@ -115,6 +130,16 @@ func AddRedemption(c *gin.Context) {
 		}
 		keys = append(keys, key)
 	}
+	// 记录操作日志
+	model.RecordOperationLog(c, c.GetInt("id"), model.ModuleRedemption, model.ActionCreate,
+		redemption.Name, redemption.Name, nil, map[string]any{
+			"name":  redemption.Name,
+			"count": redemption.Count,
+			"quota": redemption.Quota,
+			"keys":  keys,
+		},
+		fmt.Sprintf("创建兑换码: %s, 数量: %d", redemption.Name, redemption.Count))
+
 	recordManageAudit(c, "redemption.create", map[string]any{
 		"name":  redemption.Name,
 		"count": redemption.Count,
@@ -130,11 +155,25 @@ func AddRedemption(c *gin.Context) {
 
 func DeleteRedemption(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
+	// 获取兑换码信息用于日志记录
+	redemption, _ := model.GetRedemptionById(id)
+	var redemptionInfo map[string]interface{}
+	var redemptionName string
+	if redemption != nil {
+		redemptionInfo = sanitizeRedemptionForLog(redemption)
+		redemptionName = redemption.Name
+	}
 	err := model.DeleteRedemptionById(id)
 	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
+
+	// 记录操作日志
+	model.RecordOperationLog(c, c.GetInt("id"), model.ModuleRedemption, model.ActionDelete,
+		strconv.Itoa(id), redemptionName, redemptionInfo, nil,
+		fmt.Sprintf("删除兑换码: %s", redemptionName))
+
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
@@ -155,6 +194,8 @@ func UpdateRedemption(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+	// 保存旧值用于日志记录
+	oldRedemptionInfo := sanitizeRedemptionForLog(cleanRedemption)
 	if statusOnly == "" {
 		if redemption.Quota <= 0 {
 			common.ApiErrorT(c, "Redemption quota must be positive")
@@ -181,6 +222,12 @@ func UpdateRedemption(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+
+	// 记录操作日志
+	model.RecordOperationLog(c, c.GetInt("id"), model.ModuleRedemption, model.ActionUpdate,
+		strconv.Itoa(cleanRedemption.Id), cleanRedemption.Name, oldRedemptionInfo, sanitizeRedemptionForLog(cleanRedemption),
+		fmt.Sprintf("更新兑换码: %s", cleanRedemption.Name))
+
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
@@ -195,6 +242,12 @@ func DeleteInvalidRedemption(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+
+	// 记录操作日志
+	model.RecordOperationLog(c, c.GetInt("id"), model.ModuleRedemption, model.ActionDelete,
+		"invalid", fmt.Sprintf("已使用/过期兑换码%d个", rows), nil, nil,
+		fmt.Sprintf("删除已使用/过期兑换码: %d个", rows))
+
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",

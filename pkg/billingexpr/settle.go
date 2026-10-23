@@ -1,6 +1,7 @@
 package billingexpr
 
 import (
+	"math"
 	"fmt"
 
 	"github.com/QuantumNous/new-api/common"
@@ -35,7 +36,38 @@ func ComputeTieredQuotaWithRequest(snap *BillingSnapshot, params TokenParams, re
 	}
 
 	quotaBeforeGroup := quotaConversion(cost, snap)
-	afterGroup, clamp := common.QuotaRoundChecked(quotaBeforeGroup * snap.GroupRatio)
+	var clamp *common.QuotaClamp
+	switch {
+	case math.IsNaN(quotaBeforeGroup):
+		_, clamp = common.QuotaRoundChecked(quotaBeforeGroup)
+		quotaBeforeGroup = 0
+	case math.IsInf(quotaBeforeGroup, 1):
+		_, clamp = common.QuotaRoundChecked(quotaBeforeGroup)
+		quotaBeforeGroup = common.MaxQuota
+	case math.IsInf(quotaBeforeGroup, -1):
+		_, clamp = common.QuotaRoundChecked(quotaBeforeGroup)
+		clamp.Clamped = 0
+		quotaBeforeGroup = 0
+	case quotaBeforeGroup < 0:
+		quotaBeforeGroup = 0
+	}
+	quotaAfterGroup := quotaBeforeGroup * snap.GroupRatio
+	if math.IsNaN(quotaAfterGroup) {
+		if clamp == nil {
+			_, clamp = common.QuotaRoundChecked(quotaAfterGroup)
+		}
+		quotaAfterGroup = 0
+	} else if quotaAfterGroup < 0 || math.IsInf(quotaAfterGroup, -1) {
+		if math.IsInf(quotaAfterGroup, -1) && clamp == nil {
+			_, clamp = common.QuotaRoundChecked(quotaAfterGroup)
+			clamp.Clamped = 0
+		}
+		quotaAfterGroup = 0
+	}
+	afterGroup, finalClamp := common.QuotaRoundChecked(quotaAfterGroup)
+	if clamp == nil {
+		clamp = finalClamp
+	}
 	crossed := trace.MatchedTier != snap.EstimatedTier
 
 	result := TieredResult{
