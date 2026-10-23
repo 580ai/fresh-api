@@ -99,11 +99,17 @@ func Distribute() func(c *gin.Context) {
 		}
 		if pinned || shouldSelectChannel {
 			usingGroup := common.GetContextKeyString(c, constant.ContextKeyUsingGroup)
+			// [CUSTOM] 优先使用 ContextKeyTokenGroup 的完整分组字符串（如 "A,B"），
+			// ContextKeyUsingGroup 只含第一个分组，会导致多分组不生效。
+			tokenGroup := common.GetContextKeyString(c, constant.ContextKeyTokenGroup)
+			if tokenGroup == "" {
+				tokenGroup = usingGroup
+			}
 			var selectErr *service.ChannelSelectError
 			channel, _, selectErr = service.SelectChannelForRequest(c, modelRequest.Model, &service.RetryParam{
 				Ctx:         c,
 				ModelName:   modelRequest.Model,
-				TokenGroup:  usingGroup,
+				TokenGroup:  tokenGroup,
 				RequestPath: c.Request.URL.Path,
 				Retry:       common.GetPointer(0),
 			})
@@ -113,7 +119,7 @@ func Distribute() func(c *gin.Context) {
 				}
 				message := selectErr.Message
 				if selectErr.NoAvailableChannel {
-					message = noAvailableChannelMessage(c, usingGroup, modelRequest.Model)
+					message = noAvailableChannelMessage(c, tokenGroup, modelRequest.Model)
 				} else if selectErr.MessageID != "" {
 					message = i18n.T(c, selectErr.MessageID, selectErr.Params)
 				}

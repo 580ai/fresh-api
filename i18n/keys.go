@@ -6,6 +6,72 @@ package i18n
 
 // Errors returned to AI clients
 const (
+	MsgInvalidParams     = "common.invalid_params"
+	MsgDatabaseError     = "common.database_error"
+	MsgRetryLater        = "common.retry_later"
+	MsgGenerateFailed    = "common.generate_failed"
+	MsgNotFound          = "common.not_found"
+	MsgUnauthorized      = "common.unauthorized"
+	MsgForbidden         = "common.forbidden"
+	MsgInvalidId         = "common.invalid_id"
+	MsgIdEmpty           = "common.id_empty"
+	MsgFeatureDisabled   = "common.feature_disabled"
+	MsgOperationSuccess  = "common.operation_success"
+	MsgOperationFailed   = "common.operation_failed"
+	MsgUpdateSuccess     = "common.update_success"
+	MsgUpdateFailed      = "common.update_failed"
+	MsgCreateSuccess     = "common.create_success"
+	MsgCreateFailed      = "common.create_failed"
+	MsgDeleteSuccess     = "common.delete_success"
+	MsgDeleteFailed      = "common.delete_failed"
+	MsgAlreadyExists     = "common.already_exists"
+	MsgNameCannotBeEmpty = "common.name_cannot_be_empty"
+	MsgBatchTooMany      = "common.batch_too_many"
+)
+
+// Auth middleware messages
+const (
+	MsgAuthNotLoggedIn           = "auth.not_logged_in"
+	MsgAuthAccessTokenInvalid    = "auth.access_token_invalid"
+	MsgAuthUserInfoInvalid       = "auth.user_info_invalid"
+	MsgAuthUserIdNotProvided     = "auth.user_id_not_provided"
+	MsgAuthUserIdFormatError     = "auth.user_id_format_error"
+	MsgAuthUserIdMismatch        = "auth.user_id_mismatch"
+	MsgAuthUserBanned            = "auth.user_banned"
+	MsgAuthInsufficientPrivilege = "auth.insufficient_privilege"
+	MsgAuthSessionExpired        = "auth.session_expired"
+)
+
+// Token related messages
+const (
+	MsgTokenNameTooLong          = "token.name_too_long"
+	MsgTokenQuotaNegative        = "token.quota_negative"
+	MsgTokenQuotaExceedMax       = "token.quota_exceed_max"
+	MsgTokenGenerateFailed       = "token.generate_failed"
+	MsgTokenGetInfoFailed        = "token.get_info_failed"
+	MsgTokenExpiredCannotEnable  = "token.expired_cannot_enable"
+	MsgTokenExhaustedCannotEable = "token.exhausted_cannot_enable"
+	MsgTokenInvalid              = "token.invalid"
+	MsgTokenNotProvided          = "token.not_provided"
+	MsgTokenExpired              = "token.expired"
+	MsgTokenExhausted            = "token.exhausted"
+	MsgTokenStatusUnavailable    = "token.status_unavailable"
+	MsgTokenDbError              = "token.db_error"
+)
+
+// Redemption related messages
+const (
+	MsgRedemptionNameLength        = "redemption.name_length"
+	MsgRedemptionCountPositive     = "redemption.count_positive"
+	MsgRedemptionCountMax          = "redemption.count_max"
+	MsgRedemptionCreateFailed      = "redemption.create_failed"
+	MsgRedemptionInvalid           = "redemption.invalid"
+	MsgRedemptionUsed              = "redemption.used"
+	MsgRedemptionExpired           = "redemption.expired"
+	MsgRedemptionFailed            = "redemption.failed"
+	MsgRedemptionNotProvided       = "redemption.not_provided"
+	MsgRedemptionExpireTimeInvalid = "redemption.expire_time_invalid"
+)
 	MsgDatabaseError          = "common.database_error"
 	MsgAuthUserBanned         = "auth.user_banned"
 	MsgTokenGetInfoFailed     = "token.get_info_failed"
