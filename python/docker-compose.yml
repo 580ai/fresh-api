@@ -7,11 +7,17 @@ services:
       dockerfile: Dockerfile
     container_name: aff-count-api
     restart: unless-stopped
+    # 只监听回环地址，由同机的反向代理暴露；不要直接映射到公网。
     ports:
-      - "8001:8001"
+      - "127.0.0.1:8001:8001"
     environment:
-      # API 共享密钥（与前端保持一致）
-      - API_SHARED_SECRET=dd7ea0087bb492abaf990d6e2795b2f0a3fafd0c40a9a8b7a9ccf7112cf3ba75
+      # 全部通过宿主机环境变量或 python/.env 注入，切勿写死在此文件。
+      - API_DB_HOST=${API_DB_HOST:?API_DB_HOST is required}
+      - API_DB_USER=${API_DB_USER:?API_DB_USER is required}
+      - API_DB_PASSWORD=${API_DB_PASSWORD:?API_DB_PASSWORD is required}
+      - API_DB_NAME=${API_DB_NAME:-cc-club}
+      - API_DB_PORT=${API_DB_PORT:-3306}
+      - API_SHARED_SECRET=${API_SHARED_SECRET:?API_SHARED_SECRET is required}
     networks:
       - app-network
 

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"sync/atomic"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -654,6 +655,10 @@ func GetTokenModelFullConsumption(c *gin.Context) {
 	})
 }
 
+// tokenDailyBackfillRunning 保证回填任务同一时间只跑一个，
+// 避免连点接口并发跑多份全表聚合把数据库拖垮。
+var tokenDailyBackfillRunning atomic.Bool
+
 // BackfillTokenDailyStat 回填历史消耗统计数据（管理员接口）
 // 用于首次部署或日志删除后重建统计数据
 func BackfillTokenDailyStat(c *gin.Context) {
@@ -665,7 +670,16 @@ func BackfillTokenDailyStat(c *gin.Context) {
 		days = 365 // 最多回填一年
 	}
 
+	if !tokenDailyBackfillRunning.CompareAndSwap(false, true) {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "已有回填任务在运行，请稍后重试",
+		})
+		return
+	}
+
 	go func() {
+		defer tokenDailyBackfillRunning.Store(false)
 		common.SysLog(fmt.Sprintf("[TokenDailyStat] 开始回填 %d 天的数据...", days))
 		if err := model.BackfillTokenDailyStat(days); err != nil {
 			common.SysError(fmt.Sprintf("[TokenDailyStat] 回填失败: %s", err.Error()))

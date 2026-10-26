@@ -347,13 +347,14 @@ func SetApiRouter(router *gin.Engine) {
 		logRoute.POST("/backfill_token_daily_stat", middleware.AdminAuth(), controller.BackfillTokenDailyStat)
 
 		// 操作日志路由
+		// 读取沿用 AdminAuth，但删除操作会抹掉审计链，仅 root 可执行。
 		operationLogRoute := apiRouter.Group("/operation_log")
 		operationLogRoute.Use(middleware.AdminAuth())
 		{
 			operationLogRoute.GET("/", controller.GetAllOperationLogs)
-			operationLogRoute.DELETE("/", controller.DeleteHistoryOperationLogs)
 			operationLogRoute.GET("/options", controller.GetOperationLogOptions)
 		}
+		apiRouter.DELETE("/operation_log/", middleware.RootAuth(), middleware.CriticalRateLimit(), controller.DeleteHistoryOperationLogs)
 
 		systemTaskRoute := apiRouter.Group("/system-task")
 		systemTaskRoute.Use(middleware.RootAuth())

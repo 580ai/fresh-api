@@ -11,21 +11,29 @@ import hashlib
 import time
 import os
 
-# 数据库配置
+def _required_env(name):
+    """读取必需的配置项；缺失时直接退出，避免以不安全默认值启动。"""
+    value = os.getenv(name)
+    if not value:
+        raise SystemExit(
+            f"missing required environment variable: {name} "
+            "(see .env.example; never hardcode credentials in source)"
+        )
+    return value
+
+
+# 数据库配置：全部来自环境变量，禁止在源码中出现凭据。
 DB_CONFIG = {
-    "host": "91.216.169.138",
-    "user": "cc-club",
-    "password": "xMGXnXEBBnrNGPK8",
-    "database": "cc-club",
-    "port": 3306,
+    "host": _required_env("API_DB_HOST"),
+    "user": _required_env("API_DB_USER"),
+    "password": _required_env("API_DB_PASSWORD"),
+    "database": os.getenv("API_DB_NAME", "cc-club"),
+    "port": int(os.getenv("API_DB_PORT", "3306")),
     "charset": "utf8mb4",
 }
 
 # 共享密钥（需要与前端一致）
-SHARED_SECRET = os.getenv(
-    "API_SHARED_SECRET",
-    "dd7ea0087bb492abaf990d6e2795b2f0a3fafd0c40a9a8b7a9ccf7112cf3ba75",
-)
+SHARED_SECRET = _required_env("API_SHARED_SECRET")
 
 # 创建数据库连接池
 connection_pool = pooling.MySQLConnectionPool(
@@ -61,9 +69,10 @@ class APIHandler(BaseHTTPRequestHandler):
         """设置响应头"""
         self.send_response(status_code)
         self.send_header("Content-Type", "application/json; charset=utf-8")
-        # 生产环境建议改为你的实际域名，例如：
-        # self.send_header("Access-Control-Allow-Origin", "https://yourdomain.com")
-        self.send_header("Access-Control-Allow-Origin", "*")  # 允许跨域
+        # 允许的跨域来源由环境变量控制；未配置时不下发该头（同源请求不受影响）。
+        allowed_origin = os.getenv("API_ALLOWED_ORIGIN", "")
+        if allowed_origin:
+            self.send_header("Access-Control-Allow-Origin", allowed_origin)
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header(
             "Access-Control-Allow-Headers", "Content-Type, Authorization"
@@ -158,7 +167,9 @@ class APIHandler(BaseHTTPRequestHandler):
                 self._send_error(404, "API endpoint not found")
 
         except Exception as e:
-            self._send_error(500, str(e))
+            # 详细异常只写服务端日志，不回传调用方（避免泄露 SQL/连接串等内部信息）。
+            print(f"[error] unhandled exception: {e!r}")
+            self._send_error(500, "Internal server error")
 
     def get_invite_count_by_user_id(self, user_id):
         """根据user_id获取邀请人数"""
@@ -292,4 +303,9 @@ def run_server(host="127.0.0.1", port=8001):
 
 
 if __name__ == "__main__":
-    run_server(host="0.0.0.0", port=8001)
+    # 默认只监听回环地址；需要对外提供服务时显式设置 API_BIND_HOST，
+    # 并由前置反向代理负责 TLS 与访问控制。
+    run_server(
+        host=os.getenv("API_BIND_HOST", "127.0.0.1"),
+        port=int(os.getenv("API_BIND_PORT", "8001")),
+    )

@@ -1270,6 +1270,22 @@ func BatchEditChannels(c *gin.Context) {
 		}
 	}
 	if req.Proxy != nil {
+		// 代理地址属于敏感配置：与单渠道更新保持同一校验，
+		// 校验通过后仍需 ChannelSensitiveWrite 权限才能落库。
+		if err := service.ValidateProxyURL(*req.Proxy); err != nil {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": "代理地址无效: " + err.Error(),
+			})
+			return
+		}
+		if !authz.Can(c.GetInt("id"), c.GetInt("role"), authz.ChannelSensitiveWrite) {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": "批量修改代理需要渠道敏感写权限",
+			})
+			return
+		}
 		if err := model.BatchUpdateChannelProxy(req.Ids, *req.Proxy); err != nil {
 			common.ApiError(c, err)
 			return
@@ -1277,6 +1293,13 @@ func BatchEditChannels(c *gin.Context) {
 		service.ResetProxyClientCache()
 	}
 	model.InitChannelCache()
+	// 批量修改涉及敏感配置，必须留痕
+	recordManageAudit(c, "channel.batch_edit", map[string]any{
+		"ids":      req.Ids,
+		"max_rpm":  req.MaxRPM,
+		"proxy":    req.Proxy != nil,
+		"modified": len(req.Ids),
+	})
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",

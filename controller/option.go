@@ -80,6 +80,16 @@ func buildCompletionRatioMetaValue(optionValues map[string]string) string {
 	return string(jsonBytes)
 }
 
+// isSensitiveOptionKey 判断系统参数是否可能携带密钥。
+// 用于下发时的跳过，以及操作日志中的脱敏，两处必须保持同一判据。
+func isSensitiveOptionKey(k string) bool {
+	return strings.HasSuffix(k, "Token") ||
+		strings.HasSuffix(k, "Secret") ||
+		strings.HasSuffix(k, "Key") ||
+		strings.HasSuffix(k, "secret") ||
+		strings.HasSuffix(k, "api_key")
+}
+
 func GetOptions(c *gin.Context) {
 	var options []*model.Option
 	optionValues := make(map[string]string)
@@ -89,12 +99,7 @@ func GetOptions(c *gin.Context) {
 			continue
 		}
 		value := common.Interface2String(v)
-		isSensitiveKey := strings.HasSuffix(k, "Token") ||
-			strings.HasSuffix(k, "Secret") ||
-			strings.HasSuffix(k, "Key") ||
-			strings.HasSuffix(k, "secret") ||
-			strings.HasSuffix(k, "api_key")
-		if isSensitiveKey {
+		if isSensitiveOptionKey(k) {
 			continue
 		}
 		options = append(options, &model.Option{
@@ -463,10 +468,15 @@ func UpdateOption(c *gin.Context) {
 		}
 		return
 	}
-	// 记录操作日志
+	// 记录操作日志。敏感参数（Token/Secret/Key 等）只记录"已修改"，
+	// 否则管理员即可从操作日志中读到 root 配置的密钥。
 	userId := c.GetInt("id")
+	logOldValue, logNewValue := any(oldValue), any(option.Value.(string))
+	if isSensitiveOptionKey(option.Key) {
+		logOldValue, logNewValue = "[redacted]", "[redacted]"
+	}
 	model.RecordOperationLog(c, userId, model.OperationModuleOption, model.OperationActionUpdate,
-		option.Key, option.Key, oldValue, option.Value.(string),
+		option.Key, option.Key, logOldValue, logNewValue,
 		fmt.Sprintf("修改系统参数: %s", option.Key))
 
 	// 出于安全考虑只记录被修改的配置项名称，不记录配置值（可能含密钥等敏感信息）。

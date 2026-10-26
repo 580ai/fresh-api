@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
@@ -218,6 +219,17 @@ func GetHomePageContent(c *gin.Context) {
 	if host == "" {
 		host = c.Request.Host
 	}
+	// domain 来自任意匿名请求：限制长度并剔除控制字符，
+	// 避免用超长或含换行的值撑爆日志、伪造日志行。
+	if len(host) > 255 {
+		host = host[:255]
+	}
+	host = strings.Map(func(r rune) rune {
+		if r < 0x20 || r == 0x7f {
+			return -1
+		}
+		return r
+	}, host)
 	common.SysLog("GetHomePageContent - Request Host: " + host)
 
 	// 尝试从数据库获取该域名的首页内容

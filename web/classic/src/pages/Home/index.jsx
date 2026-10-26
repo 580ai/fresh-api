@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import React, { useContext, useEffect, useState } from 'react';
+import DOMPurify from 'dompurify';
 import {
   Button,
   Typography,
@@ -345,7 +346,9 @@ const Home = () => {
           ) : (
             <div
               className='mt-[60px]'
-              dangerouslySetInnerHTML={{ __html: homePageContent }}
+              dangerouslySetInnerHTML={{
+                __html: DOMPurify.sanitize(homePageContent),
+              }}
             />
           )}
         </div>

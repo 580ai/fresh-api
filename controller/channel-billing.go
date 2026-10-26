@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -898,9 +899,21 @@ func updateAllChannelsUpstreamUsed() error {
 	return nil
 }
 
+// channelsUpstreamUsedRunning 保证同一时间只有一份"全量核对上游已用额度"在跑，
+// 否则连点接口会对上游站点形成放大请求。
+var channelsUpstreamUsedRunning atomic.Bool
+
 // UpdateAllChannelsUpstreamUsed 批量核对上游已用额度（GET /api/channel/update_upstream_used）
 func UpdateAllChannelsUpstreamUsed(c *gin.Context) {
+	if !channelsUpstreamUsedRunning.CompareAndSwap(false, true) {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "已有核对任务在运行，请稍后重试",
+		})
+		return
+	}
 	go func() {
+		defer channelsUpstreamUsedRunning.Store(false)
 		if err := updateAllChannelsUpstreamUsed(); err != nil {
 			common.SysLog("批量核对上游已用额度失败: " + err.Error())
 		}
@@ -915,8 +928,14 @@ func UpdateAllChannelsUpstreamUsed(c *gin.Context) {
 func AutomaticallyUpdateChannelsUpstreamUsed(frequency int) {
 	for {
 		time.Sleep(time.Duration(frequency) * time.Minute)
+		// 与手动触发共用同一把锁，避免定时任务和人工操作叠跑
+		if !channelsUpstreamUsedRunning.CompareAndSwap(false, true) {
+			common.SysLog("channels upstream used quota update skipped: previous run still in progress")
+			continue
+		}
 		common.SysLog("updating channels upstream used quota")
 		_ = updateAllChannelsUpstreamUsed()
+		channelsUpstreamUsedRunning.Store(false)
 		common.SysLog("channels upstream used quota update done")
 	}
 }

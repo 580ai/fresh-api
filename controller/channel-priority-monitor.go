@@ -281,7 +281,15 @@ func RunChannelPriorityMonitorOptimized(
 			}
 
 			tik := time.Now()
-			result := testChannel(context.Background(), ch, testUserID, testModel, "", false)
+			// 必须带超时：上游 TCP 挂死时 testChannel 会永久阻塞，导致
+			// state.done 永不关闭、groupWg.Wait() 卡死、监控任务再也无法启动。
+			testTimeout := time.Duration(timeoutSeconds) * time.Second
+			if testTimeout <= 0 {
+				testTimeout = 60 * time.Second
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
+			result := testChannel(ctx, ch, testUserID, testModel, "", false)
+			cancel()
 			responseTime := time.Since(tik).Milliseconds()
 
 			testResult := &ChannelTestResult{
