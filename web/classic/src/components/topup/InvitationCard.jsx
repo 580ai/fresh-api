@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import {
   Avatar,
   Typography,
@@ -28,7 +28,7 @@ import {
   Space,
 } from '@douyinfe/semi-ui';
 import { Copy, Users, TrendingUp, Gift, Zap } from 'lucide-react';
-import { getRealInviteCount, getInviteIncome } from '../../helpers/pythonApi';
+import { renderQuota } from '../../helpers';
 
 const { Text } = Typography;
 
@@ -39,68 +39,10 @@ const InvitationCard = ({
   handleAffLinkClick,
   complianceConfirmed = true,
 }) => {
-  const [realInviteCount, setRealInviteCount] = useState(null);
-  const [incomeData, setIncomeData] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [incomeLoading, setIncomeLoading] = useState(false);
-
-  useEffect(() => {
-    // 获取真实邀请人数
-    if (userState?.user?.id) {
-      setLoading(true);
-      getRealInviteCount(userState.user.id)
-        .then((count) => {
-          setRealInviteCount(count);
-        })
-        .catch((error) => {
-          console.error('获取真实邀请人数失败:', error);
-          // 失败时使用数据库的aff_count
-          setRealInviteCount(userState?.user?.aff_count || 0);
-        })
-        .finally(() => {
-          setLoading(false);
-        });
-    }
-  }, [userState?.user?.id, userState?.user?.aff_count]);
-
-  useEffect(() => {
-    // 获取邀请收益数据
-    if (userState?.user?.id) {
-      setIncomeLoading(true);
-      getInviteIncome(userState.user.id)
-        .then((data) => {
-          setIncomeData(data);
-        })
-        .catch((error) => {
-          console.error('获取邀请收益失败:', error);
-          // 失败时使用原有数据
-          setIncomeData(null);
-        })
-        .finally(() => {
-          setIncomeLoading(false);
-        });
-    }
-  }, [userState?.user?.id]);
-
-  // 显示真实邀请人数或loading状态
-  const displayInviteCount = loading
-    ? '...'
-    : realInviteCount !== null
-      ? realInviteCount
-      : userState?.user?.aff_count || 0;
-
-  // 格式化收益金额显示（美元）
-  const formatIncome = (amount) => {
-    if (amount === null || amount === undefined) return '$0.00';
-    return `$${Number(amount).toFixed(2)}`;
-  };
-
-  // 显示邀请用户充值金额
-  const displayTotalIncome = incomeLoading
-    ? '...'
-    : incomeData !== null
-      ? formatIncome(incomeData.total_income)
-      : '$0.00';
+  // 邀请人数与累计邀请收益直接取自服务端返回的用户字段，
+  // 不再依赖外部的 Python 统计服务。
+  const inviteCount = userState?.user?.aff_count || 0;
+  const totalIncome = userState?.user?.aff_history_quota || 0;
 
   return (
     <Card className='!rounded-2xl shadow-sm border-0'>
@@ -174,7 +116,7 @@ const InvitationCard = ({
                       className='text-base sm:text-2xl font-bold mb-2'
                       style={{ color: 'white' }}
                     >
-                      {displayTotalIncome}
+                      {renderQuota(totalIncome)}
                     </div>
                     <div className='flex items-center justify-center text-sm'>
                       <TrendingUp
@@ -188,7 +130,7 @@ const InvitationCard = ({
                           fontSize: '12px',
                         }}
                       >
-                        {t('邀请用户充值金额')}
+                        {t('累计邀请收益')}
                       </Text>
                     </div>
                   </div>
@@ -199,7 +141,7 @@ const InvitationCard = ({
                       className='text-base sm:text-2xl font-bold mb-2'
                       style={{ color: 'white' }}
                     >
-                      {displayInviteCount}
+                      {inviteCount}
                     </div>
                     <div className='flex items-center justify-center text-sm'>
                       <Users
@@ -214,18 +156,6 @@ const InvitationCard = ({
                         }}
                       >
                         {t('邀请人数')}
-                        {!loading &&
-                          realInviteCount !== null &&
-                          realInviteCount !== userState?.user?.aff_count && (
-                            <span
-                              style={{
-                                fontSize: '10px',
-                                marginLeft: '4px',
-                              }}
-                            >
-                              (实时)
-                            </span>
-                          )}
                       </Text>
                     </div>
                   </div>
