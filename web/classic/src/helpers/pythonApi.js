@@ -23,8 +23,11 @@ import CryptoJS from 'crypto-js';
 const PYTHON_API_URL =
   import.meta.env.VITE_PYTHON_API_URL || '';
 
-// HMAC 共享密钥（需要与Python脚本中的密钥一致）
-const SHARED_SECRET = 'dd7ea0087bb492abaf990d6e2795b2f0a3fafd0c40a9a8b7a9ccf7112cf3ba75';
+// HMAC 共享密钥（需要与 Python 服务端的 API_SHARED_SECRET 一致）。
+// 注意：任何打进前端包的密钥都等同于公开值，因此这个 HMAC 只能阻挡
+// 随手改 user_id 的请求，不能作为真正的越权边界。
+// 若需要保密，应把调用放到后端代理，由后端持有密钥。
+const SHARED_SECRET = import.meta.env.VITE_PYTHON_API_SECRET || '';
 
 /**
  * 生成HMAC认证token
@@ -44,6 +47,10 @@ function generateAuthToken(userId, timestamp) {
  * @throws {Error} 如果请求失败或认证失败
  */
 export async function getRealInviteCount(userId) {
+  // 未配置 Python 服务或密钥时直接放弃，由调用方回退到数据库值。
+  if (!PYTHON_API_URL || !SHARED_SECRET) {
+    return null;
+  }
   try {
     // 生成当前时间戳（秒）
     const timestamp = Math.floor(Date.now() / 1000);
@@ -85,6 +92,10 @@ export async function getRealInviteCount(userId) {
  * @throws {Error} 如果请求失败或认证失败
  */
 export async function getInviteIncome(userId) {
+  // 未配置 Python 服务或密钥时直接放弃，由调用方回退到数据库值。
+  if (!PYTHON_API_URL || !SHARED_SECRET) {
+    return null;
+  }
   try {
     // 生成当前时间戳（秒）
     const timestamp = Math.floor(Date.now() / 1000);
