@@ -13,14 +13,29 @@ import (
 )
 
 // WebAssets holds the embedded dashboard frontend assets.
+// BuildFS/IndexPage is the upstream SPA (web/src); ClassicBuildFS/ClassicIndexPage
+// is the retained classic dashboard (web/classic). The active one is chosen at
+// request time via common.GetTheme() so the theme can be switched without a
+// restart.
 type WebAssets struct {
-	BuildFS   embed.FS
-	IndexPage []byte
+	BuildFS          embed.FS
+	IndexPage        []byte
+	ClassicBuildFS   embed.FS
+	ClassicIndexPage []byte
 }
 
 func SetWebRouter(router *gin.Engine, assets WebAssets, pluginDispatcher gin.HandlerFunc) {
-	frontendFS := common.EmbedFolder(assets.BuildFS, "web/dist")
+	defaultFS := common.EmbedFolder(assets.BuildFS, "web/dist")
+	classicFS := common.EmbedFolder(assets.ClassicBuildFS, "web/classic/dist")
+	frontendFS := common.NewThemeAwareFS(defaultFS, classicFS)
 	compress := gzip.Gzip(gzip.DefaultCompression)
+
+	indexPage := func() []byte {
+		if common.GetTheme() == "classic" {
+			return assets.ClassicIndexPage
+		}
+		return assets.IndexPage
+	}
 
 	router.NoRoute(
 		pluginDispatcher,
@@ -41,7 +56,7 @@ func SetWebRouter(router *gin.Engine, assets WebAssets, pluginDispatcher gin.Han
 				return
 			}
 			c.Header("Cache-Control", "no-cache")
-			c.Data(http.StatusOK, "text/html; charset=utf-8", assets.IndexPage)
+			c.Data(http.StatusOK, "text/html; charset=utf-8", indexPage())
 		},
 	)
 }

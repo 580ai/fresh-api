@@ -765,6 +765,9 @@ func handleConfigUpdate(key, value string) bool {
 	} else if configName == "billing_setting" {
 		InvalidatePricingCache()
 		ratio_setting.InvalidateExposedDataCache()
+	} else if configName == "theme" {
+		// 双前端：主题切换后需立即同步到 common，决定 web/ 与 web/classic 谁生效
+		system_setting.UpdateAndSyncTheme()
 	}
 
 	return true // 已处理
