@@ -622,19 +622,42 @@ func TokenAuth() func(c *gin.Context) {
 		userGroup := userCache.Group
 		tokenGroup := token.Group
 		if tokenGroup != "" {
-			// check common.UserUsableGroups[userGroup]
-			if _, ok := service.GetUserUsableGroups(userGroup)[tokenGroup]; !ok {
-				abortWithOpenAiMessage(c, http.StatusForbidden, i18n.T(c, i18n.MsgAuthTokenGroupForbidden, map[string]any{"Group": tokenGroup}))
-				return
-			}
-			// check group in common.GroupRatio
-			if !ratio_setting.ContainsGroupRatio(tokenGroup) {
-				if tokenGroup != "auto" {
-					abortWithOpenAiMessage(c, http.StatusForbidden, i18n.T(c, i18n.MsgAuthTokenGroupDeprecated, map[string]any{"Group": tokenGroup}))
+			// 旧令牌可能以逗号分隔多个分组（"groupA,groupB"），
+			// 新令牌多分组存在 auto_groups，token.Group = "auto"。
+			// 逗号格式需逐一校验每个子分组，任何一个不可用则拒绝整体。
+			if strings.Contains(tokenGroup, ",") && tokenGroup != "auto" {
+				usableGroups := service.GetUserUsableGroups(userGroup)
+				for _, g := range strings.Split(tokenGroup, ",") {
+					g = strings.TrimSpace(g)
+					if g == "" {
+						continue
+					}
+					if _, ok := usableGroups[g]; !ok {
+						abortWithOpenAiMessage(c, http.StatusForbidden, i18n.T(c, i18n.MsgAuthTokenGroupForbidden, map[string]any{"Group": g}))
+						return
+					}
+					if !ratio_setting.ContainsGroupRatio(g) {
+						abortWithOpenAiMessage(c, http.StatusForbidden, i18n.T(c, i18n.MsgAuthTokenGroupDeprecated, map[string]any{"Group": g}))
+						return
+					}
+				}
+				// 多分组令牌不把 userGroup 替换成整串，保持原始用户分组；
+				// channel_select.go 的多分组分支会按序选渠道。
+			} else {
+				// check common.UserUsableGroups[userGroup]
+				if _, ok := service.GetUserUsableGroups(userGroup)[tokenGroup]; !ok {
+					abortWithOpenAiMessage(c, http.StatusForbidden, i18n.T(c, i18n.MsgAuthTokenGroupForbidden, map[string]any{"Group": tokenGroup}))
 					return
 				}
+				// check group in common.GroupRatio
+				if !ratio_setting.ContainsGroupRatio(tokenGroup) {
+					if tokenGroup != "auto" {
+						abortWithOpenAiMessage(c, http.StatusForbidden, i18n.T(c, i18n.MsgAuthTokenGroupDeprecated, map[string]any{"Group": tokenGroup}))
+						return
+					}
+				}
+				userGroup = tokenGroup
 			}
-			userGroup = tokenGroup
 		}
 		common.SetContextKey(c, constant.ContextKeyUsingGroup, userGroup)
 
