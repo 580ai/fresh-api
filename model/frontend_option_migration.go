@@ -7,6 +7,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/setting/console_setting"
+	"github.com/QuantumNous/new-api/setting/system_setting"
 	"gorm.io/gorm"
 )
 
@@ -49,19 +50,27 @@ func MigrateRetiredFrontendOptions() error {
 
 func normalizeRetiredThemeOption() error {
 	return DB.Transaction(func(tx *gorm.DB) error {
+		// 双前端部署下，缺失或非法的 theme.frontend 应回落到配置里的默认前端
+		// （system_setting.ThemeSettings.Frontend，本部署为 classic），
+		// 而不是写死 "default"，否则首次启动会强制进入新版界面。
+		fallback := system_setting.GetThemeSettings().Frontend
+		if fallback != "default" && fallback != "classic" {
+			fallback = "classic"
+		}
+
 		var option Option
 		err := tx.Where(&Option{Key: retiredThemeOptionKey}).First(&option).Error
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return tx.Create(&Option{Key: retiredThemeOptionKey, Value: "default"}).Error
+			return tx.Create(&Option{Key: retiredThemeOptionKey, Value: fallback}).Error
 		}
 		if err != nil {
 			return err
 		}
-		// 双前端部署：classic 仍然保留，管理员选择的主题不能被启动迁移覆盖。
+		// 管理员选择的主题不能被启动迁移覆盖。
 		if option.Value == "default" || option.Value == "classic" {
 			return nil
 		}
-		return tx.Model(&option).Update("value", "default").Error
+		return tx.Model(&option).Update("value", fallback).Error
 	})
 }
 

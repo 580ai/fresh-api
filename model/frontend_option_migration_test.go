@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/setting/system_setting"
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -206,8 +207,16 @@ func TestThemeFrontendSwitchAppliesAtRuntime(t *testing.T) {
 	require.NoError(t, MigrateRetiredFrontendOptions())
 	assert.Equal(t, "classic", requireOptionValue(t, db, retiredThemeOptionKey))
 
-	// 非法值仍然回落到 default
+	// 非法值回落到配置里的默认前端（本部署为 classic）
 	require.NoError(t, db.Model(&Option{}).Where(&Option{Key: retiredThemeOptionKey}).Update("value", "bogus").Error)
 	require.NoError(t, MigrateRetiredFrontendOptions())
-	assert.Equal(t, "default", requireOptionValue(t, db, retiredThemeOptionKey))
+	assert.Equal(t, "classic", requireOptionValue(t, db, retiredThemeOptionKey))
+}
+
+// 数据库里没有 theme.frontend 时，迁移必须写入配置的默认前端，
+// 而不是写死 default——否则首次启动会被强制拉进新版界面。
+func TestMigrateRetiredThemeOptionUsesConfiguredDefault(t *testing.T) {
+	db := useFrontendOptionMigrationDB(t)
+	require.NoError(t, MigrateRetiredFrontendOptions())
+	assert.Equal(t, system_setting.GetThemeSettings().Frontend, requireOptionValue(t, db, retiredThemeOptionKey))
 }
