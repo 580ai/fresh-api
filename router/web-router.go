@@ -30,8 +30,8 @@ func SetWebRouter(router *gin.Engine, assets WebAssets, pluginDispatcher gin.Han
 	frontendFS := common.NewThemeAwareFS(defaultFS, classicFS)
 	compress := gzip.Gzip(gzip.DefaultCompression)
 
-	indexPage := func() []byte {
-		if common.GetTheme() == "classic" {
+	indexPage := func(path string) []byte {
+		if common.GetTheme() == "classic" && !common.IsDefaultOnlyPath(path) {
 			return assets.ClassicIndexPage
 		}
 		return assets.IndexPage
@@ -56,7 +56,7 @@ func SetWebRouter(router *gin.Engine, assets WebAssets, pluginDispatcher gin.Han
 				return
 			}
 			c.Header("Cache-Control", "no-cache")
-			c.Data(http.StatusOK, "text/html; charset=utf-8", indexPage())
+			c.Data(http.StatusOK, "text/html; charset=utf-8", indexPage(c.Request.URL.Path))
 		},
 	)
 }

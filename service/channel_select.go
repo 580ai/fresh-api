@@ -12,7 +12,6 @@ import (
 	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
-	"github.com/QuantumNous/new-api/setting"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/QuantumNous/new-api/pkg/jsplugin"
 	"github.com/QuantumNous/new-api/relaykit/types"
@@ -168,7 +167,7 @@ func CacheGetRandomSatisfiedChannel(param *RetryParam) (*model.Channel, string, 
 			}
 			logger.LogDebug(param.Ctx, "Multi-group selecting group: %s, priorityRetry: %d", currentGroup, priorityRetry)
 
-			channel, _ = model.GetRandomSatisfiedChannel(currentGroup, param.ModelName, priorityRetry, param.RequestPath)
+			channel, _ = model.GetRandomSatisfiedChannel(currentGroup, param.ModelName, priorityRetry, filters)
 			if channel == nil {
 				logger.LogDebug(param.Ctx, "No available channel in group %s for model %s at priorityRetry %d, trying next group", currentGroup, param.ModelName, priorityRetry)
 				common.SetContextKey(param.Ctx, constant.ContextKeyMultiGroupIndex, i+1)

@@ -537,8 +537,9 @@ func BatchDeleteTokens(ids []int, userId int) (int, error) {
 	return len(tokens), nil
 }
 
-// BatchUpdateTokenGroup 批量更新指定用户的令牌分组，返回成功更新数量
-func BatchUpdateTokenGroup(ids []int, userId int, group string, crossGroupRetry bool) (int, error) {
+// BatchUpdateTokenGroup 批量更新指定用户的令牌分组，返回成功更新数量。
+// autoGroups 仅在 group="auto" 时写入，表示有序的分组优先级链；nil 表示保留原值。
+func BatchUpdateTokenGroup(ids []int, userId int, group string, crossGroupRetry bool, autoGroups []string) (int, error) {
 	if len(ids) == 0 {
 		return 0, errors.New("ids 不能为空！")
 	}
@@ -551,10 +552,25 @@ func BatchUpdateTokenGroup(ids []int, userId int, group string, crossGroupRetry 
 		return 0, err
 	}
 
-	if err := tx.Model(&Token{}).Where("user_id = ? AND id IN (?)", userId, ids).Updates(map[string]interface{}{
+	updates := map[string]interface{}{
 		"group":             group,
 		"cross_group_retry": crossGroupRetry,
-	}).Error; err != nil {
+	}
+	// 非 auto 分组不应保留分组链；auto 且显式传了链时按传入顺序覆盖。
+	if group != "auto" || autoGroups != nil {
+		encoded := ""
+		if len(autoGroups) > 0 {
+			data, err := common.Marshal(autoGroups)
+			if err != nil {
+				tx.Rollback()
+				return 0, err
+			}
+			encoded = string(data)
+		}
+		updates["auto_groups"] = encoded
+	}
+
+	if err := tx.Model(&Token{}).Where("user_id = ? AND id IN (?)", userId, ids).Updates(updates).Error; err != nil {
 		tx.Rollback()
 		return 0, err
 	}

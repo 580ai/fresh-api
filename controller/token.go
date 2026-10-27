@@ -90,43 +90,44 @@ func getTokenRequestUserGroup(c *gin.Context) (string, error) {
 }
 
 func setTokenAutoGroups(c *gin.Context, token *model.Token, groups []string) bool {
-	if len(groups) == 0 {
-		if err := token.SetAutoGroups(nil); err != nil {
-			common.ApiError(c, err)
-			return false
-		}
-		return true
-	}
-
-	maxCount := setting.GetMaxTokenAutoGroups()
-	if len(groups) > maxCount {
-		common.ApiErrorT(c, "A token can select at most {{max}} Auto groups", map[string]any{"max": maxCount})
-		return false
-	}
-
-	userGroup, err := getTokenRequestUserGroup(c)
-	if err != nil {
+	if err := validateTokenAutoGroups(c, groups); err != nil {
 		common.ApiError(c, err)
 		return false
 	}
-	seen := make(map[string]struct{}, len(groups))
-	for _, group := range groups {
-		if _, ok := seen[group]; ok {
-			common.ApiErrorT(c, "Auto group {{group}} is duplicated", map[string]any{"group": group})
-			return false
-		}
-		seen[group] = struct{}{}
-		if !service.IsUserSelectableGroup(userGroup, group) {
-			common.ApiErrorT(c, "Auto group {{group}} is unavailable or unauthorized", map[string]any{"group": group})
-			return false
-		}
-	}
-
 	if err := token.SetAutoGroups(groups); err != nil {
 		common.ApiError(c, err)
 		return false
 	}
 	return true
+}
+
+// validateTokenAutoGroups 校验令牌自选分组链：数量上限、去重、用户可选性。
+// 返回的错误已经带好 i18n 文案，调用方直接回写给前端即可。
+func validateTokenAutoGroups(c *gin.Context, groups []string) error {
+	if len(groups) == 0 {
+		return nil
+	}
+
+	maxCount := setting.GetMaxTokenAutoGroups()
+	if len(groups) > maxCount {
+		return common.NewMessage("A token can select at most {{max}} Auto groups", map[string]any{"max": maxCount})
+	}
+
+	userGroup, err := getTokenRequestUserGroup(c)
+	if err != nil {
+		return err
+	}
+	seen := make(map[string]struct{}, len(groups))
+	for _, group := range groups {
+		if _, ok := seen[group]; ok {
+			return common.NewMessage("Auto group {{group}} is duplicated", map[string]any{"group": group})
+		}
+		seen[group] = struct{}{}
+		if !service.IsUserSelectableGroup(userGroup, group) {
+			return common.NewMessage("Auto group {{group}} is unavailable or unauthorized", map[string]any{"group": group})
+		}
+	}
+	return nil
 }
 
 func GetAllTokens(c *gin.Context) {
@@ -519,6 +520,9 @@ type TokenBatchUpdateGroup struct {
 	Ids             []int  `json:"ids"`
 	Group           string `json:"group"`
 	CrossGroupRetry bool   `json:"cross_group_retry"`
+	// AutoGroups 仅在 group="auto" 时生效，按顺序表示分组优先级；
+	// 不传（nil）表示保留各令牌原有的分组链。
+	AutoGroups []string `json:"auto_groups"`
 }
 
 func DeleteTokenBatch(c *gin.Context) {
@@ -553,8 +557,21 @@ func UpdateTokenGroupBatch(c *gin.Context) {
 		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
 		return
 	}
+	// 分组链只在 group="auto" 时有意义，其它分组会被后端清空。
+	// 传了 auto 但没给链时按空链处理，等价于沿用全局 auto 分组配置。
+	autoGroups := []string(nil)
+	if req.Group == "auto" {
+		autoGroups = req.AutoGroups
+		if autoGroups == nil {
+			autoGroups = []string{}
+		}
+		if err := validateTokenAutoGroups(c, autoGroups); err != nil {
+			common.ApiError(c, err)
+			return
+		}
+	}
 	userId := c.GetInt("id")
-	count, err := model.BatchUpdateTokenGroup(req.Ids, userId, req.Group, req.CrossGroupRetry)
+	count, err := model.BatchUpdateTokenGroup(req.Ids, userId, req.Group, req.CrossGroupRetry, autoGroups)
 	if err != nil {
 		common.ApiError(c, err)
 		return

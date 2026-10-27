@@ -284,15 +284,14 @@ func geminiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http
 		patchGeminiZeroCompletionUsage(c, info, usage, responseText.String(), imageCount)
 	}
 
-	return usage, responseText.String(), nil
 	if streamErr != nil {
-		return usage, types.NewOpenAIError(streamErr, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
+		return usage, responseText.String(), types.NewOpenAIError(streamErr, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
 	}
 	if info.StreamStatus != nil && !info.StreamStatus.IsNormalEnd() {
 		logger.LogWarn(c, common.LogText("Gemini stream ended unexpectedly: %s", info.StreamStatus.Summary()))
 	}
 
-	return usage, nil
+	return usage, responseText.String(), nil
 }
 
 func isGeminiDownstreamStop(c *gin.Context, info *relaycommon.RelayInfo) bool {

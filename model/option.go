@@ -382,7 +382,16 @@ func UpdateOptionsBulk(values map[string]string) error {
 }
 
 func updateOptionMap(key string, value string) (err error) {
-	if key == retiredThemeOptionKey || key == legacyAccessTokenRetireAtKey {
+	if key == retiredThemeOptionKey {
+		// 双前端部署：theme.frontend 仍在生效，但不需要放进 OptionMap 广播，
+		// 交给 handleConfigUpdate 同步到 common 的运行时主题即可。
+		common.OptionMapRWMutex.Lock()
+		delete(common.OptionMap, key)
+		common.OptionMapRWMutex.Unlock()
+		handleConfigUpdate(key, value)
+		return nil
+	}
+	if key == legacyAccessTokenRetireAtKey {
 		common.OptionMapRWMutex.Lock()
 		delete(common.OptionMap, key)
 		common.OptionMapRWMutex.Unlock()

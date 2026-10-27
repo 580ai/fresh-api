@@ -18,33 +18,30 @@ import (
 )
 
 // logFilterFromQuery reads the log search shared by the log list and the log
-// export. Username and channel are read only for administrators.
+// export. Username, channel and user_id are read only for administrators.
 func logFilterFromQuery(c *gin.Context, admin bool) model.LogFilter {
 	logType, _ := strconv.Atoi(c.Query("type"))
 	startTimestamp, _ := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
 	endTimestamp, _ := strconv.ParseInt(c.Query("end_timestamp"), 10, 64)
-	username := c.Query("username")
 	tokenName := c.Query("token_name")
-	modelName := c.Query("model_name")
-	channel, _ := strconv.Atoi(c.Query("channel"))
-	userId, _ := strconv.Atoi(c.Query("user_id"))
 	group := c.Query("group")
 	requestId := c.Query("request_id")
 	upstreamRequestId := c.Query("upstream_request_id")
-	logs, total, err := model.GetAllLogs(logType, startTimestamp, endTimestamp, modelName, username, tokenName, pageInfo.GetStartIdx(), pageInfo.GetPageSize(), channel, group, requestId, upstreamRequestId, userId)
 	filter := model.LogFilter{
 		Type:              logType,
 		StartTimestamp:    startTimestamp,
 		EndTimestamp:      endTimestamp,
 		ModelName:         c.Query("model_name"),
-		TokenName:         c.Query("token_name"),
-		Group:             c.Query("group"),
-		RequestId:         c.Query("request_id"),
-		UpstreamRequestId: c.Query("upstream_request_id"),
+		TokenName:         tokenName,
+		Group:             group,
+		RequestId:         requestId,
+		UpstreamRequestId: upstreamRequestId,
 	}
 	if admin {
 		filter.Username = c.Query("username")
 		filter.Channel, _ = strconv.Atoi(c.Query("channel"))
+		// [CUSTOM] 管理端支持按用户 ID 筛选使用日志
+		filter.UserId, _ = strconv.Atoi(c.Query("user_id"))
 	}
 	return filter
 }
@@ -87,19 +84,9 @@ func GetAllLogs(c *gin.Context) {
 
 func GetUserLogs(c *gin.Context) {
 	pageInfo := common.GetPageQuery(c)
-	userId := c.GetInt("id")
 	userRole := c.GetInt("role")
-	logType, _ := strconv.Atoi(c.Query("type"))
-	startTimestamp, _ := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
-	endTimestamp, _ := strconv.ParseInt(c.Query("end_timestamp"), 10, 64)
-	tokenName := c.Query("token_name")
-	modelName := c.Query("model_name")
-	group := c.Query("group")
-	requestId := c.Query("request_id")
-	upstreamRequestId := c.Query("upstream_request_id")
-	logs, total, err := model.GetUserLogs(userId, logType, startTimestamp, endTimestamp, modelName, tokenName, pageInfo.GetStartIdx(), pageInfo.GetPageSize(), group, requestId, upstreamRequestId)
 	filter := logFilterFromQuery(c, false)
-	if c.GetInt("role") < common.RoleAdminUser {
+	if userRole < common.RoleAdminUser {
 		startTimestamp, err := limitLogTimeRange(filter.StartTimestamp, filter.EndTimestamp)
 		if err != nil {
 			common.ApiError(c, err)

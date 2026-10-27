@@ -114,6 +114,12 @@ func GetOptions(c *gin.Context) {
 		Key: "ResendKeyConfigured", Value: strconv.FormatBool(strings.TrimSpace(common.OptionMap["ResendApiKey"]) != ""),
 	})
 	common.OptionMapRWMutex.Unlock()
+	// theme.frontend 不放进 OptionMap 广播（避免每个节点各持一份副本），
+	// 但设置页需要读当前值来渲染主题选择器，因此单独输出运行时主题。
+	options = append(options, &model.Option{
+		Key:   "theme.frontend",
+		Value: common.GetTheme(),
+	})
 	// Display the same effective expressions used by pricing and settlement,
 	// including built-in defaults absent from persisted administrator options.
 	for key, values := range map[string]map[string]string{
@@ -185,6 +191,16 @@ func writePasskeyDomainSettingsError(c *gin.Context, err error) {
 		return
 	}
 	common.ApiError(c, err)
+}
+
+// validateThemeFrontendValue 校验 theme.frontend。
+// 双前端部署：default（上游 SPA）与 classic（自研前端）都保留在二进制里。
+func validateThemeFrontendValue(value any) error {
+	theme, ok := value.(string)
+	if !ok || (theme != "default" && theme != "classic") {
+		return errors.New("The theme can only be set to default or classic")
+	}
+	return nil
 }
 
 func UpdateOption(c *gin.Context) {
@@ -268,8 +284,8 @@ func UpdateOption(c *gin.Context) {
 			return
 		}
 	case "theme.frontend":
-		if option.Value != "default" {
-			common.ApiErrorT(c, "The Classic frontend has been removed. The theme can only be set to default")
+		if err := validateThemeFrontendValue(option.Value); err != nil {
+			common.ApiError(c, err)
 			return
 		}
 	case "GroupRatio":

@@ -59,6 +59,7 @@ const (
 	ErrorCodeChannelAwsClientError        ErrorCode = "channel:aws_client_error"
 	ErrorCodeChannelInvalidKey            ErrorCode = "channel:invalid_key"
 	ErrorCodeChannelResponseTimeExceeded  ErrorCode = "channel:response_time_exceeded"
+	ErrorCodeChannelRateLimited           ErrorCode = "channel:rate_limited" // [CUSTOM] 渠道RPM限流
 
 	// client request error
 	ErrorCodeReadRequestBodyFailed ErrorCode = "read_request_body_failed"
@@ -366,6 +367,14 @@ func WithClaudeError(claudeError ClaudeError, statusCode int, ops ...NewAPIError
 		op(e)
 	}
 	return e
+}
+
+// [CUSTOM] 渠道RPM限流 - 判断是否是渠道限流错误
+func IsChannelRateLimitedError(err *NewAPIError) bool {
+	if err == nil {
+		return false
+	}
+	return err.errorCode == ErrorCodeChannelRateLimited
 }
 
 func IsChannelError(err *NewAPIError) bool {

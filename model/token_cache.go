@@ -107,3 +107,12 @@ func cacheGetTokenByKey(key string) (*Token, error) {
 	token.Key = key
 	return &token, nil
 }
+
+// cacheDeleteToken drops the cached token hash. Callers invoke it after an
+// atomic quota mutation so the next read repopulates from the database.
+func cacheDeleteToken(key string) error {
+	if !common.RedisEnabled || key == "" {
+		return nil
+	}
+	return common.RDB.Del(context.Background(), getTokenCacheKey(key)).Err()
+}

@@ -28,6 +28,7 @@ import { NoticeSection } from '../maintenance/notice-section'
 import { SidebarModulesSection } from '../maintenance/sidebar-modules-section'
 import type { SiteSettings } from '../types'
 import { createSectionRegistry } from '../utils/section-registry'
+import { FrontendThemeSection } from './frontend-theme-section'
 
 const SITE_SECTIONS = [
   {
@@ -90,6 +91,13 @@ const SITE_SECTIONS = [
         />
       )
     },
+  },
+  {
+    id: 'frontend',
+    titleKey: 'Frontend',
+    build: (settings: SiteSettings) => (
+      <FrontendThemeSection defaultValue={settings['theme.frontend']} />
+    ),
   },
 ] as const
 

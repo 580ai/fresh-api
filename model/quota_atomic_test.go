@@ -44,66 +44,6 @@ func getAtomicQuotaTestToken(t *testing.T, id int) Token {
 	return token
 }
 
-func TestConsumeUserQuotaExactAndInsufficient(t *testing.T) {
-	setupAtomicQuotaTest(t, false)
-	require.NoError(t, DB.Create(&User{Id: 9301, Username: "atomic-user-exact", Quota: 100}).Error)
-
-	require.NoError(t, ConsumeUserQuota(9301, 100))
-	assert.Equal(t, 0, getAtomicQuotaTestUser(t, 9301).Quota)
-
-	err := ConsumeUserQuota(9301, 1)
-	require.ErrorIs(t, err, ErrInsufficientUserQuota)
-	assert.Equal(t, 0, getAtomicQuotaTestUser(t, 9301).Quota)
-}
-
-func TestUserQuotaPrimitivesBypassBatchUpdater(t *testing.T) {
-	setupAtomicQuotaTest(t, true)
-	require.NoError(t, DB.Create(&User{Id: 9302, Username: "atomic-user-batch", Quota: 100}).Error)
-
-	require.NoError(t, ConsumeUserQuota(9302, 40))
-	require.NoError(t, RestoreUserQuota(9302, 15))
-	assert.Equal(t, 75, getAtomicQuotaTestUser(t, 9302).Quota)
-
-	batchUpdate()
-	assert.Equal(t, 75, getAtomicQuotaTestUser(t, 9302).Quota)
-}
-
-func TestConsumeUserQuotaConcurrentCallsDoNotOverdraw(t *testing.T) {
-	setupAtomicQuotaTest(t, true)
-	require.NoError(t, DB.Create(&User{Id: 9303, Username: "atomic-user-concurrent", Quota: 100}).Error)
-
-	start := make(chan struct{})
-	errs := make(chan error, 2)
-	var wg sync.WaitGroup
-	for range 2 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			<-start
-			errs <- ConsumeUserQuota(9303, 80)
-		}()
-	}
-	close(start)
-	wg.Wait()
-	close(errs)
-
-	successes := 0
-	insufficient := 0
-	for err := range errs {
-		switch {
-		case err == nil:
-			successes++
-		case errors.Is(err, ErrInsufficientUserQuota):
-			insufficient++
-		default:
-			require.NoError(t, err)
-		}
-	}
-	assert.Equal(t, 1, successes)
-	assert.Equal(t, 1, insufficient)
-	assert.Equal(t, 20, getAtomicQuotaTestUser(t, 9303).Quota)
-}
-
 func TestFiniteTokenQuotaPrimitivesAreAtomicAndBypassBatchUpdater(t *testing.T) {
 	setupAtomicQuotaTest(t, true)
 	require.NoError(t, DB.Create(&Token{

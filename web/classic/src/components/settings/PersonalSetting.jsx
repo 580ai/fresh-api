@@ -30,6 +30,7 @@ import {
   buildRegistrationResult,
   isPasskeySupported,
   setUserData,
+  clearAuthCredentials,
 } from '../../helpers';
 import { UserContext } from '../../context/User';
 import { Modal } from '@douyinfe/semi-ui';
@@ -207,16 +208,10 @@ const PersonalSetting = () => {
     setInputs((inputs) => ({ ...inputs, [name]: value }));
   };
 
-  const generateAccessToken = async () => {
-    const res = await API.get('/api/user/token');
-    const { success, message, data } = res.data;
-    if (success) {
-      setSystemToken(data);
-      await copy(data);
-      showSuccess(t('令牌已重置并已复制到剪贴板'));
-    } else {
-      showError(message);
-    }
+  // 旧的 /api/user/token 已随 cookie session 一起下线。访问令牌的创建需要
+  // 安全验证（2FA / Passkey），统一在新版前端的「账户安全」页完成。
+  const generateAccessToken = () => {
+    window.location.href = '/security';
   };
 
   const loadPasskeyStatus = async () => {
@@ -389,7 +384,21 @@ const PersonalSetting = () => {
 
     if (success) {
       showSuccess(t('账户已删除！'));
-      await API.get('/api/user/logout');
+      // 账户已删除，会话随之失效；走新的注销接口清理 refresh cookie
+      try {
+        const sid = localStorage.getItem('auth_session_sid') || '';
+        await API.post(
+          '/api/user/auth/logout',
+          {},
+          {
+            headers: sid ? { 'X-Auth-Session': sid } : undefined,
+            skipErrorHandler: true,
+          },
+        );
+      } catch (e) {
+        // 会话已失效，忽略即可
+      }
+      clearAuthCredentials();
       userDispatch({ type: 'logout' });
       localStorage.removeItem('user');
       navigate('/login');
@@ -596,7 +605,9 @@ const PersonalSetting = () => {
               <NotificationSettings
                 t={t}
                 notificationSettings={notificationSettings}
-                handleNotificationSettingChange={handleNotificationSettingChange}
+                handleNotificationSettingChange={
+                  handleNotificationSettingChange
+                }
                 saveNotificationSettings={saveNotificationSettings}
               />
             </div>

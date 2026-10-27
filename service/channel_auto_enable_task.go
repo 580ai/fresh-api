@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 )
@@ -191,9 +192,10 @@ func enableChannelWithLog(channel *model.Channel) {
 		)
 
 		// 发送通知
-		subject := fmt.Sprintf("通道「%s」（#%d）已被自动启用", channel.Name, channel.Id)
-		content := fmt.Sprintf("通道「%s」（#%d）测试成功率达标，已被系统自动启用", channel.Name, channel.Id)
-		NotifyRootUser(formatNotifyType(channel.Id, common.ChannelStatusEnabled), subject, content)
+		params := map[string]any{"Name": channel.Name, "Id": channel.Id}
+		NotifyChannelWatchers(formatNotifyType(channel.Id, common.ChannelStatusEnabled), func(lang string) (string, string) {
+			return i18n.Translate(lang, i18n.MsgChannelNotifyEnabledSubject, params), i18n.Translate(lang, i18n.MsgChannelNotifyEnabledContent, params)
+		})
 
 		common.SysLog(fmt.Sprintf("channel #%d (%s) has been auto enabled", channel.Id, channel.Name))
 	} else {

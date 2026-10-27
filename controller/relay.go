@@ -184,8 +184,8 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		if channelErr != nil {
 			// [CUSTOM] 渠道RPM限流 - 限流错误返回 channel 不为 nil，走正常重试流程
 			if channel != nil && types.IsChannelRateLimitedError(channelErr) {
-				addUsedChannel(c, channel.Id)
-				processChannelError(c, *types.NewChannelError(channel.Id, channel.Type, channel.Name, false, "", channel.GetAutoBan()), channelErr)
+				service.AppendUsedChannel(c, channel.Id)
+				processChannelError(c, *types.NewChannelError(channel.Id, channel.Type, channel.Name, false, "", channel.GetAutoBan()), channelErr, relayInfo)
 				newAPIError = channelErr
 				if !shouldRetry(c, channelErr, common.RetryTimes-retryParam.GetRetry()) {
 					break
@@ -346,10 +346,8 @@ func getChannel(c *gin.Context, info *relaycommon.RelayInfo, retryParam *service
 		}
 
 		// 未超限，使用预选渠道
-		return &model.Channel{
-			Id:      channelId,
 		channel := &model.Channel{
-			Id:      c.GetInt("channel_id"),
+			Id:      channelId,
 			Type:    c.GetInt("channel_type"),
 			Name:    c.GetString("channel_name"),
 			AutoBan: &autoBanInt,
@@ -360,9 +358,8 @@ func getChannel(c *gin.Context, info *relaycommon.RelayInfo, retryParam *service
 
 	// 动态选择渠道
 	channel, selectGroup, err := service.CacheGetRandomSatisfiedChannel(retryParam)
+	// 分组倍率必须在补扣之前算好：下面的分层计费补扣要用它换算成目标额度
 	info.PriceData.GroupRatioInfo = helper.HandleGroupRatio(c, info)
-
-	channel, selectGroup, err := service.CacheGetRandomSatisfiedChannel(retryParam)
 	if err != nil {
 		return nil, types.NewError(errors.New(i18n.T(c, i18n.MsgRelayRetryGetChannelFailed, map[string]any{"Group": selectGroup, "Model": info.OriginModelName, "Error": err.Error()})), types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
 	}
@@ -399,8 +396,6 @@ func getChannel(c *gin.Context, info *relaycommon.RelayInfo, retryParam *service
 		info.TieredBillingSnapshot.EstimatedQuotaAfterGroup = targetQuota
 		info.PriceData.QuotaToPreConsume = targetQuota
 	}
-
-	info.PriceData.GroupRatioInfo = helper.HandleGroupRatio(c, info)
 
 	service.RequestPolicy(c).BeginAttempt(channel, selectGroup)
 	newAPIError := middleware.SetupContextForSelectedChannel(c, channel, info.OriginModelName)
@@ -445,51 +440,6 @@ func shouldRetry(c *gin.Context, openaiErr *types.NewAPIError, retryTimes int) b
 	}
 	return operation_setting.ShouldRetryByStatusCode(code)
 }
-
-func processChannelError(c *gin.Context, channelError types.ChannelError, err *types.NewAPIError) {
-	logger.LogError(c, fmt.Sprintf("channel error (channel #%d, status code: %d): %s", channelError.ChannelId, err.StatusCode, common.LocalLogPreview(err.Error())))
-	// 不要使用context获取渠道信息，异步处理时可能会出现渠道信息不一致的情况
-	// do not use context to get channel info, there may be inconsistent channel info when processing asynchronously
-	if service.ShouldDisableChannel(err) && channelError.AutoBan {
-		gopool.Go(func() {
-			service.DisableChannel(channelError, err.ErrorWithStatusCode())
-		})
-	}
-
-	if constant.ErrorLogEnabled && types.IsRecordErrorLog(err) {
-		// 保存错误日志到mysql中
-		userId := c.GetInt("id")
-		tokenName := c.GetString("token_name")
-		modelName := c.GetString("original_model")
-		tokenId := c.GetInt("token_id")
-		userGroup := c.GetString("group")
-		channelId := c.GetInt("channel_id")
-		other := make(map[string]interface{})
-		if c.Request != nil && c.Request.URL != nil {
-			other["request_path"] = c.Request.URL.Path
-		}
-		other["error_type"] = err.GetErrorType()
-		other["error_code"] = err.GetErrorCode()
-		other["status_code"] = err.StatusCode
-		other["channel_id"] = channelId
-		other["channel_name"] = c.GetString("channel_name")
-		other["channel_type"] = c.GetInt("channel_type")
-		adminInfo := make(map[string]interface{})
-		adminInfo["use_channel"] = c.GetStringSlice("use_channel")
-		isMultiKey := common.GetContextKeyBool(c, constant.ContextKeyChannelIsMultiKey)
-		if isMultiKey {
-			adminInfo["is_multi_key"] = true
-			adminInfo["multi_key_index"] = common.GetContextKeyInt(c, constant.ContextKeyChannelMultiKeyIndex)
-		}
-		service.AppendChannelAffinityAdminInfo(c, adminInfo)
-		other["admin_info"] = adminInfo
-		startTime := common.GetContextKeyTime(c, constant.ContextKeyRequestStartTime)
-		if startTime.IsZero() {
-			startTime = time.Now()
-		}
-		useTimeSeconds := int(time.Since(startTime).Seconds())
-		model.RecordErrorLog(c, userId, channelId, modelName, tokenName, err.MaskSensitiveErrorWithStatusCode(), tokenId, useTimeSeconds, common.GetContextKeyBool(c, constant.ContextKeyIsStream), userGroup, other)
-	}
 
 func processChannelError(c *gin.Context, channelError types.ChannelError, err *types.NewAPIError, relayInfo *relaycommon.RelayInfo) {
 	service.ProcessChannelError(c, channelError, err, relayInfo)
@@ -723,9 +673,9 @@ func executeTaskSubmissionWith(
 			if channelErr != nil {
 				// [CUSTOM] 渠道RPM限流 - 限流错误返回 channel 不为 nil，走正常重试流程
 				if channel != nil && types.IsChannelRateLimitedError(channelErr) {
-					addUsedChannel(c, channel.Id)
-					processChannelError(c, *types.NewChannelError(channel.Id, channel.Type, channel.Name, false, "", channel.GetAutoBan()), channelErr)
-					if shouldRetryTaskRelay(c, channel.Id, &dto.TaskError{StatusCode: http.StatusTooManyRequests, LocalError: true}, common.RetryTimes-retryParam.GetRetry()) {
+					service.AppendUsedChannel(c, channel.Id)
+					processChannelError(c, *types.NewChannelError(channel.Id, channel.Type, channel.Name, false, "", channel.GetAutoBan()), channelErr, relayInfo)
+					if common.RetryTimes-retryParam.GetRetry() > 0 {
 						continue
 					}
 					taskErr = service.TaskErrorWrapperLocal(channelErr.Err, "channel_rate_limited", http.StatusTooManyRequests)

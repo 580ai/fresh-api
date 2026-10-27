@@ -53,7 +53,8 @@ func TestMigrateRetiredFrontendOptionsMigratesValidValuesIdempotently(t *testing
 	require.NoError(t, db.Create(&legacy).Error)
 
 	require.NoError(t, MigrateRetiredFrontendOptions())
-	assert.Equal(t, "default", requireOptionValue(t, db, retiredThemeOptionKey))
+	// 双前端部署下 classic 仍然有效，迁移必须保留管理员选择的主题
+	assert.Equal(t, "classic", requireOptionValue(t, db, retiredThemeOptionKey))
 	assert.JSONEq(t, legacy[1].Value, requireOptionValue(t, db, "console_setting.api_info"))
 	assert.Equal(t, legacy[2].Value, requireOptionValue(t, db, "console_setting.announcements"))
 	assert.JSONEq(t, `[{"question":"Question","answer":"Answer"}]`, requireOptionValue(t, db, "console_setting.faq"))
@@ -177,4 +178,36 @@ func TestRetiredThemeOptionIsPersistedButNotPublished(t *testing.T) {
 	assert.Equal(t, "default", requireOptionValue(t, db, retiredThemeOptionKey))
 	_, published := common.OptionMap[retiredThemeOptionKey]
 	assert.False(t, published)
+}
+
+// 双前端部署下 theme.frontend 仍是有效配置：更新后必须立即影响运行时主题，
+// 且不能被启动迁移改回默认值，否则 classic 的「切换到新版前端」按钮点了没反应。
+func TestThemeFrontendSwitchAppliesAtRuntime(t *testing.T) {
+	db := useFrontendOptionMigrationDB(t)
+	previousMap := common.OptionMap
+	previousTheme := common.GetTheme()
+	t.Cleanup(func() {
+		common.OptionMap = previousMap
+		common.SetTheme(previousTheme)
+	})
+	common.OptionMap = map[string]string{}
+	common.SetTheme("classic")
+
+	require.NoError(t, UpdateOption(retiredThemeOptionKey, "default"))
+	assert.Equal(t, "default", common.GetTheme(), "切换后运行时主题必须立即生效")
+	assert.Equal(t, "default", requireOptionValue(t, db, retiredThemeOptionKey))
+
+	// 启动迁移不能把管理员的选择改回去
+	require.NoError(t, MigrateRetiredFrontendOptions())
+	assert.Equal(t, "default", requireOptionValue(t, db, retiredThemeOptionKey))
+
+	require.NoError(t, UpdateOption(retiredThemeOptionKey, "classic"))
+	assert.Equal(t, "classic", common.GetTheme())
+	require.NoError(t, MigrateRetiredFrontendOptions())
+	assert.Equal(t, "classic", requireOptionValue(t, db, retiredThemeOptionKey))
+
+	// 非法值仍然回落到 default
+	require.NoError(t, db.Model(&Option{}).Where(&Option{Key: retiredThemeOptionKey}).Update("value", "bogus").Error)
+	require.NoError(t, MigrateRetiredFrontendOptions())
+	assert.Equal(t, "default", requireOptionValue(t, db, retiredThemeOptionKey))
 }

@@ -53,7 +53,7 @@ func HandleGroupRatio(ctx *gin.Context, relayInfo *relaycommon.RelayInfo) hostty
 	multiGroup, exists := common.GetContextKey(ctx, constant.ContextKeyMultiGroup)
 	if exists {
 		if groupStr, ok := multiGroup.(string); ok && groupStr != "" {
-			logger.LogDebug(ctx, fmt.Sprintf("final group (multi): %s", groupStr))
+			logger.LogDebug(ctx, "final group (multi): %s", groupStr)
 			relayInfo.UsingGroup = groupStr
 		}
 	}

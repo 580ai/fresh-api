@@ -5,10 +5,11 @@ import (
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
-	"github.com/QuantumNous/new-api/types"
+	"github.com/QuantumNous/new-api/relaykit/dto"
+	"github.com/QuantumNous/new-api/relaykit/types"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -17,7 +18,7 @@ import (
 func TestBillingSessionReserveMaterializesTrustedPreConsume(t *testing.T) {
 	truncate(t)
 
-	trustQuota := common.GetTrustQuota()
+	trustQuota := int(operation_setting.GetQuotaSetting().TrustQuotaUSD * common.QuotaPerUnit)
 	initialEstimate := trustQuota * 4 / 5
 	targetQuota := initialEstimate * 2
 	availableQuota := targetQuota + trustQuota/2
@@ -35,7 +36,7 @@ func TestBillingSessionReserveMaterializesTrustedPreConsume(t *testing.T) {
 	assert.Equal(t, 0, info.Billing.GetPreConsumedQuota())
 	assert.Equal(t, 0, info.FinalPreConsumedQuota)
 
-	require.NoError(t, info.Billing.Reserve(targetQuota))
+	require.NoError(t, info.Billing.ReserveBeforeSubmit(targetQuota))
 
 	assert.Equal(t, availableQuota-targetQuota, getUserQuota(t, info.UserId))
 	assert.Equal(t, availableQuota-targetQuota, getTokenRemainQuota(t, info.TokenId))
@@ -64,7 +65,7 @@ func TestBillingSessionReserveWritesThroughBatchUpdates(t *testing.T) {
 	assert.Equal(t, 200, getTokenRemainQuota(t, info.TokenId))
 	assert.Equal(t, 100, getTokenUsedQuota(t, info.TokenId))
 
-	require.NoError(t, info.Billing.Reserve(200))
+	require.NoError(t, info.Billing.ReserveBeforeSubmit(200))
 
 	assert.Equal(t, 100, getUserQuota(t, info.UserId))
 	assert.Equal(t, 100, getTokenRemainQuota(t, info.TokenId))
@@ -83,7 +84,7 @@ func TestBillingSessionReserveRejectsInsufficientWalletQuota(t *testing.T) {
 	require.Nil(t, PreConsumeBilling(ctx, 100, info))
 	require.Equal(t, 100, info.FinalPreConsumedQuota)
 
-	err := info.Billing.Reserve(200)
+	err := info.Billing.ReserveBeforeSubmit(200)
 	require.Error(t, err)
 	var apiErr *types.NewAPIError
 	require.ErrorAs(t, err, &apiErr)
@@ -106,7 +107,7 @@ func TestBillingSessionReserveRollsBackWalletWhenTokenQuotaIsInsufficient(t *tes
 	info := newReserveWalletBillingRelayInfo(9204, "reserve-token-insufficient", true)
 	require.Nil(t, PreConsumeBilling(ctx, 100, info))
 
-	err := info.Billing.Reserve(200)
+	err := info.Billing.ReserveBeforeSubmit(200)
 	require.Error(t, err)
 	var apiErr *types.NewAPIError
 	require.ErrorAs(t, err, &apiErr)
@@ -128,7 +129,7 @@ func TestBillingSessionReserveExtendsPreConsumeBeforeSettlement(t *testing.T) {
 	ctx, _ := gin.CreateTestContext(nil)
 	info := newReserveWalletBillingRelayInfo(9205, "reserve-success", true)
 	require.Nil(t, PreConsumeBilling(ctx, 100, info))
-	require.NoError(t, info.Billing.Reserve(200))
+	require.NoError(t, info.Billing.ReserveBeforeSubmit(200))
 
 	assert.Equal(t, 100, getUserQuota(t, info.UserId))
 	assert.Equal(t, 100, getTokenRemainQuota(t, info.TokenId))

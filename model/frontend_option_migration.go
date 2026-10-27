@@ -57,7 +57,8 @@ func normalizeRetiredThemeOption() error {
 		if err != nil {
 			return err
 		}
-		if option.Value == "default" {
+		// 双前端部署：classic 仍然保留，管理员选择的主题不能被启动迁移覆盖。
+		if option.Value == "default" || option.Value == "classic" {
 			return nil
 		}
 		return tx.Model(&option).Update("value", "default").Error

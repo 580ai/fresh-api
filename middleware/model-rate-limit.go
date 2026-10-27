@@ -146,16 +146,6 @@ func memoryRateLimitHandler(subject string, duration int64, totalMaxCount, succe
 
 		// 1. 检查总请求数限制（当totalMaxCount为0时跳过）
 		if totalMaxCount > 0 && !inMemoryRateLimiter.Request(totalKey, totalMaxCount, duration) {
-			abortWithOpenAiMessage(c, http.StatusTooManyRequests, fmt.Sprintf("Rate limit exceeded: max %d total requests per %d minute(s), including failed requests", totalMaxCount, setting.ModelRequestRateLimitDurationMinutes))
-			return
-		}
-
-		// 2. 检查成功请求数限制
-		// 使用一个临时key来检查限制，这样可以避免实际记录
-		checkKey := successKey + "_check"
-		if !inMemoryRateLimiter.Request(checkKey, successMaxCount, duration) {
-			abortWithOpenAiMessage(c, http.StatusTooManyRequests, fmt.Sprintf("Rate limit exceeded: max %d successful requests per %d minute(s)", successMaxCount, setting.ModelRequestRateLimitDurationMinutes))
-			return
 			abortWithOpenAiMessage(c, http.StatusTooManyRequests, i18n.T(c, i18n.MsgRateLimitTotalReached, map[string]any{"Minutes": setting.ModelRequestRateLimitDurationMinutes, "Max": totalMaxCount}))
 			return
 		}
@@ -193,6 +183,7 @@ func ModelRequestRateLimit() func(c *gin.Context) {
 
 		// 优先级：用户级别 > 分组级别 > 全局级别
 		userId := c.GetInt("id")
+		subject := strconv.Itoa(userId)
 		userTotalCount, userSuccessCount, userFound := setting.GetUserRateLimit(userId)
 		if userFound {
 			// 用户级别限速：无论全局开关是否开启，只要设置了用户级别限速就生效
@@ -211,20 +202,14 @@ func ModelRequestRateLimit() func(c *gin.Context) {
 				group = common.GetContextKeyString(c, constant.ContextKeyUserGroup)
 			}
 
-			//获取分组的限流配置
+			// 获取分组的限流配置。配置了独立限流的分组按用户和分组单独计数，
+			// 其余分组共用该用户的全局计数
 			groupTotalCount, groupSuccessCount, found := setting.GetGroupRateLimit(group)
 			if found {
 				totalMaxCount = groupTotalCount
 				successMaxCount = groupSuccessCount
+				subject += ":" + group
 			}
-		// 获取分组的限流配置。配置了独立限流的分组按用户和分组单独计数，
-		// 其余分组共用该用户的全局计数
-		subject := strconv.Itoa(c.GetInt("id"))
-		groupTotalCount, groupSuccessCount, found := setting.GetGroupRateLimit(group)
-		if found {
-			totalMaxCount = groupTotalCount
-			successMaxCount = groupSuccessCount
-			subject += ":" + group
 		}
 
 		// 根据存储类型选择并执行限流处理器

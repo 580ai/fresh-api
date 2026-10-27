@@ -1,6 +1,7 @@
 package setting
 
 import (
+	"encoding/json"
 	"fmt"
 	"math"
 	"sync"

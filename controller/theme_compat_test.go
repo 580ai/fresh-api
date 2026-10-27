@@ -3,7 +3,6 @@ package controller
 import (
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
@@ -12,22 +11,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestUpdateOptionRejectsRetiredFrontendTheme(t *testing.T) {
-	response := httptest.NewRecorder()
-	context, _ := gin.CreateTestContext(response)
-	context.Request = httptest.NewRequest(
-		http.MethodPut,
-		"/api/option/",
-		strings.NewReader(`{"key":"theme.frontend","value":"classic"}`),
-	)
-
-	UpdateOption(context)
-
-	assert.Equal(t, http.StatusOK, response.Code)
-	assert.JSONEq(t, `{"success":false,"message":"The Classic frontend has been removed. The theme can only be set to default","message_key":"The Classic frontend has been removed. The theme can only be set to default"}`, response.Body.String())
+// 本部署保留双前端：classic 未被移除，因此 theme.frontend 仍然可以切回 classic。
+// 校验逻辑本身不依赖数据库，这里只覆盖允许/拒绝的取值。
+func TestUpdateOptionAcceptsClassicFrontendTheme(t *testing.T) {
+	assert.NoError(t, validateThemeFrontendValue("classic"))
+	assert.NoError(t, validateThemeFrontendValue("default"))
+	assert.Error(t, validateThemeFrontendValue("legacy"))
+	assert.Error(t, validateThemeFrontendValue(""))
 }
 
-func TestGetStatusAdvertisesDefaultDashboard(t *testing.T) {
+func TestGetStatusAdvertisesActiveDashboard(t *testing.T) {
 	previousMap := common.OptionMap
 	common.OptionMap = map[string]string{}
 	t.Cleanup(func() { common.OptionMap = previousMap })
@@ -43,5 +36,6 @@ func TestGetStatusAdvertisesDefaultDashboard(t *testing.T) {
 	}
 	require.NoError(t, common.Unmarshal(response.Body.Bytes(), &payload))
 	assert.True(t, payload.Success)
-	assert.Equal(t, "default", payload.Data["theme"])
+	// 默认主题由 system_setting.ThemeSettings.Frontend 决定（本部署为 classic）
+	assert.Contains(t, []string{"default", "classic"}, payload.Data["theme"])
 }

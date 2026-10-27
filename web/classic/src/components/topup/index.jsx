@@ -724,6 +724,10 @@ const TopUp = () => {
       }
     } catch (error) {
       showError(t('获取充值配置异常'));
+    } finally {
+      // 首屏加载态必须等真实充值配置（/api/user/topup/info）就绪再关闭，
+      // 否则会先用 /api/status 的占位值渲染表单，随后跳变造成闪烁。
+      setStatusLoading(false);
     }
   };
 
@@ -794,12 +798,9 @@ const TopUp = () => {
 
   useEffect(() => {
     if (statusState?.status) {
-      // const minTopUpValue = statusState.status.min_topup || 1;
-      // setMinTopUp(minTopUpValue);
-      // setTopUpCount(minTopUpValue);
       setPriceRatio(statusState.status.price || 1);
-
-      setStatusLoading(false);
+      // 加载态由 getTopupInfo 的 finally 统一关闭，这里不再提前关闭，
+      // 避免真实充值配置未到位时先渲染占位值。
     }
   }, [statusState?.status]);
 

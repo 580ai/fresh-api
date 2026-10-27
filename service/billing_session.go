@@ -307,7 +307,6 @@ func (s *BillingSession) reserveFunding(delta int, requireAvailableQuota bool) e
 		if err := model.DecreaseUserQuota(funding.userId, delta, false); err != nil {
 			return types.NewError(err, types.ErrorCodeUpdateDataError, types.ErrOptionWithSkipRetry())
 		}
-		}
 		funding.consumed += delta
 		return nil
 	case *SubscriptionFunding:

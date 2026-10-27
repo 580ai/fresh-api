@@ -171,6 +171,10 @@ func StatedLang(c *gin.Context) string {
 	}
 
 	// 4. Try Accept-Language header directly (fallback if middleware didn't run)
+	if c.Request == nil {
+		// 单元测试等场景可能只构造了 gin.Context 而没有挂 Request
+		return ""
+	}
 	return ParseAcceptLanguage(c.GetHeader("Accept-Language"))
 }
 

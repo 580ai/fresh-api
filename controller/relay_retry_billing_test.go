@@ -11,10 +11,11 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/billing_setting"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
-	"github.com/QuantumNous/new-api/types"
+	hosttypes "github.com/QuantumNous/new-api/types"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -50,6 +51,11 @@ func (s *recordingRetryBillingSettler) Reserve(targetQuota int) error {
 		s.preConsumedQuota = targetQuota
 	}
 	return nil
+}
+
+// ReserveBeforeSubmit 与 Reserve 记录同样的目标值，用于断言发起上游请求前的补扣。
+func (s *recordingRetryBillingSettler) ReserveBeforeSubmit(targetQuota int) error {
+	return s.Reserve(targetQuota)
 }
 
 func TestGetChannelReservesTieredQuotaBeforeSettingUpCrossGroupRetry(t *testing.T) {
@@ -147,9 +153,9 @@ func setupCrossGroupRetryBillingTest(t *testing.T) (*gin.Context, *relaycommon.R
 		UsingGroup:      "initial",
 		ChannelMeta:     &relaycommon.ChannelMeta{},
 		Billing:         billing,
-		PriceData: types.PriceData{
+		PriceData: hosttypes.PriceData{
 			QuotaToPreConsume: 100,
-			GroupRatioInfo: types.GroupRatioInfo{
+			GroupRatioInfo: hosttypes.GroupRatioInfo{
 				GroupRatio: 1,
 			},
 		},

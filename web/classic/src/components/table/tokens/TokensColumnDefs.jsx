@@ -94,8 +94,34 @@ const renderGroupColumn = (text, record, t, groupRatios = {}) => {
     return renderGroup('');
   }
 
-
   if (text === 'auto') {
+    // 多分组令牌：group="auto" 且 auto_groups 有序，展示为用户选定的分组链
+    const autoGroups = Array.isArray(record?.auto_groups)
+      ? record.auto_groups.filter((g) => g)
+      : [];
+    if (autoGroups.length > 0) {
+      return (
+        <Tooltip
+          content={t(
+            '按顺序尝试以下分组，当前分组不可用时自动降级到下一个分组',
+          )}
+          position='top'
+        >
+          <span className='flex flex-wrap items-center gap-1'>
+            {autoGroups.map((group, index) => (
+              <Tag key={`${group}-${index}`} color='white' shape='circle'>
+                {`${index + 1}. ${group}`}
+              </Tag>
+            ))}
+            {record && record.cross_group_retry ? (
+              <Tag size='small' color='green' shape='circle'>
+                {t('跨分组')}
+              </Tag>
+            ) : null}
+          </span>
+        </Tooltip>
+      );
+    }
     return (
       <Tooltip
         content={t(

@@ -217,6 +217,8 @@ func SetApiRouter(router *gin.Engine) {
 			optionRoute.GET("/request_policy", controller.GetRequestPolicy)
 			optionRoute.PATCH("/request_policy", controller.UpdateRequestPolicy)
 			optionRoute.PUT("/", controller.UpdateOption)
+			// [CUSTOM] classic 设置页的旧配置迁移入口
+			optionRoute.POST("/migrate_console_setting", controller.MigrateConsoleSetting)
 			optionRoute.PUT("/passkey/domains", controller.UpdatePasskeyDomains)
 			optionRoute.GET("/model_pricing", controller.GetModelPricingConfig)
 			optionRoute.PATCH("/model_pricing", controller.UpdateModelPricingConfig)
@@ -345,6 +347,8 @@ func SetApiRouter(router *gin.Engine) {
 		logRoute.GET("/self/token_model_daily", middleware.UserAuth(), controller.GetTokenModelDailyConsumption)
 		logRoute.GET("/self/token_model_full", middleware.UserAuth(), controller.GetTokenModelFullConsumption)
 		logRoute.POST("/backfill_token_daily_stat", middleware.AdminAuth(), controller.BackfillTokenDailyStat)
+		// [CUSTOM] classic 设置页仍调用同步清理接口；清理会抹掉日志，仅 root 可执行
+		logRoute.DELETE("/", middleware.RootAuth(), middleware.CriticalRateLimit(), controller.DeleteHistoryLogs)
 
 		// 操作日志路由
 		// 读取沿用 AdminAuth，但删除操作会抹掉审计链，仅 root 可执行。

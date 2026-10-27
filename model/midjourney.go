@@ -176,6 +176,8 @@ func (midjourney *Midjourney) Update() error {
 
 func (midjourney *Midjourney) UpdateImageUrls() error {
 	return DB.Model(midjourney).Update("image_urls", midjourney.ImageUrls).Error
+}
+
 func (midjourney *Midjourney) UpdateBillingState() error {
 	return DB.Model(midjourney).
 		Select("quota", "token_id", "billing_channel_id").

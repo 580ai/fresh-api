@@ -280,34 +280,15 @@ export const useDeploymentsData = () => {
   };
 
   // Deployment operations
-  const startDeployment = async (deploymentId) => {
-    try {
-      const res = await API.post(`/api/deployments/${deploymentId}/start`);
-      if (res.data.success) {
-        showSuccess(t('部署启动成功'));
-        await refresh();
-      } else {
-        showError(res.data.message);
-      }
-    } catch (error) {
-      console.error(error);
-      showError(t('启动部署失败'));
-    }
+  // io.net 没有部署级的启动/重启接口（只有容器级 restart/stop），停止或失败的
+  // 部署只能删除后重新创建。这里不再请求不存在的 /start、/restart 路由（会 404），
+  // 直接给出明确提示，避免误导用户以为在重试。
+  const startDeployment = async () => {
+    showError(t('io.net 部署无法直接启动，请删除后重新创建'));
   };
 
-  const restartDeployment = async (deploymentId) => {
-    try {
-      const res = await API.post(`/api/deployments/${deploymentId}/restart`);
-      if (res.data.success) {
-        showSuccess(t('部署重启成功'));
-        await refresh();
-      } else {
-        showError(res.data.message);
-      }
-    } catch (error) {
-      console.error(error);
-      showError(t('重启部署失败'));
-    }
+  const restartDeployment = async () => {
+    showError(t('io.net 部署无法直接重启，请删除后重新创建'));
   };
 
   const deleteDeployment = async (deploymentId) => {
@@ -431,23 +412,41 @@ export const useDeploymentsData = () => {
   };
 
   // Batch operations
+  // 后端没有批量删除接口，这里串行调用单删接口（DELETE /api/deployments/:id）。
   const batchDeleteDeployments = async () => {
     if (selectedKeys.length === 0) return;
 
-    try {
-      const ids = selectedKeys.map((deployment) => deployment.id);
-      const res = await API.post('/api/deployments/batch_delete', { ids });
-      if (res.data.success) {
-        showSuccess(t('批量删除成功'));
-        setSelectedKeys([]);
-        await refresh();
-      } else {
-        showError(res.data.message);
+    const ids = selectedKeys.map((deployment) => deployment.id);
+    let successCount = 0;
+    const failedIds = [];
+    for (const id of ids) {
+      try {
+        const res = await API.delete(`/api/deployments/${id}`);
+        if (res.data.success) {
+          successCount++;
+        } else {
+          failedIds.push(id);
+        }
+      } catch (error) {
+        console.error(error);
+        failedIds.push(id);
       }
-    } catch (error) {
-      console.error(error);
+    }
+
+    if (failedIds.length === 0) {
+      showSuccess(t('批量删除成功'));
+    } else if (successCount > 0) {
+      showError(
+        t('部分删除成功：{{ok}} 成功，{{fail}} 失败', {
+          ok: successCount,
+          fail: failedIds.length,
+        }),
+      );
+    } else {
       showError(t('批量删除失败'));
     }
+    setSelectedKeys([]);
+    await refresh();
   };
 
   // Table row click handler

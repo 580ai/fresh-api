@@ -18,15 +18,24 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import React, { useState, useEffect, useContext } from 'react';
-import { Modal, Form } from '@douyinfe/semi-ui';
+import { Modal } from '@douyinfe/semi-ui';
 import { API, showError, showSuccess } from '../../../../helpers';
 import { StatusContext } from '../../../../context/Status';
+import DraggableGroupSelect from '../../../common/ui/DraggableGroupSelect';
 
-const UpdateGroupModal = ({ visible, onCancel, selectedKeys, onSuccess, t }) => {
+const UpdateGroupModal = ({
+  visible,
+  onCancel,
+  selectedKeys,
+  onSuccess,
+  t,
+}) => {
   const [statusState] = useContext(StatusContext);
   const [loading, setLoading] = useState(false);
   const [groups, setGroups] = useState([]);
-  const [formApi, setFormApi] = useState(null);
+  // 与单个令牌编辑保持一致：勾选多个分组时下发有序分组链
+  const [selectedGroups, setSelectedGroups] = useState([]);
+  const [maxAutoGroups, setMaxAutoGroups] = useState(5);
 
   const loadGroups = async () => {
     let res = await API.get(`/api/user/self/groups`);
@@ -36,7 +45,9 @@ const UpdateGroupModal = ({ visible, onCancel, selectedKeys, onSuccess, t }) => 
         label: (
           <div>
             <div>{group}</div>
-            <div style={{ fontSize: '12px', color: 'var(--semi-color-text-2)' }}>
+            <div
+              style={{ fontSize: '12px', color: 'var(--semi-color-text-2)' }}
+            >
               {info.desc}
             </div>
           </div>
@@ -60,24 +71,55 @@ const UpdateGroupModal = ({ visible, onCancel, selectedKeys, onSuccess, t }) => 
     }
   };
 
+  const loadAutoGroupsMeta = async () => {
+    try {
+      const res = await API.get('/api/token/auto-groups');
+      const { success, data } = res.data;
+      if (success && data?.max_count > 0) {
+        setMaxAutoGroups(data.max_count);
+      }
+    } catch (e) {
+      // 拿不到上限时保留默认值，服务端仍会做最终校验
+    }
+  };
+
   useEffect(() => {
     if (visible) {
       loadGroups();
+      loadAutoGroupsMeta();
     }
   }, [visible]);
 
-  const handleSubmit = async (values) => {
+  const handleSubmit = async () => {
+    const wantsAuto = selectedGroups.includes('auto');
+    const ordered = selectedGroups.filter((g) => g !== 'auto');
+    if (ordered.length > maxAutoGroups) {
+      showError(t('最多只能选择 {{max}} 个分组', { max: maxAutoGroups }));
+      return;
+    }
+
+    const payload = { ids: selectedKeys.map((token) => token.id) };
+    if (wantsAuto && ordered.length === 0) {
+      payload.group = 'auto';
+      payload.auto_groups = [];
+      payload.cross_group_retry = true;
+    } else if (ordered.length > 1) {
+      payload.group = 'auto';
+      payload.auto_groups = ordered;
+      payload.cross_group_retry = true;
+    } else {
+      payload.group = ordered[0] || '';
+      payload.auto_groups = [];
+      payload.cross_group_retry = false;
+    }
+
     setLoading(true);
-    const ids = selectedKeys.map((token) => token.id);
-    const res = await API.put('/api/token/batch/group', {
-      ids,
-      group: values.group || '',
-      cross_group_retry: values.cross_group_retry || false,
-    });
+    const res = await API.put('/api/token/batch/group', payload);
     const { success, message } = res.data;
     setLoading(false);
     if (success) {
       showSuccess(t('批量修改分组成功'));
+      setSelectedGroups([]);
       onCancel();
       onSuccess();
     } else {
@@ -90,7 +132,7 @@ const UpdateGroupModal = ({ visible, onCancel, selectedKeys, onSuccess, t }) => 
       title={t('批量修改分组')}
       visible={visible}
       onCancel={onCancel}
-      onOk={() => formApi?.submitForm()}
+      onOk={() => handleSubmit()}
       confirmLoading={loading}
       okText={t('确定')}
       cancelText={t('取消')}
@@ -98,23 +140,24 @@ const UpdateGroupModal = ({ visible, onCancel, selectedKeys, onSuccess, t }) => 
       <p className='mb-4'>
         {t('已选择')} <strong>{selectedKeys.length}</strong> {t('个令牌')}
       </p>
-      <Form
-        getFormApi={(api) => setFormApi(api)}
-        onSubmit={handleSubmit}
-        initValues={{ group: '', cross_group_retry: false }}
-      >
-        <Form.Select
-          field='group'
-          label={t('分组')}
-          placeholder={t('请选择分组')}
-          optionList={groups}
-          renderSelectedItem={(option) => option._display || option.value}
-          style={{ width: '100%' }}
-        />
-        <Form.Checkbox field='cross_group_retry' noLabel>
-          {t('跨分组重试（仅auto分组有效）')}
-        </Form.Checkbox>
-      </Form>
+      {groups.length > 0 ? (
+        <>
+          <div className='mb-2'>{t('分组')}</div>
+          <DraggableGroupSelect
+            value={selectedGroups}
+            onChange={setSelectedGroups}
+            options={groups}
+            placeholder={t('请选择分组，可多选并拖拽排序设置优先级')}
+          />
+          {(selectedGroups.includes('auto') || selectedGroups.length > 1) && (
+            <p className='mt-2 text-xs text-gray-500'>
+              {t('跨分组重试已自动开启，按顺序尝试所选分组')}
+            </p>
+          )}
+        </>
+      ) : (
+        <p className='text-xs text-gray-500'>{t('管理员未设置用户可选分组')}</p>
+      )}
     </Modal>
   );
 };

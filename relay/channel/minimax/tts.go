@@ -9,10 +9,6 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/dto"
-	relaycommon "github.com/QuantumNous/new-api/relay/common"
-	"github.com/QuantumNous/new-api/types"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
@@ -189,7 +185,7 @@ func handleChatCompletionResponse(c *gin.Context, resp *http.Response, info *rel
 
 	// Set response headers
 	for key, values := range resp.Header {
-		if key == common.RequestIdKey || key == "X-New-Api-Version" {
+		if !service.ShouldCopyUpstreamHeader(c, key, values) {
 			continue
 		}
 		for _, value := range values {

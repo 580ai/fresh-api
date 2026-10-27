@@ -5820,6 +5820,8 @@
     "Shown {{count}} models in model square": "Đã hiển thị {{count}} mô hình trong kho mô hình",
     "Sidebar": "Thanh bên",
     "Sidebar collapsed by default for new users": "Thanh bên được thu gọn theo mặc định đối với người dùng mới",
+    "Frontend": "Giao diện",
+    "Dashboard frontend": "Giao diện bảng điều khiển",
     "Sidebar modules": "Mô-đun thanh bên",
     "Sidebar Personal Settings": "Cài đặt cá nhân thanh bên",
     "Sign in": "Đăng nhập",

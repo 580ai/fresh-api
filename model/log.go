@@ -2,6 +2,7 @@ package model
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -322,20 +323,6 @@ func RecordErrorLog(c *gin.Context, userId int, channelId int, modelName string,
 }
 
 type RecordConsumeLogParams struct {
-	ChannelId        int                    `json:"channel_id"`
-	PromptTokens     int                    `json:"prompt_tokens"`
-	CompletionTokens int                    `json:"completion_tokens"`
-	ModelName        string                 `json:"model_name"`
-	TokenName        string                 `json:"token_name"`
-	Quota            int                    `json:"quota"`
-	Content          string                 `json:"content"`
-	TokenId          int                    `json:"token_id"`
-	UseTimeSeconds   int                    `json:"use_time_seconds"`
-	IsStream         bool                   `json:"is_stream"`
-	Group            string                 `json:"group"`
-	Other            map[string]interface{} `json:"other"`
-	RequestBody      string                 `json:"request_body,omitempty"`  // 请求内容
-	ResponseBody     string                 `json:"response_body,omitempty"` // 响应内容
 	ChannelId        int               `json:"channel_id"`
 	PromptTokens     int               `json:"prompt_tokens"`
 	CompletionTokens int               `json:"completion_tokens"`
@@ -348,6 +335,9 @@ type RecordConsumeLogParams struct {
 	IsStream         bool              `json:"is_stream"`
 	Group            string            `json:"group"`
 	Other            *LogOther         `json:"other"`
+	// [CUSTOM] 请求/响应原文，仅在开启日志内容记录时落库
+	RequestBody  string `json:"request_body,omitempty"`
+	ResponseBody string `json:"response_body,omitempty"`
 }
 
 func RecordConsumeLog(c *gin.Context, userId int, params RecordConsumeLogParams) {
@@ -491,13 +481,6 @@ func RecordTaskBillingLog(params RecordTaskBillingLogParams) {
 	}
 }
 
-func GetAllLogs(logType int, startTimestamp int64, endTimestamp int64, modelName string, username string, tokenName string, startIdx int, num int, channel int, group string, requestId string, upstreamRequestId string, userId int) (logs []*Log, total int64, err error) {
-	var tx *gorm.DB
-	if logType == LogTypeUnknown {
-		tx = LOG_DB
-	} else {
-		tx = LOG_DB.Where("logs.type = ?", logType)
-	}
 // LogFilter is the usage-log search shared by the log list and the log export.
 // Username and Channel are administrator filters.
 type LogFilter struct {
@@ -511,6 +494,8 @@ type LogFilter struct {
 	Group             string
 	RequestId         string
 	UpstreamRequestId string
+	// UserId 仅管理端筛选使用，0 表示不限制
+	UserId int
 }
 
 func (f LogFilter) apply(tx *gorm.DB) (*gorm.DB, error) {
@@ -539,11 +524,10 @@ func (f LogFilter) apply(tx *gorm.DB) (*gorm.DB, error) {
 	if f.EndTimestamp != 0 {
 		tx = tx.Where("logs.created_at <= ?", f.EndTimestamp)
 	}
-	if userId != 0 {
-		tx = tx.Where("logs.user_id = ?", userId)
+	if f.UserId != 0 {
+		// [CUSTOM] 管理端按用户 ID 筛选
+		tx = tx.Where("logs.user_id = ?", f.UserId)
 	}
-	if group != "" {
-		tx = tx.Where("logs."+logGroupCol+" = ?", group)
 	if f.Channel != 0 {
 		tx = tx.Where("logs.channel_id = ?", f.Channel)
 	}

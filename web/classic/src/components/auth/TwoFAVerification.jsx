@@ -29,7 +29,12 @@ import React, { useState } from 'react';
 
 const { Title, Text, Paragraph } = Typography;
 
-const TwoFAVerification = ({ onSuccess, onBack, isModal = false }) => {
+const TwoFAVerification = ({
+  onSuccess,
+  onBack,
+  isModal = false,
+  challenge,
+}) => {
   const [loading, setLoading] = useState(false);
   const [useBackupCode, setUseBackupCode] = useState(false);
   const [verificationCode, setVerificationCode] = useState('');
@@ -47,18 +52,24 @@ const TwoFAVerification = ({ onSuccess, onBack, isModal = false }) => {
       showError('验证码必须是6位数字');
       return;
     }
+    // 新版后端要求携带领取登录挑战时拿到的 flow_token
+    if (!challenge?.flow_token) {
+      showError('登录流程已失效，请重新登录');
+      if (onBack) onBack();
+      return;
+    }
 
     setLoading(true);
     try {
-      const res = await API.post('/api/user/login/2fa', {
+      const res = await API.post('/api/user/login/verify', {
+        flow_token: challenge.flow_token,
+        method: '2fa',
         code: verificationCode,
       });
 
       if (res.data.success) {
         showSuccess('登录成功');
-        // 保存用户信息到本地存储
-        localStorage.setItem('user', JSON.stringify(res.data.data));
-        // 重建 axios 实例，让后续请求带上正确的 New-Api-User
+        // bundle 的解包与凭证落盘统一交给调用方（onSuccess）
         updateAPI();
         if (onSuccess) {
           onSuccess(res.data.data);

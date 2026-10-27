@@ -232,3 +232,120 @@ func TestGetTokenAutoGroupsReturnsFullFilteredGlobalOrderAndLimit(t *testing.T) 
 	assert.Equal(t, []string{"vip", "default"}, data.Groups)
 	assert.Equal(t, 1, data.MaxCount)
 }
+
+// 批量修改分组必须能下发有序分组链，否则批量场景下用户只能退回全局 auto 配置。
+func TestUpdateTokenGroupBatchAppliesOrderedAutoGroups(t *testing.T) {
+	configureTokenAutoGroupsTest(t, "5", `["default","vip"]`)
+	user := setupTokenAutoGroupsControllerTest(t)
+
+	created := make([]*model.Token, 0, 2)
+	for i := 0; i < 2; i++ {
+		token := &model.Token{
+			UserId:          user.Id,
+			Name:            fmt.Sprintf("batch-auto-%d", i),
+			Key:             fmt.Sprintf("batch-auto-key-%d", i),
+			Status:          common.TokenStatusEnabled,
+			ExpiredTime:     -1,
+			UnlimitedQuota:  true,
+			Group:           "default",
+			CrossGroupRetry: false,
+		}
+		require.NoError(t, model.DB.Create(token).Error)
+		created = append(created, token)
+	}
+
+	ids := []int{created[0].Id, created[1].Id}
+	ctx, recorder := newTokenAutoGroupsAuthenticatedContext(t, http.MethodPut, "/api/token/batch/group", map[string]any{
+		"ids":               ids,
+		"group":             "auto",
+		"cross_group_retry": true,
+		"auto_groups":       []string{"vip", "default"},
+	}, user.Id)
+	UpdateTokenGroupBatch(ctx)
+
+	response := decodeAPIResponse(t, recorder)
+	require.True(t, response.Success, response.Message)
+
+	for _, id := range ids {
+		var updated model.Token
+		require.NoError(t, model.DB.First(&updated, id).Error)
+		assert.Equal(t, "auto", updated.Group)
+		assert.JSONEq(t, `["vip","default"]`, updated.AutoGroups)
+		assert.True(t, updated.CrossGroupRetry)
+	}
+}
+
+// 切回具体分组时必须清空分组链，否则残留的 auto_groups 会在下次切回 auto 时复用旧顺序。
+func TestUpdateTokenGroupBatchClearsAutoGroupsForConcreteGroup(t *testing.T) {
+	configureTokenAutoGroupsTest(t, "5", `["default","vip"]`)
+	user := setupTokenAutoGroupsControllerTest(t)
+
+	token := &model.Token{
+		UserId:          user.Id,
+		Name:            "batch-clear",
+		Key:             "batch-clear-key",
+		Status:          common.TokenStatusEnabled,
+		ExpiredTime:     -1,
+		UnlimitedQuota:  true,
+		Group:           "auto",
+		CrossGroupRetry: true,
+		AutoGroups:      `["vip","default"]`,
+	}
+	require.NoError(t, model.DB.Create(token).Error)
+
+	ctx, recorder := newTokenAutoGroupsAuthenticatedContext(t, http.MethodPut, "/api/token/batch/group", map[string]any{
+		"ids":   []int{token.Id},
+		"group": "default",
+	}, user.Id)
+	UpdateTokenGroupBatch(ctx)
+	require.True(t, decodeAPIResponse(t, recorder).Success)
+
+	var updated model.Token
+	require.NoError(t, model.DB.First(&updated, token.Id).Error)
+	assert.Equal(t, "default", updated.Group)
+	assert.Empty(t, updated.AutoGroups)
+	assert.False(t, updated.CrossGroupRetry)
+}
+
+// 分组链的校验（数量上限、重复、不可用分组）在批量路径上同样要生效。
+func TestUpdateTokenGroupBatchRejectsInvalidAutoGroups(t *testing.T) {
+	tests := []struct {
+		name     string
+		maxCount string
+		groups   []string
+	}{
+		{name: "over limit", maxCount: "1", groups: []string{"default", "vip"}},
+		{name: "duplicate", maxCount: "5", groups: []string{"vip", "vip"}},
+		{name: "unavailable", maxCount: "5", groups: []string{"missing"}},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			configureTokenAutoGroupsTest(t, test.maxCount, `["default","vip"]`)
+			user := setupTokenAutoGroupsControllerTest(t)
+			token := &model.Token{
+				UserId:         user.Id,
+				Name:           "batch-invalid-" + test.name,
+				Key:            "batch-invalid-key-" + test.name,
+				Status:         common.TokenStatusEnabled,
+				ExpiredTime:    -1,
+				UnlimitedQuota: true,
+				Group:          "default",
+			}
+			require.NoError(t, model.DB.Create(token).Error)
+
+			ctx, recorder := newTokenAutoGroupsAuthenticatedContext(t, http.MethodPut, "/api/token/batch/group", map[string]any{
+				"ids":         []int{token.Id},
+				"group":       "auto",
+				"auto_groups": test.groups,
+			}, user.Id)
+			UpdateTokenGroupBatch(ctx)
+			assert.False(t, decodeAPIResponse(t, recorder).Success)
+
+			var unchanged model.Token
+			require.NoError(t, model.DB.First(&unchanged, token.Id).Error)
+			assert.Equal(t, "default", unchanged.Group, "校验失败时不得部分写入")
+			assert.Empty(t, unchanged.AutoGroups)
+		})
+	}
+}

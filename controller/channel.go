@@ -119,6 +119,8 @@ func sanitizeChannelForLog(channel *model.Channel) map[string]any {
 		"base_url":     channel.GetBaseURL(),
 		"is_multi_key": channel.ChannelInfo.IsMultiKey,
 	}
+}
+
 func channelIDsFromChannels(channels []*model.Channel) []int {
 	ids := make([]int, 0, len(channels))
 	for _, channel := range channels {
@@ -945,12 +947,6 @@ func AddChannel(c *gin.Context) {
 			fmt.Sprintf("创建渠道: %s", ch.Name))
 	}
 
-	recordManageAudit(c, "channel.create", map[string]interface{}{
-		"name":  addChannelRequest.Channel.Name,
-		"type":  addChannelRequest.Channel.Type,
-		"count": len(channels),
-	})
-	resp := gin.H{
 	createAudit := map[string]any{
 		"name":  addChannelRequest.Channel.Name,
 		"type":  addChannelRequest.Channel.Type,
@@ -960,7 +956,7 @@ func AddChannel(c *gin.Context) {
 		createAudit["base_url_source"] = "plugin_default"
 	}
 	recordManageAudit(c, "channel.create", createAudit)
-	c.JSON(http.StatusOK, gin.H{
+	resp := gin.H{
 		"success": true,
 		"message": "",
 		"data": gin.H{
@@ -982,13 +978,11 @@ func DeleteChannel(c *gin.Context) {
 	oldChannel, _ := model.GetChannelById(id, false)
 
 	channelName := ""
-	if oldChannel != nil {
-		channelName = oldChannel.Name
 	channelProxy := ""
 	channelLookupFailed := false
-	if existing, err := model.GetChannelById(id, false); err == nil && existing != nil {
-		channelName = existing.Name
-		channelProxy = existing.GetSetting().Proxy
+	if oldChannel != nil {
+		channelName = oldChannel.Name
+		channelProxy = oldChannel.GetSetting().Proxy
 	} else {
 		channelLookupFailed = true
 	}
@@ -1006,7 +1000,6 @@ func DeleteChannel(c *gin.Context) {
 		strconv.Itoa(id), channelName, sanitizeChannelForLog(oldChannel), nil,
 		fmt.Sprintf("删除渠道: %s (ID: %d)", channelName, id))
 
-	recordManageAudit(c, "channel.delete", map[string]interface{}{
 	if channelLookupFailed {
 		service.ResetProxyClientCache()
 	} else {
@@ -1671,16 +1664,12 @@ func buildAdvancedCustomModelPreviewChannel(req fetchModelsRequest) (*model.Chan
 		}
 	}
 
-	baseURL := req.BaseURL
-	if !operation_setting.IsChannelBaseURLInputEnabled() {
-		baseURL = ""
-	}
-	if baseURL == "" {
-		baseURL = constant.ChannelBaseURLs[req.Type]
 	if channel.Type != constant.ChannelTypeAdvancedCustom {
 		return nil, fmt.Errorf("channel type must be advanced custom")
 	}
-	if req.BaseURL != nil {
+	// [CUSTOM] 后台关闭「自定义渠道 Base URL」时，预览也忽略前端传值，
+	// 与 AddChannel/UpdateChannel 的落库行为保持一致。
+	if req.BaseURL != nil && operation_setting.IsChannelBaseURLInputEnabled() {
 		baseURL := strings.TrimSpace(*req.BaseURL)
 		channel.BaseURL = &baseURL
 	}

@@ -5820,6 +5820,8 @@
     "Shown {{count}} models in model square": "Показано моделей в каталоге: {{count}}",
     "Sidebar": "Боковая панель",
     "Sidebar collapsed by default for new users": "Боковая панель свернута по умолчанию для новых пользователей",
+    "Frontend": "Интерфейс",
+    "Dashboard frontend": "Интерфейс панели",
     "Sidebar modules": "Модули боковой панели",
     "Sidebar Personal Settings": "Личные настройки боковой панели",
     "Sign in": "Войти",

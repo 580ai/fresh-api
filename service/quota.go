@@ -418,7 +418,6 @@ func PreConsumeTokenQuota(relayInfo *relaycommon.RelayInfo, quota int) error {
 	if relayInfo.IsPlayground {
 		return nil
 	}
-	return model.ConsumeTokenQuota(relayInfo.TokenId, relayInfo.TokenKey, quota)
 	// 原子预扣：检查与扣减在同一操作中完成，并发请求不可能同时通过检查后超扣。
 	reserved, err := model.TryReserveTokenQuota(relayInfo.TokenId, relayInfo.TokenKey, quota, relayInfo.TokenUnlimited)
 	if err != nil {
@@ -461,9 +460,9 @@ func postConsumeQuotaWithResult(relayInfo *relaycommon.RelayInfo, quota int, pre
 	} else {
 		// Wallet
 		if quota > 0 {
-			err = model.ConsumeUserQuota(relayInfo.UserId, quota)
+			err = model.DecreaseUserQuota(relayInfo.UserId, quota, false)
 		} else {
-			err = model.RestoreUserQuota(relayInfo.UserId, -quota)
+			err = model.IncreaseUserQuota(relayInfo.UserId, -quota, false)
 		}
 		if err != nil {
 			return result, err

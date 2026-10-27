@@ -240,7 +240,7 @@ func TestGeminiStreamHandlerCompletionTokensExcludeToolUsePromptTokens(t *testin
 		Body: io.NopCloser(bytes.NewReader(streamBody)),
 	}
 
-	usage, newAPIError := geminiStreamHandler(c, info, resp, func(_ string, _ *dto.GeminiChatResponse) bool {
+	usage, _, newAPIError := geminiStreamHandler(c, info, resp, func(_ string, _ *dto.GeminiChatResponse) bool {
 		return true
 	})
 	require.Nil(t, newAPIError)
@@ -399,7 +399,7 @@ func TestGeminiStreamHandlerUsesEstimatedPromptTokensWhenUsagePromptMissing(t *t
 		Body: io.NopCloser(bytes.NewReader(streamBody)),
 	}
 
-	usage, newAPIError := geminiStreamHandler(c, info, resp, func(_ string, _ *dto.GeminiChatResponse) bool {
+	usage, _, newAPIError := geminiStreamHandler(c, info, resp, func(_ string, _ *dto.GeminiChatResponse) bool {
 		return true
 	})
 	require.Nil(t, newAPIError)
@@ -549,7 +549,7 @@ func TestGeminiStreamHandlerPromptOnlyUsageMetadataEstimatesCompletionTokens(t *
 				Body: io.NopCloser(bytes.NewReader(streamBody)),
 			}
 
-			usage, newAPIError := geminiStreamHandler(c, info, resp, func(_ string, _ *dto.GeminiChatResponse) bool {
+			usage, _, newAPIError := geminiStreamHandler(c, info, resp, func(_ string, _ *dto.GeminiChatResponse) bool {
 				return true
 			})
 			require.Nil(t, newAPIError)
@@ -639,7 +639,7 @@ func TestGeminiStreamHandlerEmptyUsageMetadataBuildsEstimatedBillingUsage(t *tes
 		Body: io.NopCloser(bytes.NewReader(streamBody)),
 	}
 
-	usage, newAPIError := geminiStreamHandler(c, info, resp, func(_ string, _ *dto.GeminiChatResponse) bool {
+	usage, _, newAPIError := geminiStreamHandler(c, info, resp, func(_ string, _ *dto.GeminiChatResponse) bool {
 		return true
 	})
 	require.Nil(t, newAPIError)
@@ -737,7 +737,7 @@ func TestGeminiHandlersCountGroundingQueries(t *testing.T) {
 			var apiErr *types.NewAPIError
 			if tt.stream {
 				body := "data: " + strings.Join(tt.frames, "\ndata: ") + "\ndata: [DONE]\n"
-				_, apiErr = geminiStreamHandler(c, info, &http.Response{Body: io.NopCloser(strings.NewReader(body))}, func(string, *dto.GeminiChatResponse) bool {
+				_, _, apiErr = geminiStreamHandler(c, info, &http.Response{Body: io.NopCloser(strings.NewReader(body))}, func(string, *dto.GeminiChatResponse) bool {
 					return true
 				})
 			} else {

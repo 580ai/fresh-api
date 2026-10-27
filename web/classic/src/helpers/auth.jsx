@@ -21,17 +21,6 @@ import React from 'react';
 import { Navigate } from 'react-router-dom';
 import { history } from './history';
 
-export function authHeader() {
-  // return authorization header with jwt token
-  let user = JSON.parse(localStorage.getItem('user'));
-
-  if (user && user.token) {
-    return { Authorization: 'Bearer ' + user.token };
-  } else {
-    return {};
-  }
-}
-
 // 检查是否是超级管理员（role = 100）
 export function isSuperAdmin() {
   try {

@@ -70,6 +70,9 @@ const EditTokenModal = (props) => {
   const [models, setModels] = useState([]);
   const [groups, setGroups] = useState([]);
   const [selectedGroups, setSelectedGroups] = useState([]);
+  // 后端把「多分组」表达为 group="auto" + auto_groups 有序数组，
+  // auto_groups 的条数上限由服务端配置决定。
+  const [maxAutoGroups, setMaxAutoGroups] = useState(5);
   const [showQuotaInput, setShowQuotaInput] = useState(false);
   const isEdit = props.editingToken.id !== undefined;
 
@@ -143,7 +146,7 @@ const EditTokenModal = (props) => {
       let localGroupOptions = Object.entries(data).map(([group, info]) => ({
         label: info.desc,
         value: group,
-        name: group,  // 分组名
+        name: group, // 分组名
         ratio: info.ratio,
         order: info.order !== undefined ? info.order : 999,
       }));
@@ -162,6 +165,18 @@ const EditTokenModal = (props) => {
     }
   };
 
+  const loadAutoGroupsMeta = async () => {
+    try {
+      const res = await API.get('/api/token/auto-groups');
+      const { success, data } = res.data;
+      if (success && data?.max_count > 0) {
+        setMaxAutoGroups(data.max_count);
+      }
+    } catch (e) {
+      // 拿不到上限时保留默认值，服务端仍会做最终校验
+    }
+  };
+
   const loadToken = async () => {
     setLoading(true);
     let res = await API.get(`/api/token/${props.editingToken.id}`);
@@ -175,10 +190,23 @@ const EditTokenModal = (props) => {
       } else {
         data.model_limits = [];
       }
-      // 将 group 字符串转换为 groups 数组
-      if (data.group && data.group !== '') {
-        const groupsArray = data.group.split(',').filter(g => g.trim() !== '');
-        setSelectedGroups(groupsArray);
+      // 后端多分组：group="auto" + auto_groups 有序数组；
+      // 同时兼容旧数据里以逗号拼接的 group。
+      const autoGroups = Array.isArray(data.auto_groups)
+        ? data.auto_groups.filter((g) => g && g.trim() !== '')
+        : [];
+      if (data.group === 'auto' && autoGroups.length > 0) {
+        setSelectedGroups(autoGroups);
+      } else if (data.group === 'auto') {
+        // 只选了 auto：界面恢复成「auto」这一个选项
+        setSelectedGroups(['auto']);
+      } else if (data.group && data.group !== '') {
+        setSelectedGroups(
+          data.group
+            .split(',')
+            .map((g) => g.trim())
+            .filter((g) => g !== ''),
+        );
       } else {
         setSelectedGroups([]);
       }
@@ -202,6 +230,7 @@ const EditTokenModal = (props) => {
     }
     loadModels();
     loadGroups();
+    loadAutoGroupsMeta();
   }, [props.editingToken.id]);
 
   useEffect(() => {
@@ -230,6 +259,33 @@ const EditTokenModal = (props) => {
     return result;
   };
 
+  // 把「勾选的分组」翻译成后端协议：
+  //   选 auto        -> group="auto"，auto_groups 留空（沿用全局 auto 分组配置）
+  //   1 个具体分组    -> group=该分组，auto_groups 清空
+  //   多个具体分组    -> group="auto"，auto_groups 按勾选顺序保存优先级
+  // 超过服务端上限时直接拦截，避免整次提交被拒绝。
+  const applyGroupPayload = (localInputs) => {
+    const wantsAuto = selectedGroups.includes('auto');
+    const ordered = selectedGroups.filter((g) => g !== 'auto');
+    if (ordered.length > maxAutoGroups) {
+      showError(t('最多只能选择 {{max}} 个分组', { max: maxAutoGroups }));
+      return false;
+    }
+    if (wantsAuto && ordered.length === 0) {
+      localInputs.group = 'auto';
+      localInputs.auto_groups = [];
+    } else if (ordered.length > 1) {
+      localInputs.group = 'auto';
+      localInputs.auto_groups = ordered;
+      localInputs.cross_group_retry = true;
+    } else {
+      localInputs.group = ordered[0] || '';
+      localInputs.auto_groups = [];
+      localInputs.cross_group_retry = false;
+    }
+    return true;
+  };
+
   const submit = async (values) => {
     setLoading(true);
     if (isEdit) {
@@ -253,10 +309,10 @@ const EditTokenModal = (props) => {
       }
       localInputs.model_limits = localInputs.model_limits.join(',');
       localInputs.model_limits_enabled = localInputs.model_limits.length > 0;
-      // 使用 selectedGroups state
-      localInputs.group = selectedGroups.join(',');
-      // 多个分组时自动开启跨分组重试
-      localInputs.cross_group_retry = selectedGroups.length > 1;
+      if (!applyGroupPayload(localInputs)) {
+        setLoading(false);
+        return;
+      }
       let res = await API.put(`/api/token/`, {
         ...localInputs,
         id: parseInt(props.editingToken.id),
@@ -301,10 +357,10 @@ const EditTokenModal = (props) => {
         }
         localInputs.model_limits = localInputs.model_limits.join(',');
         localInputs.model_limits_enabled = localInputs.model_limits.length > 0;
-        // 使用 selectedGroups state
-        localInputs.group = selectedGroups.join(',');
-        // 多个分组时自动开启跨分组重试
-        localInputs.cross_group_retry = selectedGroups.length > 1;
+        if (!applyGroupPayload(localInputs)) {
+          setLoading(false);
+          break;
+        }
         let res = await API.post(`/api/token/`, localInputs);
         const { success, message } = res.data;
         if (success) {
@@ -413,13 +469,21 @@ const EditTokenModal = (props) => {
                           value={selectedGroups}
                           onChange={(newGroups) => {
                             setSelectedGroups(newGroups);
-                            // 多个分组时自动开启跨分组重试
+                            // 多分组（或选择了 auto）时才需要跨分组重试
+                            const needsRetry =
+                              newGroups.includes('auto') ||
+                              newGroups.length > 1;
                             if (formApiRef.current) {
-                              formApiRef.current.setValue('cross_group_retry', newGroups.length > 1);
+                              formApiRef.current.setValue(
+                                'cross_group_retry',
+                                needsRetry,
+                              );
                             }
                           }}
                           options={groups}
-                          placeholder={t('请选择分组，可多选并拖拽排序设置优先级')}
+                          placeholder={t(
+                            '请选择分组，可多选并拖拽排序设置优先级',
+                          )}
                         />
                       </Form.Slot>
                     ) : (
@@ -434,7 +498,11 @@ const EditTokenModal = (props) => {
                   <Col
                     span={24}
                     style={{
-                      display: values.group === 'auto' ? 'block' : 'none',
+                      display:
+                        selectedGroups.includes('auto') ||
+                        selectedGroups.length > 1
+                          ? 'block'
+                          : 'none',
                     }}
                   >
                     <Form.Switch
@@ -573,7 +641,10 @@ const EditTokenModal = (props) => {
                         ? `▾ ${t('收起原生额度输入')}`
                         : `▸ ${t('使用原生额度输入')}`}
                     </div>
-                    <div style={{ display: showQuotaInput ? 'block' : 'none' }} className='mt-2'>
+                    <div
+                      style={{ display: showQuotaInput ? 'block' : 'none' }}
+                      className='mt-2'
+                    >
                       <Form.InputNumber
                         field='remain_quota'
                         label={t('额度')}

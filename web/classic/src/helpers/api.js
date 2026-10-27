@@ -23,6 +23,11 @@ import {
   formatMessageForAPI,
   isValidMessage,
 } from './utils';
+import {
+  clearAuthCredentials,
+  getAccessToken,
+  refreshAccessToken,
+} from './authToken';
 import axios from 'axios';
 import { MESSAGE_ROLES } from '../constants/playground.constants';
 
@@ -37,11 +42,12 @@ function createAPIInstance() {
   });
 }
 
-// 每次请求时再读取用户 id，避免模块加载时快照下来的旧值（例如登录前为 -1）
-// 被钉死在实例上，导致 2FA / OAuth 等非密码登录路径带上错误的 New-Api-User
+// 每次请求时再读取用户 id 与 access token，避免模块加载时快照下来的旧值
+// （例如登录前为 -1、尚未拿到 token）被钉死在实例上。
 function installAuthHeader(instance) {
   instance.interceptors.request.use((config) => {
     const uid = getUserIdFromLocalStorage();
+    const token = getAccessToken();
     const headers = config.headers || {};
     const hasUser = uid !== null && uid !== undefined && uid !== -1;
 
@@ -51,10 +57,22 @@ function installAuthHeader(instance) {
       } else {
         headers.delete('New-Api-User');
       }
-    } else if (hasUser) {
-      headers['New-Api-User'] = uid;
+      if (token) {
+        headers.set('Authorization', `Bearer ${token}`);
+      } else {
+        headers.delete('Authorization');
+      }
     } else {
-      delete headers['New-Api-User'];
+      if (hasUser) {
+        headers['New-Api-User'] = uid;
+      } else {
+        delete headers['New-Api-User'];
+      }
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      } else {
+        delete headers['Authorization'];
+      }
     }
 
     config.headers = headers;
@@ -63,9 +81,46 @@ function installAuthHeader(instance) {
   return instance;
 }
 
+// 401 时用 refresh cookie 换一次新 token 并重放请求；仍失败才交给全局错误处理。
+function installAuthRefresh(instance) {
+  instance.interceptors.response.use(undefined, async (error) => {
+    const config = error?.config;
+    const status = error?.response?.status;
+    if (
+      !config ||
+      status !== 401 ||
+      config.authRetried ||
+      config.skipAuthRefresh
+    ) {
+      return Promise.reject(error);
+    }
+
+    config.authRetried = true;
+    const outcome = await refreshAccessToken();
+    if (!outcome.ok) {
+      clearAuthCredentials();
+      // 刷新失败说明会话已失效，交回调用方按未登录处理
+      return Promise.reject(error);
+    }
+
+    const token = getAccessToken();
+    if (!token) {
+      return Promise.reject(error);
+    }
+
+    config.headers = {
+      ...config.headers,
+      Authorization: `Bearer ${token}`,
+    };
+    return instance.request(config);
+  });
+  return instance;
+}
+
 function buildAPIInstance() {
   const instance = createAPIInstance();
   installAuthHeader(instance);
+  installAuthRefresh(instance);
   patchAPIInstance(instance);
   instance.interceptors.response.use(
     (response) => response,
@@ -290,8 +345,17 @@ async function prepareOAuthState(options = {}) {
   const { shouldLogout = false } = options;
   if (shouldLogout) {
     try {
-      await API.get('/api/user/logout', { skipErrorHandler: true });
+      const sid = localStorage.getItem('auth_session_sid') || '';
+      await API.post(
+        '/api/user/auth/logout',
+        {},
+        {
+          headers: sid ? { 'X-Auth-Session': sid } : undefined,
+          skipErrorHandler: true,
+        },
+      );
     } catch (err) {}
+    clearAuthCredentials();
     localStorage.removeItem('user');
     updateAPI();
   }

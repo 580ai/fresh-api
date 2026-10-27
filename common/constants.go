@@ -37,6 +37,36 @@ func SetTheme(t string) {
 	}
 }
 
+// defaultOnlyPaths 是只存在于新版前端（web/src）的页面前缀。
+// classic 主题下访问这些路径时，服务端需要回退到新版静态资源与 index.html，
+// 否则 SPA 路由会落到 classic 的 404 页面。
+var defaultOnlyPaths = []string{
+	"/security",
+	"/keys",
+	"/dashboard",
+	"/usage-logs",
+	"/wallet",
+	"/subscriptions",
+	"/channels",
+	"/users",
+	"/models",
+	"/redemption-codes",
+	"/sign-in",
+}
+
+// IsDefaultOnlyPath reports whether path belongs to the new frontend only.
+func IsDefaultOnlyPath(path string) bool {
+	if path == "" || path == "/" {
+		return false
+	}
+	for _, prefix := range defaultOnlyPaths {
+		if path == prefix || strings.HasPrefix(path, prefix+"/") {
+			return true
+		}
+	}
+	return false
+}
+
 // ThemeAwarePath rewrites legacy /console/* paths to the default-theme
 // equivalents when the active theme is "default". For "classic" (or any
 // other theme) the path is returned unchanged.
@@ -135,6 +165,9 @@ var DebugEnabled bool
 var MemoryCacheEnabled bool
 
 var LogConsumeEnabled = true
+
+// [CUSTOM] Claude 渠道新增时的预测试开关
+var ClaudePreTestEnabled = true
 
 var TLSInsecureSkipVerify bool
 var InsecureTLSConfig = &tls.Config{InsecureSkipVerify: true}

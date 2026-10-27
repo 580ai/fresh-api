@@ -50,15 +50,27 @@ type themeAwareFileSystem struct {
 	classicFS static.ServeFileSystem
 }
 
-func (t *themeAwareFileSystem) Exists(prefix string, path string) bool {
+func (t *themeAwareFileSystem) exists(path string) bool {
 	if GetTheme() == "classic" {
-		return t.classicFS.Exists(prefix, path)
+		// 新版前端独有的页面（如 /security）在 classic 包里不存在，
+		// 这里回退到新版资源，避免 classic 主题下访问这些页面直接 404。
+		if IsDefaultOnlyPath(path) {
+			return t.defaultFS.Exists("/", path)
+		}
+		return t.classicFS.Exists("/", path)
 	}
-	return t.defaultFS.Exists(prefix, path)
+	return t.defaultFS.Exists("/", path)
+}
+
+func (t *themeAwareFileSystem) Exists(prefix string, path string) bool {
+	return t.exists(path)
 }
 
 func (t *themeAwareFileSystem) Open(name string) (http.File, error) {
 	if GetTheme() == "classic" {
+		if IsDefaultOnlyPath(name) || (!t.classicFS.Exists("/", name) && t.defaultFS.Exists("/", name)) {
+			return t.defaultFS.Open(name)
+		}
 		return t.classicFS.Open(name)
 	}
 	return t.defaultFS.Open(name)

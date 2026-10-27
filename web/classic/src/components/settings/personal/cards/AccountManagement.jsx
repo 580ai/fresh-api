@@ -38,9 +38,8 @@ import {
   IconLock,
   IconDelete,
 } from '@douyinfe/semi-icons';
-import { SiTelegram, SiWechat, SiLinux, SiDiscord } from 'react-icons/si';
+import { SiWechat, SiLinux, SiDiscord } from 'react-icons/si';
 import { UserPlus, ShieldCheck } from 'lucide-react';
-import TelegramLoginButton from 'react-telegram-login';
 import {
   API,
   showError,
@@ -97,8 +96,6 @@ const AccountManagement = ({
     );
   };
   const isBound = (accountId) => Boolean(accountId);
-  const [showTelegramBindModal, setShowTelegramBindModal] =
-    React.useState(false);
   const [customOAuthBindings, setCustomOAuthBindings] = React.useState([]);
   const [customOAuthLoading, setCustomOAuthLoading] = React.useState({});
 
@@ -112,7 +109,9 @@ const AccountManagement = ({
         showError(res.data.message || t('获取绑定信息失败'));
       }
     } catch (error) {
-      showError(error.response?.data?.message || error.message || t('获取绑定信息失败'));
+      showError(
+        error.response?.data?.message || error.message || t('获取绑定信息失败'),
+      );
     }
   };
 
@@ -126,7 +125,9 @@ const AccountManagement = ({
       onOk: async () => {
         setCustomOAuthLoading((prev) => ({ ...prev, [providerId]: true }));
         try {
-          const res = await API.delete(`/api/user/oauth/bindings/${providerId}`);
+          const res = await API.delete(
+            `/api/user/oauth/bindings/${providerId}`,
+          );
           if (res.data.success) {
             showSuccess(t('解绑成功'));
             await loadCustomOAuthBindings();
@@ -134,7 +135,9 @@ const AccountManagement = ({
             showError(res.data.message);
           }
         } catch (error) {
-          showError(error.response?.data?.message || error.message || t('操作失败'));
+          showError(
+            error.response?.data?.message || error.message || t('操作失败'),
+          );
         } finally {
           setCustomOAuthLoading((prev) => ({ ...prev, [providerId]: false }));
         }
@@ -150,13 +153,17 @@ const AccountManagement = ({
   // Check if custom OAuth provider is bound
   const isCustomOAuthBound = (providerId) => {
     const normalizedId = Number(providerId);
-    return customOAuthBindings.some((b) => Number(b.provider_id) === normalizedId);
+    return customOAuthBindings.some(
+      (b) => Number(b.provider_id) === normalizedId,
+    );
   };
 
   // Get binding info for a provider
   const getCustomOAuthBinding = (providerId) => {
     const normalizedId = Number(providerId);
-    return customOAuthBindings.find((b) => Number(b.provider_id) === normalizedId);
+    return customOAuthBindings.find(
+      (b) => Number(b.provider_id) === normalizedId,
+    );
   };
 
   React.useEffect(() => {
@@ -401,81 +408,6 @@ const AccountManagement = ({
                 </div>
               </Card>
 
-              {/* Telegram绑定 */}
-              <Card className='!rounded-xl'>
-                <div className='flex items-center justify-between gap-3'>
-                  <div className='flex items-center flex-1 min-w-0'>
-                    <div className='w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center mr-3 flex-shrink-0'>
-                      <SiTelegram
-                        size={20}
-                        className='text-slate-600 dark:text-slate-300'
-                      />
-                    </div>
-                    <div className='flex-1 min-w-0'>
-                      <div className='font-medium text-gray-900'>
-                        {t('Telegram')}
-                      </div>
-                      <div className='text-sm text-gray-500 truncate'>
-                        {renderAccountInfo(
-                          userState.user?.telegram_id,
-                          t('Telegram ID'),
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                  <div className='flex-shrink-0'>
-                    {status.telegram_oauth ? (
-                      isBound(userState.user?.telegram_id) ? (
-                        <Button
-                          disabled
-                          size='small'
-                          type='primary'
-                          theme='outline'
-                        >
-                          {t('已绑定')}
-                        </Button>
-                      ) : (
-                        <Button
-                          type='primary'
-                          theme='outline'
-                          size='small'
-                          onClick={() => setShowTelegramBindModal(true)}
-                        >
-                          {t('绑定')}
-                        </Button>
-                      )
-                    ) : (
-                      <Button
-                        disabled
-                        size='small'
-                        type='primary'
-                        theme='outline'
-                      >
-                        {t('未启用')}
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              </Card>
-              <Modal
-                title={t('绑定 Telegram')}
-                visible={showTelegramBindModal}
-                onCancel={() => setShowTelegramBindModal(false)}
-                footer={null}
-              >
-                <div className='my-3 text-sm text-gray-600'>
-                  {t('点击下方按钮通过 Telegram 完成绑定')}
-                </div>
-                <div className='flex justify-center'>
-                  <div className='scale-90'>
-                    <TelegramLoginButton
-                      dataAuthUrl='/api/oauth/telegram/bind'
-                      botName={status.telegram_bot_name}
-                    />
-                  </div>
-                </div>
-              </Modal>
-
               {/* LinuxDO绑定 */}
               <Card className='!rounded-xl'>
                 <div className='flex items-center justify-between gap-3'>
@@ -554,7 +486,10 @@ const AccountManagement = ({
                               size='small'
                               loading={customOAuthLoading[provider.id]}
                               onClick={() =>
-                                handleUnbindCustomOAuth(provider.id, provider.name)
+                                handleUnbindCustomOAuth(
+                                  provider.id,
+                                  provider.name,
+                                )
                               }
                             >
                               {t('解绑')}
@@ -603,7 +538,9 @@ const AccountManagement = ({
                           {t('系统访问令牌')}
                         </Typography.Title>
                         <Typography.Text type='tertiary' className='text-sm'>
-                          {t('用于API调用的身份验证令牌，请妥善保管')}
+                          {t(
+                            '访问令牌已迁移到新版前端的「账户安全」页面，创建时需要完成安全验证',
+                          )}
                         </Typography.Text>
                         {systemToken && (
                           <div className='mt-3'>
@@ -625,7 +562,7 @@ const AccountManagement = ({
                       className='!bg-slate-600 hover:!bg-slate-700 w-full sm:w-auto'
                       icon={<IconKey />}
                     >
-                      {systemToken ? t('重新生成') : t('生成令牌')}
+                      {t('前往管理')}
                     </Button>
                   </div>
                 </Card>

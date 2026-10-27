@@ -26,6 +26,9 @@ import {
   showSuccess,
   updateAPI,
   setUserData,
+  extractUserFromLoginPayload,
+  isLoginChallenge,
+  saveAuthCredentials,
 } from '../../helpers';
 import { UserContext } from '../../context/User';
 import Loading from '../common/ui/Loading';
@@ -35,7 +38,7 @@ const OAuth2Callback = (props) => {
   const [searchParams] = useSearchParams();
   const [, userDispatch] = useContext(UserContext);
   const navigate = useNavigate();
-  
+
   // 防止 React 18 Strict Mode 下重复执行
   const hasExecuted = useRef(false);
 
@@ -59,10 +62,26 @@ const OAuth2Callback = (props) => {
       if (data?.action === 'bind') {
         showSuccess(t('绑定成功！'));
         navigate('/console/personal');
+      } else if (isLoginChallenge(data)) {
+        // 第三方登录同样可能要求第二因子：把挑战带回登录页继续验证
+        try {
+          sessionStorage.setItem(
+            'pending_login_challenge',
+            JSON.stringify(data),
+          );
+        } catch (e) {
+          // 存储不可用时忽略，登录页会提示重新登录
+        }
+        navigate('/login');
       } else {
-        userDispatch({ type: 'login', payload: data });
-        localStorage.setItem('user', JSON.stringify(data));
-        setUserData(data);
+        const user = extractUserFromLoginPayload(data);
+        if (!user) {
+          showError(t('返回数据异常，请重试'));
+          return;
+        }
+        saveAuthCredentials(data);
+        setUserData(user);
+        userDispatch({ type: 'login', payload: user });
         updateAPI();
         showSuccess(t('登录成功！'));
         navigate('/console/token');
