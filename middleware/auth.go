@@ -643,6 +643,11 @@ func TokenAuth() func(c *gin.Context) {
 				}
 				// 多分组令牌不把 userGroup 替换成整串，保持原始用户分组；
 				// channel_select.go 的多分组分支会按序选渠道。
+			} else if tokenGroup == "auto" && token.AutoGroups != "" {
+				// 令牌携带了显式有序分组链（auto_groups），"auto" 只是路由机制。
+				// 每个子分组已在保存时校验过可用性，这里无需再检查 auto 分组本身。
+				// userGroup 保持原始用户分组，channel_select.go 的 auto 分支会按
+				// token.AutoGroups 里的顺序选渠道。
 			} else {
 				// check common.UserUsableGroups[userGroup]
 				if _, ok := service.GetUserUsableGroups(userGroup)[tokenGroup]; !ok {
