@@ -61,7 +61,7 @@ const LoginForm = () => {
   const [turnstileSiteKey, setTurnstileSiteKey] = useState('');
   const [turnstileToken, setTurnstileToken] = useState('');
   const [showWeChatLoginModal, setShowWeChatLoginModal] = useState(false);
-  const [showTwoFA, setShowTwoFA] = useState(false);
+  const [loginChallenge, setLoginChallenge] = useState(null);
   const [showAgreementModal, setShowAgreementModal] = useState(false);
   
   const [loginLoading, setLoginLoading] = useState(false);
@@ -103,8 +103,8 @@ const LoginForm = () => {
       const { success, message, data } = res.data;
       
       if (success) {
-        if (data && data.require_2fa) {
-          setShowTwoFA(true);
+        if (data?.require_verification || data?.require_2fa) {
+          setLoginChallenge(data);
           setLoginLoading(false);
           return;
         }
@@ -294,8 +294,25 @@ const LoginForm = () => {
         </div>
       </Modal>
 
-      <Modal title="安全验证" visible={showTwoFA} onCancel={() => setShowTwoFA(false)} footer={null} centered>
-        <TwoFAVerification onSuccess={(user) => { userDispatch({ type: 'login', payload: user }); navigate('/console'); }} onBack={() => setShowTwoFA(false)} isModal={true} />
+      <Modal
+        title={t('安全验证')}
+        visible={!!loginChallenge}
+        onCancel={() => setLoginChallenge(null)}
+        footer={null}
+        centered
+      >
+        {loginChallenge && (
+          <TwoFAVerification
+            challenge={loginChallenge}
+            onSuccess={(user) => {
+              setLoginChallenge(null);
+              userDispatch({ type: 'login', payload: user });
+              navigate('/console');
+            }}
+            onBack={() => setLoginChallenge(null)}
+            isModal={true}
+          />
+        )}
       </Modal>
     </div>
   );

@@ -80,7 +80,12 @@ function buildAPIInstance() {
   instance.interceptors.response.use(
     (response) => {
       const data = response.data?.data;
-      if (response.data?.success && data?.access_token && data?.session?.sid) {
+      if (
+        !response.config?.skipAuthRotation &&
+        response.data?.success &&
+        data?.access_token &&
+        data?.session?.sid
+      ) {
         // Password/security changes can rotate the current access token too.
         const user = data.user || getStoredUser();
         if (user) setAuthentication({ ...data, user });

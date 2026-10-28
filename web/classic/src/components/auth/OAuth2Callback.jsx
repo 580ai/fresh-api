@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React, { useContext, useEffect, useRef } from 'react';
+import React, { useContext, useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
@@ -29,12 +29,14 @@ import {
 } from '../../helpers';
 import { UserContext } from '../../context/User';
 import Loading from '../common/ui/Loading';
+import TwoFAVerification from './TwoFAVerification';
 
 const OAuth2Callback = (props) => {
   const { t } = useTranslation();
   const [searchParams] = useSearchParams();
   const [, userDispatch] = useContext(UserContext);
   const navigate = useNavigate();
+  const [loginChallenge, setLoginChallenge] = useState(null);
   
   // 防止 React 18 Strict Mode 下重复执行
   const hasExecuted = useRef(false);
@@ -53,6 +55,11 @@ const OAuth2Callback = (props) => {
       if (!success) {
         // 业务错误不重试，直接显示错误
         showError(message || t('授权失败'));
+        return;
+      }
+
+      if (data?.require_verification || data?.require_2fa) {
+        setLoginChallenge(data);
         return;
       }
 
@@ -99,6 +106,19 @@ const OAuth2Callback = (props) => {
 
     sendCode(code, state);
   }, []);
+
+  if (loginChallenge) {
+    return (
+      <TwoFAVerification
+        challenge={loginChallenge}
+        onSuccess={(user) => {
+          userDispatch({ type: 'login', payload: user });
+          navigate('/console/token');
+        }}
+        onBack={() => navigate('/login')}
+      />
+    );
+  }
 
   return <Loading />;
 };
