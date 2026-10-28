@@ -24,6 +24,14 @@ import {
   isValidMessage,
 } from './utils';
 import axios from 'axios';
+import {
+  getAuthHeaders,
+  getStoredUser,
+  isTokenAuthentication,
+  logoutAuthentication,
+  refreshAuthentication,
+  setAuthentication,
+} from './auth-session';
 import { MESSAGE_ROLES } from '../constants/playground.constants';
 
 function createAPIInstance() {
@@ -31,6 +39,7 @@ function createAPIInstance() {
     baseURL: import.meta.env.VITE_REACT_APP_SERVER_URL
       ? import.meta.env.VITE_REACT_APP_SERVER_URL
       : '',
+    withCredentials: true,
     headers: {
       'Cache-Control': 'no-store',
     },
@@ -58,6 +67,7 @@ function installAuthHeader(instance) {
     }
 
     config.headers = headers;
+    Object.assign(config.headers, getAuthHeaders());
     return config;
   });
   return instance;
@@ -68,8 +78,40 @@ function buildAPIInstance() {
   installAuthHeader(instance);
   patchAPIInstance(instance);
   instance.interceptors.response.use(
-    (response) => response,
-    (error) => {
+    (response) => {
+      const data = response.data?.data;
+      if (response.data?.success && data?.access_token && data?.session?.sid) {
+        // Password/security changes can rotate the current access token too.
+        const user = data.user || getStoredUser();
+        if (user) setAuthentication({ ...data, user });
+      }
+      return response;
+    },
+    async (error) => {
+      const config = error.config;
+      if (
+        error.response?.status === 401 &&
+        config &&
+        !config.authRetry &&
+        !config.skipAuthRefresh &&
+        !config.url?.startsWith('/api/user/login') &&
+        isTokenAuthentication()
+      ) {
+        config.authRetry = true;
+        try {
+          const sentToken = config.headers?.Authorization;
+          const currentToken = getAuthHeaders().Authorization;
+          // A parallel request may already have refreshed the rejected token.
+          if (currentToken && sentToken !== currentToken) {
+            return instance.request(config);
+          }
+          const user = await refreshAuthentication();
+          if (user) return instance.request(config);
+        } catch (refreshError) {
+          if (!config.skipErrorHandler) showError(refreshError);
+          return Promise.reject(refreshError);
+        }
+      }
       // 如果请求配置中显式要求跳过全局错误处理，则不弹出默认错误提示
       if (error.config && error.config.skipErrorHandler) {
         return Promise.reject(error);
@@ -289,10 +331,7 @@ export async function getOAuthState() {
 async function prepareOAuthState(options = {}) {
   const { shouldLogout = false } = options;
   if (shouldLogout) {
-    try {
-      await API.get('/api/user/logout', { skipErrorHandler: true });
-    } catch (err) {}
-    localStorage.removeItem('user');
+    await logoutAuthentication();
     updateAPI();
   }
   return await getOAuthState();

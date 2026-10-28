@@ -27,23 +27,18 @@ import {
 } from '../constants/playground.constants';
 import { TABLE_COMPACT_MODES_KEY } from '../constants';
 import { MOBILE_BREAKPOINT } from '../hooks/common/useIsMobile';
+import { clearAuthentication, getStoredUser } from './auth-session';
 
 const HTMLToastContent = ({ htmlContent }) => {
   return <div dangerouslySetInnerHTML={{ __html: htmlContent }} />;
 };
 export default HTMLToastContent;
 export function isAdmin() {
-  let user = localStorage.getItem('user');
-  if (!user) return false;
-  user = JSON.parse(user);
-  return user.role >= 10;
+  return getStoredUser()?.role >= 10;
 }
 
 export function isRoot() {
-  let user = localStorage.getItem('user');
-  if (!user) return false;
-  user = JSON.parse(user);
-  return user.role >= 100;
+  return getStoredUser()?.role >= 100;
 }
 
 export function getSystemName() {
@@ -59,10 +54,7 @@ export function getLogo() {
 }
 
 export function getUserIdFromLocalStorage() {
-  let user = localStorage.getItem('user');
-  if (!user) return -1;
-  user = JSON.parse(user);
-  return user.id;
+  return getStoredUser()?.id ?? -1;
 }
 
 export function getFooterHTML() {
@@ -126,7 +118,7 @@ export function showError(error) {
       switch (error.response?.status) {
         case 401:
           // 清除用户状态
-          localStorage.removeItem('user');
+          clearAuthentication();
           // toast.error('错误：未登录或登录已过期，请重新登录！', showErrorOptions);
           window.location.href = '/login?expired=true';
           break;
@@ -770,7 +762,6 @@ export const calculateModelPrice = ({
     const audioInputPrice = hasRatioValue(record.audio_ratio)
       ? formatTokenPrice(inputRatioPriceUSD * Number(record.audio_ratio))
       : null;
-
 
     return {
       inputPrice,

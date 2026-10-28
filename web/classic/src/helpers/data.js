@@ -56,6 +56,4 @@ export function setStatusData(data) {
   }
 }
 
-export function setUserData(data) {
-  localStorage.setItem('user', JSON.stringify(data));
-}
+export { setAuthentication as setUserData } from './auth-session';
