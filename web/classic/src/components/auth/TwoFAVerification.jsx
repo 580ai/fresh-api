@@ -16,7 +16,13 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { API, showError, showSuccess, updateAPI, setUserData } from '../../helpers';
+import {
+  API,
+  showError,
+  showSuccess,
+  updateAPI,
+  setUserData,
+} from '../../helpers';
 import {
   Button,
   Card,
@@ -25,57 +31,98 @@ import {
   Input,
   Typography,
 } from '@douyinfe/semi-ui';
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 const { Title, Text, Paragraph } = Typography;
 
-const TwoFAVerification = ({ onSuccess, onBack, isModal = false }) => {
+const TwoFAVerification = ({
+  onSuccess,
+  onBack,
+  isModal = false,
+  challenge = null,
+}) => {
+  const { t } = useTranslation();
   const [loading, setLoading] = useState(false);
   const [useBackupCode, setUseBackupCode] = useState(false);
   const [verificationCode, setVerificationCode] = useState('');
+  const verificationRequest = useRef(null);
+
+  useEffect(() => () => verificationRequest.current?.abort(), []);
 
   const handleSubmit = async () => {
-    if (!verificationCode) {
-      showError('请输入验证码');
+    if (verificationRequest.current) return;
+    const code = verificationCode.trim();
+    if (!code) {
+      showError(t('请输入验证码'));
       return;
     }
     // Validate code format
-    if (useBackupCode && verificationCode.length !== 8) {
-      showError('备用码必须是8位');
+    if (useBackupCode && code.length !== 8) {
+      showError(t('备用码必须是8位'));
       return;
-    } else if (!useBackupCode && !/^\d{6}$/.test(verificationCode)) {
-      showError('验证码必须是6位数字');
+    } else if (!useBackupCode && !/^\d{6}$/.test(code)) {
+      showError(t('验证码必须是6位数字'));
       return;
     }
 
+    const isModernChallenge = challenge?.require_verification === true;
+    if (isModernChallenge) {
+      if (
+        !challenge.flow_token ||
+        !Number.isFinite(challenge.expires_at) ||
+        !challenge.methods?.some(
+          (option) => option.method === '2fa' && option.available,
+        )
+      ) {
+        showError(t('验证失败，请重试'));
+        return;
+      }
+      if (challenge.expires_at <= Date.now() / 1000) {
+        showError(t('未登录或登录已过期，请重新登录'));
+        onBack?.();
+        return;
+      }
+    }
+
+    const controller = new AbortController();
+    verificationRequest.current = controller;
     setLoading(true);
     try {
-      const res = await API.post('/api/user/login/2fa', {
-        code: verificationCode,
-      });
+      const res = await API.post(
+        isModernChallenge ? '/api/user/login/verify' : '/api/user/login/2fa',
+        isModernChallenge
+          ? { flow_token: challenge.flow_token, method: '2fa', code }
+          : { code },
+        {
+          signal: controller.signal,
+          skipAuthRefresh: true,
+          skipErrorHandler: true,
+          skipAuthRotation: true,
+        },
+      );
+      if (controller.signal.aborted) return;
 
       if (res.data.success) {
-        showSuccess('登录成功');
         // 保存用户信息到本地存储
         const user = setUserData(res.data.data);
+        showSuccess(t('登录成功'));
         // 重建 axios 实例，让后续请求带上正确的 New-Api-User
         updateAPI();
         if (onSuccess) {
           onSuccess(user);
         }
       } else {
-        showError(res.data.message);
+        showError(res.data.message || t('验证失败，请重试'));
+        if (res.data.code === 'AUTH_FLOW_INVALID') onBack?.();
       }
     } catch (error) {
-      showError('验证失败，请重试');
+      if (controller.signal.aborted) return;
+      showError(error.response?.data?.message || t('验证失败，请重试'));
+      if (error.response?.data?.code === 'AUTH_FLOW_INVALID') onBack?.();
     } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleKeyPress = (e) => {
-    if (e.key === 'Enter') {
-      handleSubmit();
+      verificationRequest.current = null;
+      if (!controller.signal.aborted) setLoading(false);
     }
   };
 
@@ -93,7 +140,6 @@ const TwoFAVerification = ({ onSuccess, onBack, isModal = false }) => {
             placeholder={useBackupCode ? '请输入8位备用码' : '请输入6位验证码'}
             value={verificationCode}
             onChange={setVerificationCode}
-            onKeyPress={handleKeyPress}
             size='large'
             style={{ marginBottom: 16 }}
             autoFocus
@@ -176,7 +222,6 @@ const TwoFAVerification = ({ onSuccess, onBack, isModal = false }) => {
             placeholder={useBackupCode ? '请输入8位备用码' : '请输入6位验证码'}
             value={verificationCode}
             onChange={setVerificationCode}
-            onKeyPress={handleKeyPress}
             size='large'
             style={{ marginBottom: 16 }}
             autoFocus
