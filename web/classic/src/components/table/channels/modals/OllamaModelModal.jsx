@@ -45,11 +45,11 @@ import {
 } from '@douyinfe/semi-icons';
 import {
   API,
-  authHeader,
   getUserIdFromLocalStorage,
   showError,
   showSuccess,
 } from '../../../../helpers';
+import { getFreshAuthHeaders } from '../../../../helpers/auth-session';
 
 const { Text, Title } = Typography;
 
@@ -330,7 +330,7 @@ const OllamaModelModal = ({
       setEventSource(closable);
 
       // 使用 fetch 请求 SSE 流
-      const authHeaders = authHeader();
+      const authHeaders = await getFreshAuthHeaders();
       const userId = getUserIdFromLocalStorage();
       const fetchHeaders = {
         'Content-Type': 'application/json',

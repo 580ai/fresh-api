@@ -111,8 +111,8 @@ const LoginForm = () => {
         
         // 成功处理：先更新本地持久化，再更新全局 Context
         if (data) {
-          setUserData(data);
-          userDispatch({ type: 'login', payload: data });
+          const user = setUserData(data);
+          userDispatch({ type: 'login', payload: user });
           updateAPI();
           showSuccess('登录成功！');
           // 延迟极短时间确保状态写入后再跳转
@@ -295,7 +295,7 @@ const LoginForm = () => {
       </Modal>
 
       <Modal title="安全验证" visible={showTwoFA} onCancel={() => setShowTwoFA(false)} footer={null} centered>
-        <TwoFAVerification onSuccess={(d) => { setUserData(d); navigate('/console'); }} onBack={() => setShowTwoFA(false)} isModal={true} />
+        <TwoFAVerification onSuccess={(user) => { userDispatch({ type: 'login', payload: user }); navigate('/console'); }} onBack={() => setShowTwoFA(false)} isModal={true} />
       </Modal>
     </div>
   );

@@ -17,10 +17,17 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { reducer, initialState } from './reducer';
 import { normalizeLanguage } from '../../i18n/language';
+import {
+  AUTH_CHANGED_EVENT,
+  bootstrapAuthentication,
+  getStoredUser,
+} from '../../helpers/auth-session';
+import Loading from '../../components/common/ui/Loading';
+import { Button } from '@douyinfe/semi-ui';
 
 export const UserContext = React.createContext({
   state: initialState,
@@ -29,7 +36,33 @@ export const UserContext = React.createContext({
 
 export const UserProvider = ({ children }) => {
   const [state, dispatch] = React.useReducer(reducer, initialState);
-  const { i18n } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const [authStatus, setAuthStatus] = useState('loading');
+  const [bootstrapAttempt, setBootstrapAttempt] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+    const syncUser = () => {
+      const user = getStoredUser();
+      dispatch(user ? { type: 'login', payload: user } : { type: 'logout' });
+    };
+    window.addEventListener(AUTH_CHANGED_EVENT, syncUser);
+    setAuthStatus('loading');
+    bootstrapAuthentication().then(
+      () => {
+        if (!active) return;
+        syncUser();
+        setAuthStatus('ready');
+      },
+      () => {
+        if (active) setAuthStatus('error');
+      },
+    );
+    return () => {
+      active = false;
+      window.removeEventListener(AUTH_CHANGED_EVENT, syncUser);
+    };
+  }, [bootstrapAttempt]);
 
   // Sync language preference when user data is loaded
   useEffect(() => {
@@ -51,7 +84,18 @@ export const UserProvider = ({ children }) => {
 
   return (
     <UserContext.Provider value={[state, dispatch]}>
-      {children}
+      {authStatus === 'loading' ? (
+        <Loading />
+      ) : authStatus === 'error' ? (
+        <div className='flex h-screen flex-col items-center justify-center gap-4'>
+          <p>{t('加载失败')}</p>
+          <Button onClick={() => setBootstrapAttempt((value) => value + 1)}>
+            {t('重试')}
+          </Button>
+        </div>
+      ) : (
+        children
+      )}
     </UserContext.Provider>
   );
 };
