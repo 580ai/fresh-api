@@ -56,14 +56,14 @@ const LoginForm = () => {
   const [inputs, setInputs] = useState({ username: '', password: '', wechat_verification_code: '' });
   const { username, password } = inputs;
   const [userState, userDispatch] = useContext(UserContext);
-  
+
   const [turnstileEnabled, setTurnstileEnabled] = useState(false);
   const [turnstileSiteKey, setTurnstileSiteKey] = useState('');
   const [turnstileToken, setTurnstileToken] = useState('');
   const [showWeChatLoginModal, setShowWeChatLoginModal] = useState(false);
   const [loginChallenge, setLoginChallenge] = useState(null);
   const [showAgreementModal, setShowAgreementModal] = useState(false);
-  
+
   const [loginLoading, setLoginLoading] = useState(false);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
 
@@ -101,14 +101,14 @@ const LoginForm = () => {
     try {
       const res = await API.post(`/api/user/login?turnstile=${turnstileToken}`, { username, password });
       const { success, message, data } = res.data;
-      
+
       if (success) {
         if (data?.require_verification || data?.require_2fa) {
           setLoginChallenge(data);
           setLoginLoading(false);
           return;
         }
-        
+
         // 成功处理：先更新本地持久化，再更新全局 Context
         if (data) {
           const user = setUserData(data);
@@ -134,9 +134,9 @@ const LoginForm = () => {
   };
 
   const handleAgreeAndLogin = () => {
-    setAgreedToTerms(true); 
+    setAgreedToTerms(true);
     setShowAgreementModal(false);
-    handleSubmit(true); 
+    handleSubmit(true);
   };
 
   const inputStyle = {
@@ -175,10 +175,10 @@ const LoginForm = () => {
         <div className="flex items-center justify-between">
           <Checkbox checked={agreedToTerms} onChange={(e) => setAgreedToTerms(e.target.checked)}>
             <span className="text-xs text-gray-400">
-              我已阅读并同意 
-              <span 
+              我已阅读并同意{' '}
+              <span
                 className="font-bold cursor-pointer mx-1 hover:underline"
-                style={{ color: '#2F65FF' }} 
+                style={{ color: '#2F65FF' }}
                 onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();

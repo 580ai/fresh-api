@@ -52,7 +52,7 @@ const NoticeModal = ({
 
   const announcements = statusState?.status?.announcements || [];
   const tutorialLink = statusState?.status?.tutorial_link || '';
-  
+
   // 解析顶栏模块配置，检查接入教程是否启用
   const headerNavModules = useMemo(() => {
     try {
@@ -63,7 +63,7 @@ const NoticeModal = ({
     } catch (e) {}
     return { tutorial: true };
   }, [statusState?.status?.HeaderNavModules]);
-  
+
   const showTutorialLink = tutorialLink && headerNavModules?.tutorial !== false;
 
   const unreadSet = useMemo(() => new Set(unreadKeys), [unreadKeys]);
