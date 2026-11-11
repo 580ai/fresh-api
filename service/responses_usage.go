@@ -115,6 +115,15 @@ func (a *ResponsesUsageAccumulator) Finish() *dto.Usage {
 	return a.usage
 }
 
+// OutputText returns the generated output text accumulated from the stream.
+// Used for log content recording; call it after Finish.
+func (a *ResponsesUsageAccumulator) OutputText() string {
+	if a == nil {
+		return ""
+	}
+	return a.outputText.String()
+}
+
 // ObserveResponsesOutcome records the protocol outcome of one Responses event
 // on the stream status for health classification. Only codes and types are
 // kept; messages never leave the event.

@@ -29,7 +29,7 @@ type AuditLog struct {
 	UserId     int        `json:"user_id" gorm:"index:idx_audit_user_time,priority:1"`
 	Username   string     `json:"username" gorm:"type:varchar(64);index"`
 	ActorRole  int        `json:"actor_role"` // Immutable role of the actor when the event began, not the log owner.
-	CreatedAt  int64      `json:"created_at" gorm:"type:bigint;index:idx_audit_user_time,priority:2;index:idx_audit_token_time,priority:2;index;index:idx_audit_time_event,priority:1"`
+	CreatedAt  int64      `json:"created_at" gorm:"type:bigint;index:idx_audit_user_time,priority:2;index:idx_audit_token_time,priority:2;index:idx_audit_time_event,priority:1"`
 	Category   string     `json:"category" gorm:"type:varchar(24);index"`
 	Action     string     `json:"action" gorm:"type:varchar(128)"`
 	TokenRef   string     `json:"token_ref" gorm:"type:varchar(64);index:idx_audit_token_time,priority:1"`

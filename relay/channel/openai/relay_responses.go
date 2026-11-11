@@ -42,6 +42,9 @@ func OaiResponsesHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http
 	// 写入新的 response body
 	service.IOCopyBytesGracefully(c, resp, responseBody)
 
+	// 存储响应内容用于日志记录
+	c.Set("log_response_body", string(responseBody))
+
 	// compute usage
 	usage := &dto.Usage{}
 	service.ApplyResponsesUsage(usage, responsesResponse.Usage)
@@ -102,7 +105,10 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 
 	common.SetContextKey(c, constant.ContextKeyResponseStreamStatus, info.StreamStatus)
 	info.StreamStatus.RequireTerminal()
-	return accumulator.Finish(), nil
+	usage := accumulator.Finish()
+	// 存储响应内容用于日志记录（流式响应拼接后的完整文本）
+	c.Set("log_response_body", accumulator.OutputText())
+	return usage, nil
 }
 
 func rewriteSGLangResponsesCreatedAt(info *relaycommon.RelayInfo, payload []byte, path string, createdAt dto.IntValue) []byte {

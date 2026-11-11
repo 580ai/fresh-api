@@ -252,7 +252,7 @@ func GetSubscriptionOrderByTradeNo(tradeNo string) *SubscriptionOrder {
 // User subscription instance
 type UserSubscription struct {
 	Id     int `json:"id"`
-	UserId int `json:"user_id" gorm:"index;index:idx_user_sub_active,priority:1"`
+	UserId int `json:"user_id" gorm:"index:idx_user_sub_active,priority:1"`
 	PlanId int `json:"plan_id" gorm:"index"`
 
 	AmountTotal int64 `json:"amount_total" gorm:"type:bigint;not null;default:0"`

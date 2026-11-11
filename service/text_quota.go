@@ -540,6 +540,8 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 
 	}
 
+	requestBody := ctx.GetString("log_request_body")
+	responseBody := ctx.GetString("log_response_body")
 	attachQuotaSaturation(ctx, relayInfo, other)
 
 	model.RecordConsumeLog(ctx, relayInfo.UserId, model.RecordConsumeLogParams{
@@ -555,6 +557,8 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 		IsStream:         relayInfo.IsStream,
 		Group:            relayInfo.UsingGroup,
 		Other:            other,
+		RequestBody:      requestBody,
+		ResponseBody:     responseBody,
 	})
 	relayInfo.PerformanceOutputTokens = int64(summary.CompletionTokens)
 }

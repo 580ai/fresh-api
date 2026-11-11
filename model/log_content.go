@@ -15,11 +15,23 @@ import (
 
 // LogContent 日志内容结构
 type LogContent struct {
-	UserId       int    `json:"user_id"`
-	RequestId    string `json:"request_id"`
-	RequestBody  string `json:"request_body"`
-	ResponseBody string `json:"response_body"`
-	CreatedAt    int64  `json:"created_at"`
+	UserId           int    `json:"user_id"`
+	RequestId        string `json:"request_id"`
+	RequestBody      string `json:"request_body"`
+	ResponseBody     string `json:"response_body"`
+	PromptTokens     int    `json:"prompt_tokens"`
+	CompletionTokens int    `json:"completion_tokens"`
+	ModelName        string `json:"model_name"`
+	IsStream         bool   `json:"is_stream"`
+	CreatedAt        int64  `json:"created_at"`
+}
+
+// LogContentUsage carries the usage figures recorded alongside the raw bodies.
+type LogContentUsage struct {
+	PromptTokens     int
+	CompletionTokens int
+	ModelName        string
+	IsStream         bool
 }
 
 var (
@@ -70,7 +82,7 @@ func writeLogContentToFile(userId int, tokenName string, data []byte) error {
 }
 
 // RecordLogContent 异步记录日志内容到文件（按令牌分文件）
-func RecordLogContent(userId int, tokenName string, requestId string, requestBody string, responseBody string) {
+func RecordLogContent(userId int, tokenName string, requestId string, requestBody string, responseBody string, usage LogContentUsage) {
 	if !operation_setting.IsLogContentEnabledForUser(userId) {
 		return
 	}
@@ -81,11 +93,15 @@ func RecordLogContent(userId int, tokenName string, requestId string, requestBod
 
 	gopool.Go(func() {
 		logContent := &LogContent{
-			UserId:       userId,
-			RequestId:    requestId,
-			RequestBody:  requestBody,
-			ResponseBody: responseBody,
-			CreatedAt:    common.GetTimestamp(),
+			UserId:           userId,
+			RequestId:        requestId,
+			RequestBody:      requestBody,
+			ResponseBody:     responseBody,
+			PromptTokens:     usage.PromptTokens,
+			CompletionTokens: usage.CompletionTokens,
+			ModelName:        usage.ModelName,
+			IsStream:         usage.IsStream,
+			CreatedAt:        common.GetTimestamp(),
 		}
 
 		jsonData, err := json.Marshal(logContent)

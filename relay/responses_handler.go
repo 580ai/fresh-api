@@ -5,17 +5,28 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/QuantumNous/new-api/common"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 
 	"github.com/gin-gonic/gin"
 )
 
 func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types.NewAPIError) {
+	// 收集请求体内容用于日志记录
+	if operation_setting.IsLogContentEnabledForUser(info.UserId) {
+		if storage, err := common.GetBodyStorage(c); err == nil {
+			if bodyBytes, bErr := storage.Bytes(); bErr == nil {
+				c.Set("log_request_body", string(bodyBytes))
+			}
+		}
+	}
+
 	var responsesReq *dto.OpenAIResponsesRequest
 	switch req := info.Request.(type) {
 	case *dto.OpenAIResponsesRequest:
