@@ -20,6 +20,11 @@ func RouteTag(tag string) gin.HandlerFunc {
 
 func SetUpLogger(server *gin.Engine) {
 	server.Use(redactTaskArtifactAccessQuery())
+	// Per-request access lines are the largest source of container log volume.
+	// They stay off unless GIN_LOG_ENABLED is explicitly set to true.
+	if !common.GinLogEnabled {
+		return
+	}
 	server.Use(gin.LoggerWithFormatter(func(param gin.LogFormatterParams) string {
 		var requestID string
 		if param.Keys != nil {

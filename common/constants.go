@@ -163,6 +163,7 @@ var EmailLoginAuthServerList = []string{
 
 var DebugEnabled bool
 var MemoryCacheEnabled bool
+var GinLogEnabled bool
 
 var LogConsumeEnabled = true
 
