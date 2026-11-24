@@ -17,10 +17,15 @@ import (
 
 func TestSetUpLoggerMasksQueryCredentials(t *testing.T) {
 	previousMode, previousWriter := gin.Mode(), gin.DefaultWriter
+	// Access lines are off by default in this fork (GIN_LOG_ENABLED); these
+	// tests cover the masking that only runs when they are enabled.
+	previousGinLogEnabled := common.GinLogEnabled
+	common.GinLogEnabled = true
 	gin.SetMode(gin.TestMode)
 	t.Cleanup(func() {
 		gin.SetMode(previousMode)
 		gin.DefaultWriter = previousWriter
+		common.GinLogEnabled = previousGinLogEnabled
 	})
 
 	for _, tc := range []struct{ target, loggedPath string }{
@@ -63,12 +68,15 @@ func TestSetUpLoggerMasksQueryCredentials(t *testing.T) {
 func TestAccessAndPanicLogsFollowLogRotation(t *testing.T) {
 	previousMode, previousWriter, previousErrorWriter := gin.Mode(), gin.DefaultWriter, gin.DefaultErrorWriter
 	previousLogDir := *common.LogDir
+	previousGinLogEnabled := common.GinLogEnabled
+	common.GinLogEnabled = true
 	gin.SetMode(gin.TestMode)
 	*common.LogDir = t.TempDir()
 	t.Cleanup(func() {
 		gin.SetMode(previousMode)
 		gin.DefaultWriter, gin.DefaultErrorWriter = previousWriter, previousErrorWriter
 		*common.LogDir = previousLogDir
+		common.GinLogEnabled = previousGinLogEnabled
 	})
 
 	logger.SetupLogger()
@@ -102,10 +110,13 @@ func TestAccessAndPanicLogsFollowLogRotation(t *testing.T) {
 
 func TestSetUpLoggerOmitsQueryCredentialsTakenOutByHandlers(t *testing.T) {
 	previousMode, previousWriter := gin.Mode(), gin.DefaultWriter
+	previousGinLogEnabled := common.GinLogEnabled
+	common.GinLogEnabled = true
 	gin.SetMode(gin.TestMode)
 	t.Cleanup(func() {
 		gin.SetMode(previousMode)
 		gin.DefaultWriter = previousWriter
+		common.GinLogEnabled = previousGinLogEnabled
 	})
 
 	for _, tc := range []struct{ target, loggedPath string }{
