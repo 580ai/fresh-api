@@ -90,6 +90,7 @@ var channelReadOnlyFields = map[string]struct{}{
 	"used_quota":           {},
 	// [CUSTOM] 上游已用额度来自独立表 channel_upstream_usages，编辑接口不应接收
 	"upstream_used_quota": {},
+	"balance_detail":       {},
 }
 
 func clearChannelReadOnlyFields(channel *PatchChannel, requestData map[string]any) {
@@ -110,6 +111,9 @@ func clearChannelReadOnlyFields(channel *PatchChannel, requestData map[string]an
 	}
 	if _, ok := requestData["used_quota"]; ok {
 		channel.UsedQuota = 0
+	}
+	if _, ok := requestData["balance_detail"]; ok {
+		channel.BalanceDetail = nil
 	}
 }
 
