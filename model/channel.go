@@ -589,7 +589,8 @@ func BatchUpdateChannelProxy(ids []int, proxy string) error {
 		setting := channel.GetSetting()
 		setting.Proxy = proxy
 		channel.SetSetting(setting)
-		if err := channel.Save(); err != nil {
+		// 只写 setting 列：整行保存会把这次读到的旧密钥、计数覆盖回库。
+		if err := DB.Model(&Channel{}).Where("id = ?", channel.Id).Update("setting", channel.Setting).Error; err != nil {
 			return err
 		}
 	}
