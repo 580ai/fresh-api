@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useQuery } from '@tanstack/react-query'
 import type { ColumnDef } from '@tanstack/react-table'
+import type { TFunction } from 'i18next'
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -30,9 +31,12 @@ import { getCurrencyDisplay } from '@/lib/currency'
 import { requireServerSuccess } from '@/lib/server-error-message'
 import { useSystemConfigStore } from '@/stores/system-config-store'
 
+import { getTokenAutoGroups } from '../api'
 import { API_KEY_STATUSES } from '../constants'
+import { toApiKeyGroupOptions } from '../lib/api-key-groups'
 import type { ApiKey } from '../types'
 import { ApiKeyGroupCell } from './api-key-group-cell'
+import type { ApiKeyGroupOption } from './api-key-group-combobox'
 import { ApiKeyQuotaCell } from './api-key-quota-cell'
 import {
   ApiKeyActivityCell,
@@ -45,26 +49,32 @@ import {
 } from './api-keys-cells'
 import { DataTableRowActions } from './data-table-row-actions'
 
-const EMPTY_GROUP_RATIOS: Record<string, number | string> = {}
+const EMPTY_GROUP_OPTIONS: ApiKeyGroupOption[] = []
 
-function useGroupRatios(): Record<string, number | string> {
+function useUserGroupOptions(t: TFunction): ApiKeyGroupOption[] {
   const { data } = useQuery({
     queryKey: ['user-groups'],
     queryFn: async () => requireServerSuccess(await getUserGroups()),
     staleTime: 0,
-    select: (res) => {
-      if (!res.success || !res.data) return {}
-      const ratios: Record<string, number | string> = {}
-      for (const [group, info] of Object.entries(res.data)) {
-        if (typeof info.ratio === 'number' || typeof info.ratio === 'string') {
-          ratios[group] = info.ratio
-        }
-      }
-      return ratios
-    },
   })
 
-  return data ?? EMPTY_GROUP_RATIOS
+  return useMemo(
+    () => (data ? toApiKeyGroupOptions(t, data.data) : EMPTY_GROUP_OPTIONS),
+    [data, t]
+  )
+}
+
+const EMPTY_AUTO_GROUPS: string[] = []
+
+function useGlobalAutoGroups(): string[] {
+  const { data } = useQuery({
+    queryKey: ['token-auto-groups'],
+    queryFn: async () => requireServerSuccess(await getTokenAutoGroups()),
+    staleTime: 0,
+    select: (res) => (res.success && res.data ? res.data.groups : []),
+  })
+
+  return data ?? EMPTY_AUTO_GROUPS
 }
 
 export function useApiKeysColumns(now: number): ColumnDef<ApiKey>[] {
@@ -72,7 +82,20 @@ export function useApiKeysColumns(now: number): ColumnDef<ApiKey>[] {
   useSystemConfigStore((state) => state.config.currency)
   const { meta: currency } = getCurrencyDisplay()
   const quotaUnit = currency.kind === 'tokens' ? t('Tokens') : currency.symbol
-  const groupRatios = useGroupRatios()
+  const groupOptions = useUserGroupOptions(t)
+  const groupRatios = useMemo(() => {
+    const ratios: Record<string, number | string> = {}
+    for (const option of groupOptions) {
+      if (
+        typeof option.ratio === 'number' ||
+        typeof option.ratio === 'string'
+      ) {
+        ratios[option.value] = option.ratio
+      }
+    }
+    return ratios
+  }, [groupOptions])
+  const globalAutoGroups = useGlobalAutoGroups()
   const shouldReduceMotion = useMediaQuery('(prefers-reduced-motion: reduce)')
   const locale = toIntlLocale(i18n.resolvedLanguage || i18n.language)
   const justNowLabel = t('Just now')
@@ -158,6 +181,9 @@ export function useApiKeysColumns(now: number): ColumnDef<ApiKey>[] {
             <ApiKeyGroupCell
               group={group}
               ratio={groupRatios[group]}
+              autoGroups={apiKey.auto_groups}
+              groupOptions={groupOptions}
+              globalAutoGroups={globalAutoGroups}
               crossGroupRetry={apiKey.cross_group_retry}
               shouldReduceMotion={shouldReduceMotion}
             />
@@ -233,6 +259,16 @@ export function useApiKeysColumns(now: number): ColumnDef<ApiKey>[] {
         meta: { pinned: 'right' as const },
       },
     ],
-    [t, quotaUnit, now, groupRatios, shouldReduceMotion, locale, justNowLabel]
+    [
+      t,
+      quotaUnit,
+      now,
+      groupRatios,
+      groupOptions,
+      globalAutoGroups,
+      shouldReduceMotion,
+      locale,
+      justNowLabel,
+    ]
   )
 }

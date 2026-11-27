@@ -67,10 +67,7 @@ import { useStatus } from '@/hooks/use-status'
 import { getUserModels, getUserGroups } from '@/lib/api'
 import { getCurrencyDisplay, getCurrencyLabel } from '@/lib/currency'
 import { handleServerError } from '@/lib/handle-server-error'
-import {
-  requireServerSuccess,
-  translateServerText,
-} from '@/lib/server-error-message'
+import { requireServerSuccess } from '@/lib/server-error-message'
 import { cn } from '@/lib/utils'
 
 import {
@@ -87,6 +84,7 @@ import {
   transformFormDataToPayload,
   transformApiKeyToFormDefaults,
 } from '../lib'
+import { toApiKeyGroupOptions } from '../lib/api-key-groups'
 import type { ApiKey } from '../types'
 import {
   ApiKeyGroupCombobox,
@@ -163,13 +161,7 @@ export function ApiKeysMutateDrawer({
 
   const models = modelsData?.data || []
   const groups = useMemo<ApiKeyGroupOption[]>(
-    () =>
-      Object.entries(groupsData?.data || {}).map(([key, info]) => ({
-        value: key,
-        label: key,
-        desc: info.desc ? translateServerText(t, info.desc) : key,
-        ratio: info.ratio,
-      })),
+    () => toApiKeyGroupOptions(t, groupsData?.data),
     [groupsData, t]
   )
   const backendHasAuto = groups.some((g) => g.value === 'auto')

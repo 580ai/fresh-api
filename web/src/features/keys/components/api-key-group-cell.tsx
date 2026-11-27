@@ -16,24 +16,34 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { BadgeCell, TruncatedCell } from '@/components/data-table'
 import { GroupBadge } from '@/components/group-badge'
 import { StatusBadge } from '@/components/status-badge'
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@/components/ui/tooltip'
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from '@/components/ui/hover-card'
 import { useMediaQuery } from '@/hooks'
 import { cn } from '@/lib/utils'
 
+import type { ApiKeyGroupOption } from './api-key-group-combobox'
+import {
+  AutoGroupOrderPreview,
+  type AutoGroupOrderPreviewItem,
+} from './auto-group-order-preview'
 import { GroupRatioBadge, type GroupRatio } from './auto-group-visuals'
 
 type ApiKeyGroupCellProps = {
+  /** The key's own Auto order; empty means it inherits the global order. */
+  autoGroups?: string[] | null
   crossGroupRetry: boolean
+  globalAutoGroups?: string[]
   group: string
+  groupOptions?: ApiKeyGroupOption[]
   ratio?: GroupRatio
   shouldReduceMotion: boolean
 }
@@ -41,6 +51,23 @@ type ApiKeyGroupCellProps = {
 export function ApiKeyGroupCell(props: ApiKeyGroupCellProps) {
   const { t } = useTranslation()
   const isMobile = useMediaQuery('(max-width: 640px)')
+
+  const autoGroupItems = useMemo<AutoGroupOrderPreviewItem[]>(() => {
+    const groups = props.autoGroups?.length
+      ? props.autoGroups
+      : (props.globalAutoGroups ?? [])
+    const optionsByValue = new Map(
+      (props.groupOptions ?? []).map((option) => [option.value, option])
+    )
+    return groups.map((group) => {
+      const option = optionsByValue.get(group)
+      return {
+        value: group,
+        label: option?.label ?? group,
+        ratio: option?.ratio,
+      }
+    })
+  }, [props.autoGroups, props.globalAutoGroups, props.groupOptions])
 
   const group = props.group?.trim() || ''
   if (group !== 'auto') {
@@ -66,8 +93,8 @@ export function ApiKeyGroupCell(props: ApiKeyGroupCellProps) {
   }
 
   return (
-    <Tooltip>
-      <TooltipTrigger
+    <HoverCard>
+      <HoverCardTrigger
         render={
           <BadgeCell
             data-api-key-group-cell='auto'
@@ -90,14 +117,26 @@ export function ApiKeyGroupCell(props: ApiKeyGroupCellProps) {
           isAuto
           shouldReduceMotion={props.shouldReduceMotion}
         />
-      </TooltipTrigger>
-      <TooltipContent>
-        <span className='text-xs'>
+      </HoverCardTrigger>
+      <HoverCardContent
+        align='start'
+        sideOffset={6}
+        className='w-auto max-w-[min(90vw,32rem)] space-y-2'
+      >
+        <p className='text-muted-foreground text-xs'>
           {t(
             'Automatically selects the best available group with circuit breaker mechanism'
           )}
-        </span>
-      </TooltipContent>
-    </Tooltip>
+        </p>
+        {autoGroupItems.length > 0 && (
+          <AutoGroupOrderPreview
+            items={autoGroupItems}
+            ariaLabel={t('Auto group order')}
+            showConnectors={false}
+            className='max-h-64'
+          />
+        )}
+      </HoverCardContent>
+    </HoverCard>
   )
 }

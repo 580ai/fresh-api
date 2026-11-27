@@ -83,6 +83,7 @@ export function AutoGroupOrderItem(props: AutoGroupOrderItemProps) {
       {props.leading}
       <div className='flex min-w-0 flex-1 flex-wrap items-center gap-2'>
         <span
+          data-slot='auto-group-order-name'
           className='min-w-0 truncate text-sm font-medium'
           title={props.group}
         >

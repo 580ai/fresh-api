@@ -153,6 +153,18 @@ function getCommandItem(label: string): HTMLElement {
   return item
 }
 
+function readCustomOrder(container: HTMLElement) {
+  return [
+    ...container.querySelectorAll<HTMLElement>(
+      '[data-slot="auto-group-custom-order"] > li'
+    ),
+  ].map((item) => ({
+    name: item.querySelector('[data-slot="auto-group-order-name"]')
+      ?.textContent,
+    ratio: item.querySelector('[data-slot="badge"]')?.textContent ?? null,
+  }))
+}
+
 describe('Auto group order editor', () => {
   test('enforces the limit and exposes accessible reorder controls', () => {
     const { container } = render(<Harness />)
@@ -204,12 +216,12 @@ describe('Auto group order editor', () => {
     )
 
     const inheritedItems = container.querySelectorAll(
-      '[data-slot="global-auto-order"] > li'
+      '[data-slot="auto-group-order-preview"] > li'
     )
     expect(
       [...inheritedItems].map(
         (item) =>
-          item.querySelector('[data-slot="global-auto-order-name"]')
+          item.querySelector('[data-slot="auto-group-order-preview-name"]')
             ?.textContent
       )
     ).toEqual(['VIP', 'Default', 'Team'])
@@ -224,7 +236,7 @@ describe('Auto group order editor', () => {
     expect(container).not.toHaveTextContent('0 / 2 groups selected')
 
     const order = container.querySelector<HTMLOListElement>(
-      '[data-slot="global-auto-order"]'
+      '[data-slot="auto-group-order-preview"]'
     )
     if (!order) {
       throw new Error('Expected inherited Auto group order')
@@ -234,19 +246,21 @@ describe('Auto group order editor', () => {
     const items = [...order.querySelectorAll('li')]
     expect(items.length).toBe(3)
     expect(
-      order.querySelectorAll('[data-slot="global-auto-order-connector"]').length
+      order.querySelectorAll('[data-slot="auto-group-order-preview-connector"]')
+        .length
     ).toBe(2)
     expect(
       items.map((item) => ({
-        index: item.querySelector('[data-slot="global-auto-order-index"]')
-          ?.textContent,
-        name: item.querySelector('[data-slot="global-auto-order-name"]')
+        index: item.querySelector(
+          '[data-slot="auto-group-order-preview-index"]'
+        )?.textContent,
+        name: item.querySelector('[data-slot="auto-group-order-preview-name"]')
           ?.textContent,
         title: item
-          .querySelector('[data-slot="global-auto-order-chip"]')
+          .querySelector('[data-slot="auto-group-order-preview-chip"]')
           ?.getAttribute('title'),
         description: item.querySelector(
-          '[data-slot="global-auto-order-description"]'
+          '[data-slot="auto-group-order-preview-description"]'
         )?.textContent,
         ratio: item.querySelector('[data-slot="badge"]')?.textContent,
       }))
@@ -275,20 +289,24 @@ describe('Auto group order editor', () => {
     ])
 
     for (const item of items) {
-      const chip = item.querySelector('[data-slot="global-auto-order-chip"]')
+      const chip = item.querySelector(
+        '[data-slot="auto-group-order-preview-chip"]'
+      )
       expect(chip).toBeInTheDocument()
       const description = item.querySelector(
-        '[data-slot="global-auto-order-description"]'
+        '[data-slot="auto-group-order-preview-description"]'
       )
       expect(description).toHaveClass('sr-only')
     }
 
     expect(
-      items[0]?.querySelector('[data-slot="global-auto-order-connector"]')
+      items[0]?.querySelector(
+        '[data-slot="auto-group-order-preview-connector"]'
+      )
     ).toBe(null)
     for (const item of items.slice(1)) {
       const connector = item.querySelector(
-        '[data-slot="global-auto-order-connector"]'
+        '[data-slot="auto-group-order-preview-connector"]'
       )
       expect(connector).toHaveAttribute('aria-hidden', 'true')
     }
@@ -311,9 +329,9 @@ describe('Auto group order editor', () => {
     expect(container).toHaveTextContent(
       'No available groups in the global Auto order.'
     )
-    expect(container.querySelector('[data-slot="global-auto-order"]')).toBe(
-      null
-    )
+    expect(
+      container.querySelector('[data-slot="auto-group-order-preview"]')
+    ).toBe(null)
   })
 
   test('keeps an empty custom order distinct from global inheritance', () => {
@@ -323,9 +341,9 @@ describe('Auto group order editor', () => {
     expect(container).toHaveTextContent(
       'No valid custom Auto groups remain. Add a group or restore global Auto.'
     )
-    expect(container.querySelector('[data-slot="global-auto-order"]')).toBe(
-      null
-    )
+    expect(
+      container.querySelector('[data-slot="auto-group-order-preview"]')
+    ).toBe(null)
 
     const restoreButton = within(container).getByRole('button', {
       name: 'Restore global Auto',
@@ -335,7 +353,7 @@ describe('Auto group order editor', () => {
 
     expect(within(container).getByTestId('mode')).toHaveTextContent('inherit')
     expect(
-      container.querySelector('[data-slot="global-auto-order"]')
+      container.querySelector('[data-slot="auto-group-order-preview"]')
     ).toBeInTheDocument()
   })
 
@@ -347,9 +365,27 @@ describe('Auto group order editor', () => {
 
     expect(within(container).getByTestId('mode')).toHaveTextContent('custom')
     expect(within(container).getByTestId('order')).toHaveTextContent('vip')
-    expect(container.querySelector('[data-slot="global-auto-order"]')).toBe(
-      null
-    )
+    expect(
+      container.querySelector('[data-slot="auto-group-order-preview"]')
+    ).toBe(null)
+  })
+
+  test('shows each selected group ratio in the custom order', () => {
+    const { container } = render(<Harness />)
+
+    expect(readCustomOrder(container)).toEqual([
+      { name: 'default', ratio: '1x' },
+      { name: 'vip', ratio: '2x' },
+    ])
+
+    fireEvent.click(findButton(container, 'Remove vip'))
+    fireEvent.click(within(container).getByRole('combobox'))
+    fireEvent.click(getCommandItem('team'))
+
+    expect(readCustomOrder(container)).toEqual([
+      { name: 'default', ratio: '1x' },
+      { name: 'team', ratio: '3x' },
+    ])
   })
 
   test('removing the last custom group does not silently enable inheritance', () => {

@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, test } from 'vitest'
 
@@ -42,7 +42,9 @@ await i18n.use(initReactI18next).init({
 })
 
 function CellHarness(props: {
+  autoGroups?: string[] | null
   group: string
+  globalAutoGroups?: string[]
   ratio?: number | string
   crossGroupRetry?: boolean
   shouldReduceMotion?: boolean
@@ -53,12 +55,33 @@ function CellHarness(props: {
         <ApiKeyGroupCell
           group={props.group}
           ratio={props.ratio}
+          autoGroups={props.autoGroups}
+          groupOptions={groupOptions}
+          globalAutoGroups={props.globalAutoGroups}
           crossGroupRetry={props.crossGroupRetry ?? false}
           shouldReduceMotion={props.shouldReduceMotion ?? false}
         />
       </TooltipProvider>
     </I18nextProvider>
   )
+}
+
+const groupOptions = [
+  { value: 'vip', label: 'vip', desc: 'Priority access', ratio: 3 },
+  { value: 'default', label: 'default', desc: 'Standard access', ratio: 1 },
+  { value: 'team', label: 'team', desc: 'Shared access', ratio: 2 },
+]
+
+function readPreview(container: HTMLElement) {
+  return [
+    ...container.querySelectorAll<HTMLElement>(
+      '[data-slot="auto-group-order-preview"] > li'
+    ),
+  ].map((item) => ({
+    name: item.querySelector('[data-slot="auto-group-order-preview-name"]')
+      ?.textContent,
+    ratio: item.querySelector('[data-slot="badge"]')?.textContent,
+  }))
 }
 
 describe('API key group table cell', () => {
@@ -89,6 +112,48 @@ describe('API key group table cell', () => {
     )
     expect(screen.getByText('Auto')).toBeInTheDocument()
     expect(container.querySelector('[data-auto-group-flow-border]')).toBeNull()
+  })
+
+  test('previews the ordered Auto groups with their multipliers on hover', async () => {
+    const { container } = render(
+      <CellHarness group='auto' ratio='自动' autoGroups={['vip', 'default']} />
+    )
+
+    await userEvent.hover(screen.getByText('Cross-group'))
+
+    expect(
+      await screen.findByText(
+        'Automatically selects the best available group with circuit breaker mechanism'
+      )
+    ).toBeVisible()
+    expect(readPreview(document.body)).toEqual([
+      { name: 'vip', ratio: '3x' },
+      { name: 'default', ratio: '1x' },
+    ])
+    expect(
+      document.querySelectorAll(
+        '[data-slot="auto-group-order-preview-connector"]'
+      )
+    ).toHaveLength(0)
+    expect(container).not.toHaveTextContent('Priority access')
+  })
+
+  test('falls back to the global Auto order when the key has no custom order', async () => {
+    render(
+      <CellHarness
+        group='auto'
+        autoGroups={[]}
+        globalAutoGroups={['default', 'team']}
+      />
+    )
+
+    await userEvent.hover(screen.getByText('Cross-group'))
+
+    await waitFor(() => expect(readPreview(document.body)).toHaveLength(2))
+    expect(readPreview(document.body)).toEqual([
+      { name: 'default', ratio: '1x' },
+      { name: 'team', ratio: '2x' },
+    ])
   })
 
   test('does not invent a multiplier while automatic ratio data is unavailable', () => {

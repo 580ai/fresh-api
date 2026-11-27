@@ -220,7 +220,9 @@ describe('API keys mutate drawer Auto group integration', () => {
     ).toBe(true)
     expect(
       [
-        ...document.querySelectorAll('[data-slot="global-auto-order-name"]'),
+        ...document.querySelectorAll(
+          '[data-slot="auto-group-order-preview-name"]'
+        ),
       ].map((item) => item.textContent)
     ).toEqual(['vip', 'default'])
     expect(findButton('Restore global Auto', true).disabled).toBe(true)
